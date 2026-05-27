@@ -16,7 +16,9 @@ from bifrost_kv.schema import (
     validate_json_schema,
     validate_validation_result,
 )
+from bifrost_kv.target_profile import validate_target_profile_schema
 from bifrost_kv.types import ObjectIdentity
+from bifrost_kv.validate import validate_object
 
 __all__ = [
     "ObjectIdentity",
@@ -33,5 +35,7 @@ __all__ = [
     "load_schema",
     "normalized_descriptor_for_hashing",
     "validate_json_schema",
+    "validate_object",
+    "validate_target_profile_schema",
     "validate_validation_result",
 ]

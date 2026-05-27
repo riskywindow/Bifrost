@@ -49,39 +49,6 @@
     "integrity": { "$ref": "#/$defs/integrity" },
     "provenance": { "$ref": "#/$defs/provenance" }
   },
-  "allOf": [
-    {
-      "if": {
-        "properties": { "object_type": { "const": "native_kv_page" } },
-        "required": ["object_type"]
-      },
-      "then": {
-        "properties": {
-          "prefix_profile": { "$ref": "#/$defs/prefix_profile" },
-          "native_tensor_profile": { "$ref": "#/$defs/native_tensor_profile" },
-          "opaque_engine_profile": { "type": "null" }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": { "object_type": { "const": "opaque_engine_blob" } },
-        "required": ["object_type"]
-      },
-      "then": {
-        "properties": {
-          "prefix_profile": {
-            "anyOf": [
-              { "$ref": "#/$defs/prefix_profile" },
-              { "type": "null" }
-            ]
-          },
-          "native_tensor_profile": { "type": "null" },
-          "opaque_engine_profile": { "$ref": "#/$defs/opaque_engine_profile" }
-        }
-      }
-    }
-  ],
   "$defs": {
     "non_empty_string": {
       "type": "string",
@@ -208,8 +175,8 @@
       "required": ["byte_length", "compression", "payload_encoding"],
       "properties": {
         "byte_length": { "$ref": "#/$defs/non_negative_integer" },
-        "compression": { "const": "none" },
-        "payload_encoding": { "const": "raw_bytes" }
+        "compression": { "$ref": "#/$defs/non_empty_string" },
+        "payload_encoding": { "$ref": "#/$defs/non_empty_string" }
       }
     },
     "native_tensor_profile": {
@@ -232,7 +199,7 @@
         "block_size_tokens": { "$ref": "#/$defs/positive_integer" },
         "block_token_count": { "$ref": "#/$defs/non_negative_integer" },
         "token_range": { "$ref": "#/$defs/range" },
-        "tensor_role": { "enum": ["key", "value", "kv"] },
+        "tensor_role": { "enum": ["key", "value", "kv", "kv_pair"] },
         "tensor_shape": {
           "type": "array",
           "minItems": 1,

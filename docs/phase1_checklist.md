@@ -40,22 +40,22 @@ Last verified: 2026-05-27
 ## Python validator
 
 - [ ] Parse descriptor JSON.
-- [ ] Validate schema version.
-- [ ] Validate object type.
-- [ ] Validate required fields.
-- [ ] Reject unknown fields.
-- [ ] Validate field types.
-- [ ] Validate payload byte length.
-- [ ] Validate payload hash.
-- [ ] Validate descriptor hash.
-- [ ] Validate object ID.
-- [ ] Validate native model compatibility fields.
-- [ ] Validate native engine compatibility fields.
-- [ ] Validate native prefix fields.
-- [ ] Validate native tensor fields.
-- [ ] Validate opaque engine key fields.
-- [ ] Validate opaque engine and integration fields.
-- [ ] Return stable reason codes.
+- [x] Validate schema version.
+- [x] Validate object type.
+- [x] Validate required fields.
+- [x] Reject unknown fields.
+- [x] Validate field types.
+- [x] Validate payload byte length.
+- [x] Validate payload hash.
+- [x] Validate descriptor hash.
+- [x] Validate object ID.
+- [x] Validate native model compatibility fields.
+- [x] Validate native engine compatibility fields.
+- [x] Validate native prefix fields.
+- [x] Validate native tensor fields.
+- [x] Validate opaque engine key fields.
+- [x] Validate opaque engine and integration fields.
+- [x] Return stable reason codes.
 - [ ] Add known-good fixture tests.
 - [ ] Add known-bad fixture tests for every reason code where practical.
 
