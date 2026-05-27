@@ -1,4 +1,7 @@
-use bifrostd::transport::{get_object, has_object, put_object, DEFAULT_CHUNK_SIZE};
+use bifrostd::transport::{
+    get_object_observed, has_object, put_object_observed, ClientTelemetry, TraceSink,
+    TransportMetrics, DEFAULT_CHUNK_SIZE,
+};
 use clap::{Parser, Subcommand};
 use serde_json::json;
 use serde_json::Value;
@@ -9,6 +12,8 @@ use std::path::PathBuf;
 #[command(name = "bifrost-xfer")]
 #[command(about = "BIFROST Phase 2 transfer client placeholder")]
 struct Args {
+    #[arg(long, global = true)]
+    json: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -26,6 +31,8 @@ enum Command {
         chunk_size: usize,
         #[arg(long)]
         target: Option<PathBuf>,
+        #[arg(long)]
+        trace_jsonl: Option<PathBuf>,
     },
     Get {
         #[arg(long, default_value = "127.0.0.1:7420")]
@@ -36,20 +43,21 @@ enum Command {
         out: PathBuf,
         #[arg(long, default_value_t = DEFAULT_CHUNK_SIZE)]
         chunk_size: usize,
+        #[arg(long)]
+        trace_jsonl: Option<PathBuf>,
     },
     Has {
         #[arg(long, default_value = "127.0.0.1:7420")]
         endpoint: String,
         #[arg(long)]
         object_id: String,
-        #[arg(long)]
-        json: bool,
     },
 }
 
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
+    let as_json = args.json;
     match args.command {
         Command::Put {
             endpoint,
@@ -57,8 +65,18 @@ async fn main() {
             payload,
             chunk_size,
             target,
+            trace_jsonl,
         } => {
-            let result = run_put(&endpoint, meta, payload, chunk_size, target).await;
+            let result = run_put(
+                &endpoint,
+                meta,
+                payload,
+                chunk_size,
+                target,
+                trace_jsonl,
+                as_json,
+            )
+            .await;
             match result {
                 Ok(true) => std::process::exit(0),
                 Ok(false) => std::process::exit(1),
@@ -73,8 +91,10 @@ async fn main() {
             object_id,
             out,
             chunk_size,
+            trace_jsonl,
         } => {
-            let result = run_get(&endpoint, &object_id, out, chunk_size).await;
+            let result =
+                run_get(&endpoint, &object_id, out, chunk_size, trace_jsonl, as_json).await;
             match result {
                 Ok(true) => std::process::exit(0),
                 Ok(false) => std::process::exit(1),
@@ -87,9 +107,8 @@ async fn main() {
         Command::Has {
             endpoint,
             object_id,
-            json,
         } => {
-            let result = run_has(&endpoint, &object_id, json).await;
+            let result = run_has(&endpoint, &object_id, as_json).await;
             match result {
                 Ok(true) => std::process::exit(0),
                 Ok(false) => std::process::exit(1),
@@ -108,22 +127,36 @@ async fn run_put(
     payload: PathBuf,
     chunk_size: usize,
     target: Option<PathBuf>,
+    trace_jsonl: Option<PathBuf>,
+    as_json: bool,
 ) -> anyhow::Result<bool> {
     let metadata_bytes = fs::read(meta)?;
     let payload = fs::read(payload)?;
     let target_profile: Option<Value> = target
         .map(|path| -> anyhow::Result<Value> { Ok(serde_json::from_slice(&fs::read(path)?)?) })
         .transpose()?;
+    let telemetry = telemetry(trace_jsonl)?;
 
-    let outcome = put_object(
+    let outcome = put_object_observed(
         endpoint,
         metadata_bytes,
         payload,
         chunk_size,
         target_profile,
+        telemetry.clone(),
     )
     .await?;
-    if outcome.accepted {
+    if as_json {
+        println!(
+            "{}",
+            serde_json::to_string(&json!({
+                "accepted": outcome.accepted,
+                "object_id": outcome.object_id,
+                "reason": outcome.reason,
+                "metrics": telemetry.metrics.snapshot(),
+            }))?
+        );
+    } else if outcome.accepted {
         println!("accepted object_id={}", outcome.object_id);
     } else {
         println!(
@@ -158,19 +191,53 @@ async fn run_get(
     object_id: &str,
     out: PathBuf,
     chunk_size: usize,
+    trace_jsonl: Option<PathBuf>,
+    as_json: bool,
 ) -> anyhow::Result<bool> {
-    let outcome = get_object(endpoint, object_id, chunk_size).await?;
+    let telemetry = telemetry(trace_jsonl)?;
+    let outcome = get_object_observed(endpoint, object_id, chunk_size, telemetry.clone()).await?;
     if !outcome.found {
-        println!(
-            "miss object_id={} reason={}",
-            outcome.object_id, outcome.reason
-        );
+        if as_json {
+            println!(
+                "{}",
+                serde_json::to_string(&json!({
+                    "found": false,
+                    "object_id": outcome.object_id,
+                    "reason": outcome.reason,
+                    "metrics": telemetry.metrics.snapshot(),
+                }))?
+            );
+        } else {
+            println!(
+                "miss object_id={} reason={}",
+                outcome.object_id, outcome.reason
+            );
+        }
         return Ok(false);
     }
 
     fs::create_dir_all(&out)?;
     fs::write(out.join("meta.json"), &outcome.metadata_bytes)?;
     fs::write(out.join("payload.bin"), &outcome.payload)?;
-    println!("fetched object_id={}", outcome.object_id);
+    if as_json {
+        println!(
+            "{}",
+            serde_json::to_string(&json!({
+                "found": true,
+                "object_id": outcome.object_id,
+                "bytes": outcome.payload.len(),
+                "metrics": telemetry.metrics.snapshot(),
+            }))?
+        );
+    } else {
+        println!("fetched object_id={}", outcome.object_id);
+    }
     Ok(true)
+}
+
+fn telemetry(trace_jsonl: Option<PathBuf>) -> anyhow::Result<ClientTelemetry> {
+    Ok(ClientTelemetry {
+        metrics: TransportMetrics::default(),
+        trace: trace_jsonl.map(TraceSink::create).transpose()?,
+    })
 }

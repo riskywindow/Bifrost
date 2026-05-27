@@ -68,15 +68,15 @@ Last verified: 2026-05-27
 
 ## Metrics
 
-- [ ] Count PUT attempts, commits, rejections, and protocol errors.
-- [ ] Count GET attempts, hits, misses, rejections, and protocol errors.
+- [x] Count PUT attempts, commits, rejections, and protocol errors.
+- [x] Count GET attempts, hits, misses, rejections, and protocol errors.
 - [ ] Count bytes transferred and bytes committed.
 - [ ] Count chunks, duplicate chunks, missing chunks, and hash mismatches.
 - [ ] Count Phase 1 validation failures by reason code.
 - [ ] Measure PUT and GET latency.
 - [ ] Report ContextStorm throughput.
-- [ ] Keep metrics local and dependency-light.
-- [ ] Test that expected metrics are emitted for success and failure paths.
+- [x] Keep metrics local and dependency-light.
+- [x] Test that expected metrics are emitted for success and failure paths.
 
 ## Multipath
 
@@ -133,7 +133,7 @@ Last verified: 2026-05-27
 - [x] The daemon never serves from staging.
 - [x] A committed object can be fetched with GET and revalidated by the client.
 - [x] HAS returns true only for committed and servable objects.
-- [ ] Metrics exist for successful and failed transfer paths.
+- [x] Metrics exist for successful and failed transfer paths.
 - [ ] ContextStorm can run a CPU-only local benchmark.
 - [ ] Multipath synthetic transfer is implemented or explicitly deferred with
       single-path Phase 2 acceptance documented.

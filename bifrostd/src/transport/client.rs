@@ -1,12 +1,19 @@
 use crate::cache::validate_object;
 use crate::transport::{
     chunk_bytes, iter_chunks, read_frame, write_frame, ChunkInfo, ChunkManifest, Frame,
-    FrameHeader, FrameType, Reassembler, TransportResult, TRANSPORT_VERSION,
+    FrameHeader, FrameType, Reassembler, TraceEvent, TraceSink, TransportMetrics, TransportResult,
+    TRANSPORT_VERSION,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tokio::net::TcpStream;
+
+#[derive(Debug, Default, Clone)]
+pub struct ClientTelemetry {
+    pub metrics: TransportMetrics,
+    pub trace: Option<TraceSink>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PutOutcome {
@@ -38,9 +45,35 @@ pub async fn put_object(
     chunk_size: usize,
     target_profile: Option<Value>,
 ) -> anyhow::Result<PutOutcome> {
+    put_object_observed(
+        endpoint,
+        metadata_bytes,
+        payload,
+        chunk_size,
+        target_profile,
+        ClientTelemetry::default(),
+    )
+    .await
+}
+
+pub async fn put_object_observed(
+    endpoint: &str,
+    metadata_bytes: Vec<u8>,
+    payload: Vec<u8>,
+    chunk_size: usize,
+    target_profile: Option<Value>,
+    telemetry: ClientTelemetry,
+) -> anyhow::Result<PutOutcome> {
     let metadata: Value = serde_json::from_slice(&metadata_bytes)?;
     let validation = validate_object(&metadata, &payload, target_profile.as_ref());
     if validation.status != "accepted" {
+        telemetry.metrics.record_transfer_failed();
+        emit_trace(
+            &telemetry.trace,
+            TraceEvent::new("transfer_error")
+                .maybe_object_id(validation.object_id.as_deref())
+                .reason_code(validation.reason_code.clone()),
+        )?;
         return Ok(PutOutcome {
             accepted: false,
             object_id: validation.object_id.unwrap_or_default(),
@@ -54,7 +87,7 @@ pub async fn put_object(
         .ok_or_else(|| anyhow::anyhow!("local validation accepted without object_id"))?;
     let mut manifest = chunk_bytes(&payload, chunk_size)?;
     manifest.object_id = Some(object_id.clone());
-    put_validated_object(endpoint, metadata_bytes, payload, manifest).await
+    put_validated_object_observed(endpoint, metadata_bytes, payload, manifest, telemetry).await
 }
 
 pub async fn put_validated_object(
@@ -62,6 +95,23 @@ pub async fn put_validated_object(
     metadata_bytes: Vec<u8>,
     payload: Vec<u8>,
     manifest: ChunkManifest,
+) -> anyhow::Result<PutOutcome> {
+    put_validated_object_observed(
+        endpoint,
+        metadata_bytes,
+        payload,
+        manifest,
+        ClientTelemetry::default(),
+    )
+    .await
+}
+
+pub async fn put_validated_object_observed(
+    endpoint: &str,
+    metadata_bytes: Vec<u8>,
+    payload: Vec<u8>,
+    manifest: ChunkManifest,
+    telemetry: ClientTelemetry,
 ) -> anyhow::Result<PutOutcome> {
     let object_id = manifest
         .object_id
@@ -71,6 +121,14 @@ pub async fn put_validated_object(
     let mut stream = TcpStream::connect(endpoint).await?;
 
     handshake(&mut stream, &transfer_id).await?;
+    telemetry.metrics.record_transfer_started();
+    emit_trace(
+        &telemetry.trace,
+        TraceEvent::new("client_put_begin")
+            .transfer_id(transfer_id.clone())
+            .object_id(object_id.clone())
+            .bytes(metadata_bytes.len() as u64),
+    )?;
 
     let mut begin = FrameHeader::new(
         FrameType::PutBegin,
@@ -89,6 +147,9 @@ pub async fn put_validated_object(
         serde_json::to_value(&manifest)?,
     )]));
     write_frame(&mut stream, &begin, &metadata_bytes).await?;
+    telemetry
+        .metrics
+        .record_bytes_sent(metadata_bytes.len() as u64);
 
     for chunk in iter_chunks(&payload, manifest.chunk_size)? {
         let mut header = FrameHeader::new(
@@ -102,23 +163,57 @@ pub async fn put_validated_object(
         header.chunk_offset = Some(chunk.info.offset);
         header.object_payload_len = Some(chunk.info.len);
         header.payload_hash = Some(chunk.info.hash.clone());
+        let ack_started = Instant::now();
         write_frame(&mut stream, &header, chunk.bytes).await?;
+        telemetry
+            .metrics
+            .record_chunk_sent(chunk.bytes.len() as u64);
+        emit_trace(
+            &telemetry.trace,
+            TraceEvent::new("chunk_sent")
+                .transfer_id(transfer_id.clone())
+                .object_id(object_id.clone())
+                .chunk_index(chunk.info.chunk_index)
+                .bytes(chunk.bytes.len() as u64),
+        )?;
 
         let ack = read_frame(&mut stream).await?;
+        let ack_duration_ms = ack_started.elapsed().as_millis() as u64;
+        telemetry
+            .metrics
+            .record_chunk_ack_latency_ms(ack_duration_ms);
         if ack.header.frame_type != FrameType::ChunkAck {
             anyhow::bail!("expected chunk_ack, got {:?}", ack.header.frame_type);
         }
         let status = ack.header.status.as_deref().unwrap_or("rejected");
+        emit_trace(
+            &telemetry.trace,
+            TraceEvent::new("chunk_ack")
+                .transfer_id(transfer_id.clone())
+                .object_id(object_id.clone())
+                .chunk_index(chunk.info.chunk_index)
+                .duration_ms(ack_duration_ms)
+                .reason_code(ack.header.reason.clone().unwrap_or_default()),
+        )?;
         if status != "accepted" && status != "duplicate" {
             let reason = ack
                 .header
                 .reason
                 .unwrap_or_else(|| "chunk_rejected".to_string());
+            telemetry.metrics.record_transfer_failed();
+            emit_trace(
+                &telemetry.trace,
+                TraceEvent::new("transfer_error")
+                    .transfer_id(transfer_id.clone())
+                    .object_id(object_id.clone())
+                    .chunk_index(chunk.info.chunk_index)
+                    .reason_code(reason.clone()),
+            )?;
             anyhow::bail!("chunk {} rejected: {}", chunk.info.chunk_index, reason);
         }
     }
 
-    let mut commit = FrameHeader::new(FrameType::PutCommit, transfer_id, 0);
+    let mut commit = FrameHeader::new(FrameType::PutCommit, transfer_id.clone(), 0);
     commit.object_id = Some(object_id.clone());
     commit.total_chunks = Some(manifest.total_chunks);
     commit.object_payload_len = Some(manifest.payload_len);
@@ -129,6 +224,11 @@ pub async fn put_validated_object(
         anyhow::bail!("expected put_result, got {:?}", result.header.frame_type);
     }
     let status = result.header.status.as_deref().unwrap_or("rejected");
+    if status == "committed" {
+        telemetry.metrics.record_transfer_completed();
+    } else {
+        telemetry.metrics.record_transfer_failed();
+    }
     Ok(PutOutcome {
         accepted: status == "committed",
         object_id,
@@ -164,6 +264,15 @@ pub async fn get_object(
     object_id: &str,
     chunk_size: usize,
 ) -> anyhow::Result<GetOutcome> {
+    get_object_observed(endpoint, object_id, chunk_size, ClientTelemetry::default()).await
+}
+
+pub async fn get_object_observed(
+    endpoint: &str,
+    object_id: &str,
+    chunk_size: usize,
+    telemetry: ClientTelemetry,
+) -> anyhow::Result<GetOutcome> {
     if chunk_size == 0 {
         anyhow::bail!("chunk_size must be greater than zero");
     }
@@ -171,13 +280,43 @@ pub async fn get_object(
     let transfer_id = new_transfer_id("get");
     let mut stream = TcpStream::connect(endpoint).await?;
     handshake(&mut stream, &transfer_id).await?;
+    telemetry.metrics.record_transfer_started();
+    emit_trace(
+        &telemetry.trace,
+        TraceEvent::new("get_begin")
+            .transfer_id(transfer_id.clone())
+            .object_id(object_id.to_string()),
+    )?;
 
     let mut request = FrameHeader::new(FrameType::GetBegin, transfer_id, 0);
     request.object_id = Some(object_id.to_string());
     request.chunk_size = Some(chunk_size as u64);
     write_frame(&mut stream, &request, &[]).await?;
 
-    receive_get_response(&mut stream, object_id).await
+    let outcome = receive_get_response(&mut stream, object_id).await?;
+    if outcome.found {
+        telemetry.metrics.record_transfer_completed();
+        telemetry
+            .metrics
+            .record_bytes_received(outcome.payload.len() as u64);
+        emit_trace(
+            &telemetry.trace,
+            TraceEvent::new("get_completed")
+                .transfer_id(request.transfer_id)
+                .object_id(outcome.object_id.clone())
+                .bytes(outcome.payload.len() as u64),
+        )?;
+    } else {
+        telemetry.metrics.record_transfer_failed();
+        emit_trace(
+            &telemetry.trace,
+            TraceEvent::new("transfer_error")
+                .transfer_id(request.transfer_id)
+                .object_id(outcome.object_id.clone())
+                .reason_code(outcome.reason.clone()),
+        )?;
+    }
+    Ok(outcome)
 }
 
 pub async fn receive_get_response(
@@ -348,4 +487,11 @@ fn new_transfer_id(prefix: &str) -> String {
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
     format!("{prefix}-{}-{nanos}", std::process::id())
+}
+
+fn emit_trace(trace: &Option<TraceSink>, event: TraceEvent) -> anyhow::Result<()> {
+    if let Some(trace) = trace {
+        trace.emit(event)?;
+    }
+    Ok(())
 }

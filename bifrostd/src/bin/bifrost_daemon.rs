@@ -10,6 +10,8 @@ struct Args {
     listen: String,
     #[arg(long)]
     spool: PathBuf,
+    #[arg(long)]
+    trace_jsonl: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -18,6 +20,7 @@ async fn main() {
     if let Err(error) = serve(ServerConfig {
         listen: args.listen,
         spool_root: args.spool,
+        trace_jsonl: args.trace_jsonl,
     })
     .await
     {
