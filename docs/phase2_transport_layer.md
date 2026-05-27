@@ -57,6 +57,12 @@ should remain clear: protocol code does not validate KV object meaning, spool
 code does not redefine object identity, and benchmark code does not bypass the
 acceptance path.
 
+## Dependency note
+
+The Phase 2 daemon uses Tokio for local TCP listener concurrency and async
+client I/O. This keeps one connection from blocking other PUT transfers while
+preserving a single-process, local-only implementation for Phase 2 tests.
+
 ## How Phase 2 builds on Phase 1
 
 Phase 1 defines the immutable object contract:

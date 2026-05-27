@@ -63,6 +63,24 @@ pub struct FrameHeader {
     #[serde(default, alias = "chunk_hash", skip_serializing_if = "Option::is_none")]
     pub payload_hash: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chunk_offset: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chunk_size: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub descriptor_len: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub object_payload_len: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peer_role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supported_versions: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_profile_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub flags: Option<BTreeMap<String, Value>>,
 }
 
@@ -77,6 +95,15 @@ impl FrameHeader {
             total_chunks: None,
             payload_len,
             payload_hash: None,
+            chunk_offset: None,
+            chunk_size: None,
+            descriptor_len: None,
+            object_payload_len: None,
+            status: None,
+            reason: None,
+            peer_role: None,
+            supported_versions: None,
+            target_profile_id: None,
             flags: None,
         }
     }

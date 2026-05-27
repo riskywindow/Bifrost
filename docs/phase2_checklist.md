@@ -27,17 +27,17 @@ Last verified: 2026-05-27
 
 ## Single-path PUT
 
-- [ ] Implement local TCP client and daemon handshake.
-- [ ] Send `put_begin` with descriptor bytes.
-- [ ] Create staging state only after transfer shape validation.
-- [ ] Send and acknowledge chunk frames.
+- [x] Implement local TCP client and daemon handshake.
+- [x] Send `put_begin` with descriptor bytes.
+- [x] Create staging state only after transfer shape validation.
+- [x] Send and acknowledge chunk frames.
 - [ ] Retry rejected chunks while the request is live.
-- [ ] Send `put_commit` only after all chunks are acknowledged.
-- [ ] Reassemble full payload from staging.
-- [ ] Run Phase 1 Rust validation before commit.
-- [ ] Return `put_result` with stable status and reason.
-- [ ] Test successful PUT for valid Phase 1 fixtures.
-- [ ] Test rejected PUT for invalid descriptor, payload hash mismatch, and
+- [x] Send `put_commit` only after all chunks are acknowledged.
+- [x] Reassemble full payload from staging.
+- [x] Run Phase 1 Rust validation before commit.
+- [x] Return `put_result` with stable status and reason.
+- [x] Test successful PUT for valid Phase 1 fixtures.
+- [x] Test rejected PUT for invalid descriptor, payload hash mismatch, and
       object ID mismatch.
 
 ## Single-path GET
@@ -54,7 +54,7 @@ Last verified: 2026-05-27
 
 ## Spool
 
-- [ ] Create a minimal spool layout with `staging/`, `objects/`, and
+- [x] Create a minimal spool layout with `staging/`, `objects/`, and
       `quarantine/`.
 - [x] Keep transfer state outside immutable descriptors.
 - [x] Keep committed record state outside immutable descriptors.
@@ -127,9 +127,9 @@ Last verified: 2026-05-27
 
 ## Phase 2 done criteria
 
-- [ ] A valid Phase 1 object can be PUT over single-path TCP.
-- [ ] The daemon chunks, reassembles, and revalidates the object before commit.
-- [ ] The daemon never commits incomplete or invalid objects.
+- [x] A valid Phase 1 object can be PUT over single-path TCP.
+- [x] The daemon chunks, reassembles, and revalidates the object before commit.
+- [x] The daemon never commits incomplete or invalid objects.
 - [ ] The daemon never serves from staging.
 - [ ] A committed object can be fetched with GET and revalidated by the client.
 - [ ] HAS returns true only for committed and servable objects.

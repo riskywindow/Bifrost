@@ -127,7 +127,7 @@ fn header_too_large_is_rejected() {
 
 #[test]
 fn daemon_help_works() {
-    let output = Command::new(env!("CARGO_BIN_EXE_bifrost_daemon"))
+    let output = Command::new(env!("CARGO_BIN_EXE_bifrost-daemon"))
         .arg("--help")
         .output()
         .unwrap();
@@ -140,7 +140,7 @@ fn daemon_help_works() {
 
 #[test]
 fn xfer_help_works() {
-    let output = Command::new(env!("CARGO_BIN_EXE_bifrost_xfer"))
+    let output = Command::new(env!("CARGO_BIN_EXE_bifrost-xfer"))
         .arg("--help")
         .output()
         .unwrap();

@@ -1,12 +1,16 @@
 pub mod chunker;
+pub mod client;
 pub mod errors;
 pub mod frame;
 pub mod manifest;
 pub mod metrics;
 pub mod protocol;
 pub mod reassembler;
+pub mod server;
+pub mod tcp;
 
 pub use chunker::{chunk_bytes, iter_chunks, Chunk};
+pub use client::{put_object, put_validated_object, PutOutcome};
 pub use errors::{TransportError, TransportResult};
 pub use frame::{
     decode_frame, decode_frame_with_limits, encode_frame, DecodeLimits, Frame, FrameHeader,
@@ -14,3 +18,5 @@ pub use frame::{
 };
 pub use manifest::{ChunkInfo, ChunkManifest, ChunkSpec, DEFAULT_CHUNK_SIZE};
 pub use reassembler::{ChunkAcceptStatus, Reassembler};
+pub use server::{handle_connection, serve, serve_listener, ServerConfig};
+pub use tcp::{read_frame, read_frame_with_limits, write_frame};

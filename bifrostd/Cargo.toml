@@ -10,7 +10,16 @@ clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "time"] }
 
 [[bin]]
 name = "bifrost-kv-validate"
 path = "src/bin/bifrost_kv_validate.rs"
+
+[[bin]]
+name = "bifrost-daemon"
+path = "src/bin/bifrost_daemon.rs"
+
+[[bin]]
+name = "bifrost-xfer"
+path = "src/bin/bifrost_xfer.rs"
