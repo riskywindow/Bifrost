@@ -214,12 +214,20 @@ def _schema_reason(messages: list[str]) -> str | None:
     if not messages:
         return None
 
-    first = messages[0]
-    if "is a required property" in first:
+    first_location = messages[0].split(":", maxsplit=1)[0]
+    location_messages = [
+        message
+        for message in messages
+        if message.split(":", maxsplit=1)[0] == first_location
+    ]
+    if any("is a required property" in message for message in location_messages):
         return errors.MISSING_REQUIRED_FIELD
-    if "Additional properties are not allowed" in first:
+    if any(
+        "Additional properties are not allowed" in message
+        for message in location_messages
+    ):
         return errors.EXTRA_FIELD_REJECTED
-    if "is not of type" in first:
+    if any("is not of type" in message for message in location_messages):
         return errors.INVALID_FIELD_TYPE
     return errors.SCHEMA_VALIDATION_FAILED
 

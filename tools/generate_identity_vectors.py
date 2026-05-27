@@ -71,6 +71,14 @@ def main() -> int:
 
     native_meta = REPO_ROOT / "fixtures/native_valid/tiny_gpt_layer0_block0.meta.json"
     native_payload = REPO_ROOT / "fixtures/native_valid/tiny_gpt_layer0_block0.payload.bin"
+    native_layer3_block7_meta = (
+        REPO_ROOT
+        / "fixtures/native_valid_layer3_block7/tiny_gpt_layer3_block7.meta.json"
+    )
+    native_layer3_block7_payload = (
+        REPO_ROOT
+        / "fixtures/native_valid_layer3_block7/tiny_gpt_layer3_block7.payload.bin"
+    )
     opaque_meta = REPO_ROOT / "fixtures/opaque_valid/lmcache_blob.meta.json"
     opaque_payload = REPO_ROOT / "fixtures/opaque_valid/lmcache_blob.payload.bin"
 
@@ -82,6 +90,11 @@ def main() -> int:
 
     vectors = [
         vector_for("native_tiny_gpt_layer0_block0", native_meta, native_payload),
+        vector_for(
+            "native_tiny_gpt_layer3_block7",
+            native_layer3_block7_meta,
+            native_layer3_block7_payload,
+        ),
         vector_for("opaque_lmcache_blob", opaque_meta, opaque_payload),
         vector_for(
             "native_tiny_gpt_layer0_block0_key_order_variant",

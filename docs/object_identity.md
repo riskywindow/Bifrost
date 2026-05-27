@@ -79,6 +79,17 @@ Canonical JSON requirements:
 
 The same descriptor must produce identical canonical bytes in Python and Rust.
 
+## Schema evolution
+
+Phase 1 accepts only `bifrost.kv_object.v1alpha1`. Unknown schema versions fail
+closed with `unknown_schema_version`; validators do not guess forward
+compatibility.
+
+Future schema versions must define a new supported version string, immutable
+descriptor shape, canonical hashing behavior, and migration expectations before
+validators accept them. Adding fields to `v1alpha1` descriptors is not allowed:
+strict schemas reject extra fields so that object identity remains stable.
+
 ## Payload hash
 
 The payload hash commits to the exact payload bytes.
@@ -116,7 +127,7 @@ The object ID commits to the descriptor hash and payload hash.
 Phase 1 object ID input:
 
 ```text
-"bifrost.object_id.v1" || "\n" || descriptor_hash || "\n" || payload_hash
+"bifrost.object_id.v1" || NUL || descriptor_hash || NUL || payload_hash
 ```
 
 Format:

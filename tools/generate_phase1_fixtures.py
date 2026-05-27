@@ -14,6 +14,8 @@ sys.path.insert(0, str(REPO_ROOT / "bifrost_py"))
 
 from bifrost_kv.fixtures import (  # noqa: E402
     invalid_fixture_cases,
+    native_layer3_block7_metadata,
+    native_layer3_block7_target_profile,
     native_metadata,
     native_payload,
     native_target_profile,
@@ -38,6 +40,15 @@ def main() -> int:
         native_metadata(),
         native_payload(),
         native_target_profile(),
+    )
+    valid_count += 1
+
+    _write_fixture_dir(
+        fixtures_root / "native_valid_layer3_block7",
+        "tiny_gpt_layer3_block7",
+        native_layer3_block7_metadata(),
+        native_payload(),
+        native_layer3_block7_target_profile(),
     )
     valid_count += 1
 

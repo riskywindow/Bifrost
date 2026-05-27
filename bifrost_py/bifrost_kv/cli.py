@@ -34,6 +34,15 @@ class CliError(Exception):
     """A user-facing CLI error with argparse-compatible exit code 2."""
 
 
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    values: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in values:
+            raise ValueError(f"duplicate JSON object key: {key}")
+        values[key] = value
+    return values
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -155,11 +164,13 @@ def _build_parser() -> argparse.ArgumentParser:
 def _read_json_object(path: Path, label: str) -> dict[str, Any]:
     try:
         with path.open(encoding="utf-8") as file:
-            value = json.load(file)
+            value = json.load(file, object_pairs_hook=_reject_duplicate_keys)
     except OSError as exc:
         raise CliError(f"cannot read {label} JSON {path}: {exc.strerror}") from exc
     except json.JSONDecodeError as exc:
         raise CliError(f"cannot parse {label} JSON {path}: {exc.msg}") from exc
+    except ValueError as exc:
+        raise CliError(f"cannot parse {label} JSON {path}: {exc}") from exc
     if not isinstance(value, dict):
         raise CliError(f"{label} JSON root must be an object: {path}")
     return value

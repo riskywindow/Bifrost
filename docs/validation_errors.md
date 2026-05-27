@@ -54,6 +54,31 @@ unsupported_compression
 unsupported_payload_encoding
 ```
 
+## Deterministic validation order
+
+When an object has multiple failures, Phase 1 validators return the first reason
+in this order:
+
+1. Metadata JSON root must be an object; otherwise `parse_error`.
+2. `schema_version` presence, type, and supported value.
+3. `object_type` presence, type, and supported value.
+4. Descriptor schema checks in deterministic path order: missing required fields,
+   extra fields, invalid field types, malformed hash strings, malformed ranges,
+   and other schema failures.
+5. Payload profile support checks: `compression`, then `payload_encoding`.
+6. Payload byte length.
+7. Payload hash.
+8. Descriptor hash.
+9. Object ID.
+10. Target compatibility checks, in the order listed by the native or opaque
+    compatibility code meanings below.
+11. Native or opaque semantic checks that require an integrity-verified
+    descriptor.
+
+This means integrity failures win over compatibility failures. For example, a
+payload hash mismatch is returned before a tokenizer mismatch. A descriptor hash
+mismatch is returned before an object ID mismatch when both are present.
+
 ## Code meanings
 
 `accepted`: descriptor, payload, identity, and requested compatibility profile all validated.

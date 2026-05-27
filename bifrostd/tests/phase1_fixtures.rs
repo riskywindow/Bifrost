@@ -55,6 +55,24 @@ fn native_valid_fixture_is_accepted() {
 }
 
 #[test]
+fn native_layer3_block7_fixture_is_accepted() {
+    let root = repo_root();
+    let meta = read_json(
+        &root.join("fixtures/native_valid_layer3_block7/tiny_gpt_layer3_block7.meta.json"),
+    );
+    let payload = read_bytes(
+        &root.join("fixtures/native_valid_layer3_block7/tiny_gpt_layer3_block7.payload.bin"),
+    );
+    let target = read_json(&root.join("fixtures/native_valid_layer3_block7/target_profile.json"));
+    let result = validate_object(&meta, &payload, Some(&target));
+
+    assert_eq!(result.status, "accepted");
+    assert_eq!(result.reason_code, "accepted");
+    assert_eq!(meta["native_tensor_profile"]["layer_id"], 3);
+    assert_eq!(meta["native_tensor_profile"]["kv_block_id"], 7);
+}
+
+#[test]
 fn opaque_valid_fixture_is_accepted() {
     let root = repo_root();
     let meta = read_json(&root.join("fixtures/opaque_valid/lmcache_blob.meta.json"));

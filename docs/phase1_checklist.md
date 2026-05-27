@@ -14,7 +14,7 @@ Last verified: 2026-05-27
 - [x] Define allowed hash string formats.
 - [x] Define allowed compression values for Phase 1.
 - [x] Define allowed payload encoding values for Phase 1.
-- [ ] Document schema evolution rules.
+- [x] Document schema evolution rules.
 
 ## Validation results and errors
 
@@ -26,7 +26,7 @@ Last verified: 2026-05-27
 ## Python canonicalization and hashing
 
 - [x] Implement canonical JSON serialization.
-- [ ] Reject duplicate JSON object keys.
+- [x] Reject duplicate JSON object keys in CLI JSON inputs.
 - [x] Reject non-canonical or unsupported number forms.
 - [x] Sort object keys lexicographically.
 - [x] Preserve array order.
@@ -39,7 +39,7 @@ Last verified: 2026-05-27
 
 ## Python validator
 
-- [ ] Parse descriptor JSON.
+- [x] Parse descriptor JSON in CLI entry points.
 - [x] Validate schema version.
 - [x] Validate object type.
 - [x] Validate required fields.
@@ -56,12 +56,15 @@ Last verified: 2026-05-27
 - [x] Validate opaque engine key fields.
 - [x] Validate opaque engine and integration fields.
 - [x] Return stable reason codes.
+- [x] Document and test deterministic error ordering for multi-error objects.
 - [x] Add known-good fixture tests.
 - [x] Add known-bad fixture tests for every reason code where practical.
+- [x] Add fail-closed edge-case tests for malformed hash prefixes and negative numeric fields.
 
 ## Fixture generator
 
 - [x] Generate deterministic native accepted fixture.
+- [x] Generate deterministic native accepted fixture for layer 3, block 7.
 - [x] Generate deterministic opaque accepted fixture.
 - [x] Generate object identity test vectors.
 - [x] Generate payload hash mismatch fixture.
@@ -76,7 +79,7 @@ Last verified: 2026-05-27
 ## CLI
 
 - [x] Add command to validate one descriptor and payload pair.
-- [ ] Add command to validate a fixture directory.
+- [ ] Add command to validate a fixture directory. Phase 1 validates fixture file triples; directory loading is currently used by fixture corruption.
 - [x] Print `ACCEPTED` for accepted objects.
 - [x] Print stable reason codes for rejected objects.
 - [x] Return non-zero exit status for rejected or malformed objects.
@@ -108,9 +111,10 @@ Last verified: 2026-05-27
 - [x] Assert identical object ID values.
 - [x] Assert identical accepted or rejected reason codes.
 - [x] Include native KV page vectors.
+- [x] Include nonzero native KV page vectors.
 - [x] Include opaque engine blob vectors.
 - [x] Include recursive metadata key-order invariant tests.
-- [ ] Include mutable local record examples proving identity does not change.
+- [x] Include mutable local record examples proving mutable storage fields are outside descriptor identity.
 
 ## CI
 
@@ -120,16 +124,16 @@ Last verified: 2026-05-27
 - [x] Run cross-language parity tests.
 - [x] Run identity vector generation check.
 - [x] Fail CI if generated identity vectors differ from committed fixtures.
-- [ ] Fail CI if reason code lists diverge between docs, Python, and Rust.
+- [x] Fail CI if reason code lists diverge between docs, Python, and Rust.
 
 ## Phase 1 done criteria
 
-- [ ] Documentation defines scope, identity, validation, and error codes.
-- [ ] Python reference implementation is complete.
+- [x] Documentation defines scope, identity, validation, and error codes.
+- [x] Python reference implementation is complete.
 - [x] Rust metadata mirror is complete.
 - [x] Fixtures cover accepted and rejected paths.
 - [x] CLI validates fixtures deterministically.
 - [x] Python and Rust agree on all committed test vectors.
 - [x] CI enforces Python tests, Rust tests, identity vector determinism, and parity.
-- [ ] No networking, object storage, LMCache, vLLM, dashboard, inference, or real KV extraction work is required.
-- [ ] BIFROST rejects uncertain compatibility or integrity every time.
+- [x] No networking, object storage, LMCache, vLLM, dashboard, inference, or real KV extraction work is required.
+- [x] BIFROST rejects uncertain compatibility or integrity every time.

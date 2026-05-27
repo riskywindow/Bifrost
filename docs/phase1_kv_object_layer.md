@@ -107,6 +107,21 @@ compression
 
 BIFROST must not reinterpret an opaque blob as tensors. If BIFROST cannot prove compatibility from the opaque metadata, it rejects the object or reports that the payload is not interpretable.
 
+## Fail-closed validation
+
+Validation is deliberately ordered so uncertain identity is rejected before
+compatibility is considered. Validators check supported schema version and
+object type first, reject unknown fields and malformed required fields, reject
+unsupported compression or payload encodings, then verify byte length, payload
+hash, descriptor hash, and object ID. Only after those identity checks pass does
+the validator evaluate target compatibility and native or opaque semantics.
+
+Mutable storage fields such as tier, pinned state, local path, write state, last
+access time, expiry, eviction metadata, and cache location are not part of the
+KV object descriptor schema. If such fields appear inside a descriptor, strict
+schema validation rejects them as extra fields. They belong in a separate local
+record owned by later storage phases.
+
 ## Python first, Rust second
 
 Python is the Phase 1 reference implementation.

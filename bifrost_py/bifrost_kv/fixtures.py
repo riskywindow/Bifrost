@@ -108,8 +108,44 @@ def native_metadata() -> dict[str, Any]:
     return finalize_identity(metadata, native_payload())
 
 
+def native_layer3_block7_metadata() -> dict[str, Any]:
+    metadata = native_metadata()
+    block_size_tokens = metadata["native_tensor_profile"]["block_size_tokens"]
+    token_start = 7 * block_size_tokens
+    token_end = token_start + block_size_tokens
+
+    metadata["prefix_profile"]["token_count"] = token_end
+    metadata["prefix_profile"]["token_range"] = {"start": token_start, "end": token_end}
+    metadata["prefix_profile"]["absolute_position_range"] = {
+        "start": token_start,
+        "end": token_end,
+    }
+    metadata["prefix_profile"]["prefix_hash"] = deterministic_hash(
+        f"tiny-gpt:prefix:{token_start}:{token_end}"
+    )
+    metadata["prefix_profile"]["token_hash"] = deterministic_hash(
+        f"tiny-gpt:tokens:{token_start}:{token_end}"
+    )
+    metadata["native_tensor_profile"]["layer_id"] = 3
+    metadata["native_tensor_profile"]["kv_block_id"] = 7
+    metadata["native_tensor_profile"]["token_range"] = {
+        "start": token_start,
+        "end": token_end,
+    }
+    metadata["provenance"] = _provenance("native_valid_layer3_block7")
+    return finalize_identity(metadata, native_payload())
+
+
 def native_target_profile() -> dict[str, Any]:
     metadata = native_metadata()
+    return native_target_profile_for_metadata(metadata)
+
+
+def native_layer3_block7_target_profile() -> dict[str, Any]:
+    return native_target_profile_for_metadata(native_layer3_block7_metadata())
+
+
+def native_target_profile_for_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": TARGET_SCHEMA_VERSION,
         "accepts_object_type": "native_kv_page",
@@ -529,9 +565,12 @@ __all__ = [
     "fake_lmcache_engine_key_hash",
     "finalize_identity",
     "invalid_fixture_cases",
+    "native_layer3_block7_metadata",
+    "native_layer3_block7_target_profile",
     "native_metadata",
     "native_payload",
     "native_target_profile",
+    "native_target_profile_for_metadata",
     "opaque_metadata",
     "opaque_payload",
     "opaque_target_profile",

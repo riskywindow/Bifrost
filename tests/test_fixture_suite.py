@@ -30,6 +30,20 @@ def test_native_valid_fixture_is_accepted() -> None:
     assert result.reason_code == ACCEPTED
 
 
+def test_native_layer3_block7_fixture_is_accepted() -> None:
+    fixture_dir = FIXTURES_ROOT / "native_valid_layer3_block7"
+    metadata = load_json(fixture_dir / "tiny_gpt_layer3_block7.meta.json")
+    payload = (fixture_dir / "tiny_gpt_layer3_block7.payload.bin").read_bytes()
+    target = load_json(fixture_dir / "target_profile.json")
+
+    result = validate_object(metadata, payload, target)
+
+    assert result.status == "accepted"
+    assert result.reason_code == ACCEPTED
+    assert metadata["native_tensor_profile"]["layer_id"] == 3
+    assert metadata["native_tensor_profile"]["kv_block_id"] == 7
+
+
 def test_opaque_valid_fixture_is_accepted() -> None:
     fixture_dir = FIXTURES_ROOT / "opaque_valid"
     metadata = load_json(fixture_dir / "lmcache_blob.meta.json")

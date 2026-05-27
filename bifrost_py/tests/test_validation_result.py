@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -105,6 +106,18 @@ def test_reason_codes_match_validation_errors_doc() -> None:
     stable_block = doc.split("```text\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
 
     assert tuple(stable_block.splitlines()) == REASON_CODES
+
+
+def test_reason_codes_match_rust_mirror() -> None:
+    source = (REPO_ROOT / "bifrostd" / "src" / "cache" / "errors.rs").read_text(
+        encoding="utf-8"
+    )
+    rust_codes = tuple(
+        match.group(1)
+        for match in re.finditer(r'=> "([a-z0-9_]+)",', source)
+    )
+
+    assert rust_codes == REASON_CODES
 
 
 def test_invalid_validation_result_fails_schema() -> None:

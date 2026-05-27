@@ -10,6 +10,7 @@ from bifrost_kv.errors import (
     ACCEPTED,
     BYTE_LENGTH_MISMATCH,
     DESCRIPTOR_HASH_MISMATCH,
+    SCHEMA_VALIDATION_FAILED,
     INVALID_KV_BLOCK_ID,
     INVALID_LAYER_ID,
     INVALID_TENSOR_SHAPE,
@@ -27,6 +28,7 @@ from bifrost_kv.errors import (
     WRONG_TOKEN_RANGE,
     WRONG_TOKENIZER_HASH,
 )
+from bifrost_kv.fixtures import native_layer3_block7_metadata
 from bifrost_kv.validate import validate_object
 
 HASHES = {
@@ -42,6 +44,10 @@ HASHES = {
 
 def native_payload() -> bytes:
     return bytes(range(96))
+
+
+def payload_bytes(byte_length: int) -> bytes:
+    return bytes(index % 251 for index in range(byte_length))
 
 
 def finalize_identity(metadata: dict[str, Any], payload: bytes) -> dict[str, Any]:
@@ -160,6 +166,55 @@ def test_valid_native_accepted() -> None:
 
 
 @pytest.mark.parametrize(
+    ("dtype", "byte_width"),
+    [
+        ("float16", 2),
+        ("bfloat16", 2),
+        ("float32", 4),
+    ],
+)
+def test_native_payload_byte_length_matches_dtype_width(
+    dtype: str, byte_width: int
+) -> None:
+    metadata = native_metadata()
+    expected_length = 2 * 4 * 2 * 3 * byte_width
+    payload = payload_bytes(expected_length)
+    metadata["model_profile"]["dtype"] = dtype
+    metadata["native_tensor_profile"]["tensor_dtype"] = dtype
+    metadata["payload_profile"]["byte_length"] = expected_length
+    metadata["integrity"]["chunk_size_bytes"] = expected_length
+    metadata = finalize_identity(metadata, payload)
+
+    result = validate_object(metadata, payload)
+
+    assert result.status == "accepted"
+    assert result.reason_code == ACCEPTED
+
+
+def test_native_tensor_shape_must_match_exact_rank_and_dimensions() -> None:
+    metadata = native_metadata()
+    metadata["native_tensor_profile"]["tensor_shape"] = [2, 4, 2, 3, 1]
+    metadata = finalize_identity(metadata, native_payload())
+
+    result = validate_object(metadata, native_payload())
+
+    assert result.reason_code == INVALID_TENSOR_SHAPE
+
+
+def test_native_kv_block_id_calculation_accepts_nonzero_block() -> None:
+    metadata = native_layer3_block7_metadata()
+    payload = (
+        bytes(index % 251 for index in range(metadata["payload_profile"]["byte_length"]))
+    )
+
+    result = validate_object(metadata, payload)
+
+    assert result.status == "accepted"
+    assert metadata["native_tensor_profile"]["kv_block_id"] == 7
+    assert metadata["native_tensor_profile"]["token_range"]["start"] == 1792
+
+
+@pytest.mark.parametrize(
     ("path", "value", "reason"),
     [
         (("model_profile", "model_hash"), HASHES["wrong"], WRONG_MODEL_HASH),
@@ -241,3 +296,39 @@ def test_object_id_mismatch_rejected() -> None:
     metadata["object_id"] = "bifrost://object/blake3/" + "9" * 64
 
     assert validate_object(metadata, native_payload()).reason_code == OBJECT_ID_MISMATCH
+
+
+@pytest.mark.parametrize(
+    ("mutate", "reason"),
+    [
+        (
+            lambda meta: meta["payload_profile"].__setitem__("byte_length", -1),
+            SCHEMA_VALIDATION_FAILED,
+        ),
+        (
+            lambda meta: meta["native_tensor_profile"]["token_range"].__setitem__(
+                "start", -1
+            ),
+            SCHEMA_VALIDATION_FAILED,
+        ),
+        (
+            lambda meta: meta["native_tensor_profile"].__setitem__("layer_id", -1),
+            SCHEMA_VALIDATION_FAILED,
+        ),
+        (
+            lambda meta: meta["native_tensor_profile"].__setitem__("kv_block_id", -1),
+            SCHEMA_VALIDATION_FAILED,
+        ),
+        (
+            lambda meta: meta["native_tensor_profile"].__setitem__(
+                "block_token_count", -1
+            ),
+            SCHEMA_VALIDATION_FAILED,
+        ),
+    ],
+)
+def test_negative_native_numbers_fail_closed(mutate: Any, reason: str) -> None:
+    metadata = native_metadata()
+    mutate(metadata)
+
+    assert validate_object(metadata, native_payload()).reason_code == reason

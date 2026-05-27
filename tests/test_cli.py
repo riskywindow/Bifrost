@@ -116,6 +116,27 @@ def test_validate_json_emits_validation_result_schema() -> None:
     assert value["reason_code"] == "accepted"
 
 
+def test_validate_json_rejected_output_matches_validation_result_schema() -> None:
+    fixture_dir = FIXTURES_ROOT / "invalid" / "payload_hash_mismatch"
+
+    result = run_cli(
+        "validate",
+        "--meta",
+        fixture_dir / "meta.json",
+        "--payload",
+        fixture_dir / "payload.bin",
+        "--target",
+        fixture_dir / "target_profile.json",
+        "--json",
+    )
+
+    assert result.returncode == 1
+    value = json.loads(result.stdout)
+    assert validate_validation_result(value) == []
+    assert value["status"] == "rejected"
+    assert value["reason_code"] == "payload_hash_mismatch"
+
+
 def test_id_emits_same_identity_as_compute_object_identity() -> None:
     fixture_dir = FIXTURES_ROOT / "native_valid"
     metadata = load_json(fixture_dir / "tiny_gpt_layer0_block0.meta.json")
@@ -190,3 +211,25 @@ def test_cli_exits_2_for_missing_files(tmp_path: Path) -> None:
 
     assert result.returncode == 2
     assert "cannot read metadata JSON" in result.stderr
+
+
+def test_cli_exits_2_for_duplicate_json_keys(tmp_path: Path) -> None:
+    meta = tmp_path / "duplicate.meta.json"
+    payload = tmp_path / "payload.bin"
+    meta.write_text(
+        '{"schema_version":"bifrost.kv_object.v1alpha1","schema_version":"future"}',
+        encoding="utf-8",
+    )
+    payload.write_bytes(b"")
+
+    result = run_cli("validate", "--meta", meta, "--payload", payload)
+
+    assert result.returncode == 2
+    assert "duplicate JSON object key: schema_version" in result.stderr
+
+
+def test_cli_exits_2_for_usage_errors() -> None:
+    result = run_cli("validate")
+
+    assert result.returncode == 2
+    assert "usage:" in result.stderr

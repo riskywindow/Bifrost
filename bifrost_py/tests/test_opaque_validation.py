@@ -7,6 +7,8 @@ from bifrost_kv.errors import (
     ACCEPTED,
     OPAQUE_PAYLOAD_NOT_INTERPRETABLE,
     OPAQUE_WRONG_ENGINE_KEY,
+    OPAQUE_WRONG_INTEGRATION_NAME,
+    PAYLOAD_HASH_MISMATCH,
 )
 from bifrost_kv.validate import validate_object
 from test_native_validation import HASHES, finalize_identity, native_metadata
@@ -92,6 +94,26 @@ def test_opaque_wrong_engine_key_rejected() -> None:
     result = validate_object(opaque_metadata(), opaque_payload(), target)
 
     assert result.reason_code == OPAQUE_WRONG_ENGINE_KEY
+
+
+def test_opaque_wrong_integration_name_rejected() -> None:
+    target = opaque_target_profile()
+    target["engine_profile"]["integration_name"] = "other-integration"
+
+    result = validate_object(opaque_metadata(), opaque_payload(), target)
+
+    assert result.reason_code == OPAQUE_WRONG_INTEGRATION_NAME
+
+
+def test_opaque_payload_hash_mismatch_rejected_before_compatibility() -> None:
+    metadata = opaque_metadata()
+    target = opaque_target_profile()
+    target["opaque_requirements"]["engine_key_hash"] = HASHES["wrong"]
+    payload = b"x" + opaque_payload()[1:]
+
+    result = validate_object(metadata, payload, target)
+
+    assert result.reason_code == PAYLOAD_HASH_MISMATCH
 
 
 def test_opaque_object_with_native_tensor_profile_rejected() -> None:

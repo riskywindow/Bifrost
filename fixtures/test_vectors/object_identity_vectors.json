@@ -8,6 +8,14 @@
     "payload_path": "fixtures/native_valid/tiny_gpt_layer0_block0.payload.bin"
   },
   {
+    "expected_descriptor_hash": "blake3:5ec52478a09dc55cea4b466b4fc07224e80357333dae433347e9d61fc7bdbf53",
+    "expected_object_id": "bifrost://object/blake3/bfd0b8e5cf9664b3756bba3343643a8925017f068b58dfb7ccc413d45674e742",
+    "expected_payload_hash": "blake3:acca1229e537587e75108d1a25c3e28d7ce8036556137dc2973d9289187e58d4",
+    "meta_path": "fixtures/native_valid_layer3_block7/tiny_gpt_layer3_block7.meta.json",
+    "name": "native_tiny_gpt_layer3_block7",
+    "payload_path": "fixtures/native_valid_layer3_block7/tiny_gpt_layer3_block7.payload.bin"
+  },
+  {
     "expected_descriptor_hash": "blake3:656314965f3de28360ba0f34772f9861dae49c55347855122b0f47c1cb2021e7",
     "expected_object_id": "bifrost://object/blake3/73a1f47f6910ead76ca8cf9d6b04c6a76c9f754c0672a8c021be4fb20b25f6ab",
     "expected_payload_hash": "blake3:015094013f57a5277b59d8475c0501042c0b642e531b0a1c8f58d2163229e969",
