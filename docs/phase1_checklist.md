@@ -18,17 +18,17 @@ Last verified: 2026-05-27
 
 ## Python canonicalization and hashing
 
-- [ ] Implement canonical JSON serialization.
+- [x] Implement canonical JSON serialization.
 - [ ] Reject duplicate JSON object keys.
-- [ ] Reject non-canonical or unsupported number forms.
-- [ ] Sort object keys lexicographically.
-- [ ] Preserve array order.
-- [ ] Omit descriptor hash and object ID from descriptor hash input.
-- [ ] Compute payload hash from exact payload bytes.
-- [ ] Compute descriptor hash from canonical immutable descriptor bytes.
-- [ ] Compute object ID from descriptor hash and payload hash.
-- [ ] Add deterministic test vectors for canonical bytes.
-- [ ] Add deterministic test vectors for all hash outputs.
+- [x] Reject non-canonical or unsupported number forms.
+- [x] Sort object keys lexicographically.
+- [x] Preserve array order.
+- [x] Omit descriptor hash and object ID from descriptor hash input.
+- [x] Compute payload hash from exact payload bytes.
+- [x] Compute descriptor hash from canonical immutable descriptor bytes.
+- [x] Compute object ID from descriptor hash and payload hash.
+- [x] Add deterministic test vectors for canonical bytes.
+- [x] Add deterministic test vectors for all hash outputs.
 
 ## Python validator
 

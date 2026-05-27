@@ -3,7 +3,10 @@ name = "bifrost-py"
 version = "0.1.0"
 description = "Phase 1 Python schema validation tests for BIFROST."
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+  # Phase 1 object identity requires BLAKE3; SHA-family hashes are not valid primary object identity hashes.
+  "blake3>=1.0.0"
+]
 
 [project.optional-dependencies]
 dev = [
