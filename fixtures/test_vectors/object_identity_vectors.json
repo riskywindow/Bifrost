@@ -1,0 +1,26 @@
+[
+  {
+    "expected_descriptor_hash": "blake3:d97b3b11e17696f72fad3fc123e453051a2117c3a190469065cdb6d89a13ec2f",
+    "expected_object_id": "bifrost://object/blake3/5e515c8340de72c52cc23e54345c51f185c06e49f8cadd8a4808da95e1854e32",
+    "expected_payload_hash": "blake3:acca1229e537587e75108d1a25c3e28d7ce8036556137dc2973d9289187e58d4",
+    "meta_path": "fixtures/native_valid/tiny_gpt_layer0_block0.meta.json",
+    "name": "native_tiny_gpt_layer0_block0",
+    "payload_path": "fixtures/native_valid/tiny_gpt_layer0_block0.payload.bin"
+  },
+  {
+    "expected_descriptor_hash": "blake3:656314965f3de28360ba0f34772f9861dae49c55347855122b0f47c1cb2021e7",
+    "expected_object_id": "bifrost://object/blake3/73a1f47f6910ead76ca8cf9d6b04c6a76c9f754c0672a8c021be4fb20b25f6ab",
+    "expected_payload_hash": "blake3:015094013f57a5277b59d8475c0501042c0b642e531b0a1c8f58d2163229e969",
+    "meta_path": "fixtures/opaque_valid/lmcache_blob.meta.json",
+    "name": "opaque_lmcache_blob",
+    "payload_path": "fixtures/opaque_valid/lmcache_blob.payload.bin"
+  },
+  {
+    "expected_descriptor_hash": "blake3:d97b3b11e17696f72fad3fc123e453051a2117c3a190469065cdb6d89a13ec2f",
+    "expected_object_id": "bifrost://object/blake3/5e515c8340de72c52cc23e54345c51f185c06e49f8cadd8a4808da95e1854e32",
+    "expected_payload_hash": "blake3:acca1229e537587e75108d1a25c3e28d7ce8036556137dc2973d9289187e58d4",
+    "meta_path": "fixtures/test_vectors/native_tiny_gpt_layer0_block0.reordered.meta.json",
+    "name": "native_tiny_gpt_layer0_block0_key_order_variant",
+    "payload_path": "fixtures/native_valid/tiny_gpt_layer0_block0.payload.bin"
+  }
+]

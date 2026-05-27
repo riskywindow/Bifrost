@@ -63,7 +63,7 @@ Last verified: 2026-05-27
 
 - [x] Generate deterministic native accepted fixture.
 - [x] Generate deterministic opaque accepted fixture.
-- [ ] Generate descriptor-only test vectors.
+- [x] Generate object identity test vectors.
 - [x] Generate payload hash mismatch fixture.
 - [x] Generate descriptor hash mismatch fixture.
 - [x] Generate object ID mismatch fixture.
@@ -71,7 +71,7 @@ Last verified: 2026-05-27
 - [x] Generate compatibility mismatch fixtures.
 - [x] Generate malformed schema fixtures.
 - [x] Store expected reason code with each rejected fixture.
-- [ ] Make fixture generation reproducible in CI.
+- [x] Make identity vector generation reproducible in CI.
 
 ## CLI
 
@@ -101,7 +101,7 @@ Last verified: 2026-05-27
 
 ## Cross-language test vectors
 
-- [ ] Share canonical JSON fixtures between Python and Rust.
+- [x] Share canonical JSON fixtures between Python and Rust.
 - [x] Share payload bytes between Python and Rust.
 - [x] Assert identical payload hash values.
 - [x] Assert identical descriptor hash values.
@@ -109,16 +109,17 @@ Last verified: 2026-05-27
 - [x] Assert identical accepted or rejected reason codes.
 - [x] Include native KV page vectors.
 - [x] Include opaque engine blob vectors.
+- [x] Include recursive metadata key-order invariant tests.
 - [ ] Include mutable local record examples proving identity does not change.
 
 ## CI
 
-- [ ] Run Python unit tests.
-- [ ] Run Python CLI tests.
-- [ ] Run Rust unit tests.
-- [ ] Run cross-language parity tests.
-- [ ] Run fixture generation check.
-- [ ] Fail CI if generated fixtures differ from committed fixtures.
+- [x] Run Python unit tests.
+- [x] Run Python CLI tests.
+- [x] Run Rust unit tests.
+- [x] Run cross-language parity tests.
+- [x] Run identity vector generation check.
+- [x] Fail CI if generated identity vectors differ from committed fixtures.
 - [ ] Fail CI if reason code lists diverge between docs, Python, and Rust.
 
 ## Phase 1 done criteria
@@ -129,6 +130,6 @@ Last verified: 2026-05-27
 - [x] Fixtures cover accepted and rejected paths.
 - [x] CLI validates fixtures deterministically.
 - [x] Python and Rust agree on all committed test vectors.
-- [ ] CI enforces Python tests, Rust tests, fixture determinism, and parity.
+- [x] CI enforces Python tests, Rust tests, identity vector determinism, and parity.
 - [ ] No networking, object storage, LMCache, vLLM, dashboard, inference, or real KV extraction work is required.
 - [ ] BIFROST rejects uncertain compatibility or integrity every time.
