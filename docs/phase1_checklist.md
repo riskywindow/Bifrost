@@ -86,29 +86,29 @@ Last verified: 2026-05-27
 
 ## Rust metadata mirror
 
-- [ ] Define Rust metadata structs matching the schema.
-- [ ] Define Rust reason code enum or constants matching Python.
-- [ ] Parse descriptor JSON.
-- [ ] Reject unsupported schema versions.
-- [ ] Reject unsupported object types.
-- [ ] Validate required fields and types.
-- [ ] Validate native metadata fields.
-- [ ] Validate opaque metadata fields.
-- [ ] Recompute descriptor hash and object ID.
-- [ ] Keep mutable local record fields outside object identity types.
-- [ ] Add Rust unit tests for accepted metadata.
-- [ ] Add Rust unit tests for rejected metadata.
+- [x] Define Rust metadata structs matching the schema.
+- [x] Define Rust reason code enum or constants matching Python.
+- [x] Parse descriptor JSON.
+- [x] Reject unsupported schema versions.
+- [x] Reject unsupported object types.
+- [x] Validate required fields and types.
+- [x] Validate native metadata fields.
+- [x] Validate opaque metadata fields.
+- [x] Recompute descriptor hash and object ID.
+- [x] Keep mutable local record fields outside object identity types.
+- [x] Add Rust unit tests for accepted metadata.
+- [x] Add Rust unit tests for rejected metadata.
 
 ## Cross-language test vectors
 
 - [ ] Share canonical JSON fixtures between Python and Rust.
-- [ ] Share payload bytes between Python and Rust.
-- [ ] Assert identical payload hash values.
-- [ ] Assert identical descriptor hash values.
-- [ ] Assert identical object ID values.
-- [ ] Assert identical accepted or rejected reason codes.
-- [ ] Include native KV page vectors.
-- [ ] Include opaque engine blob vectors.
+- [x] Share payload bytes between Python and Rust.
+- [x] Assert identical payload hash values.
+- [x] Assert identical descriptor hash values.
+- [x] Assert identical object ID values.
+- [x] Assert identical accepted or rejected reason codes.
+- [x] Include native KV page vectors.
+- [x] Include opaque engine blob vectors.
 - [ ] Include mutable local record examples proving identity does not change.
 
 ## CI
@@ -125,10 +125,10 @@ Last verified: 2026-05-27
 
 - [ ] Documentation defines scope, identity, validation, and error codes.
 - [ ] Python reference implementation is complete.
-- [ ] Rust metadata mirror is complete.
+- [x] Rust metadata mirror is complete.
 - [x] Fixtures cover accepted and rejected paths.
 - [x] CLI validates fixtures deterministically.
-- [ ] Python and Rust agree on all committed test vectors.
+- [x] Python and Rust agree on all committed test vectors.
 - [ ] CI enforces Python tests, Rust tests, fixture determinism, and parity.
 - [ ] No networking, object storage, LMCache, vLLM, dashboard, inference, or real KV extraction work is required.
 - [ ] BIFROST rejects uncertain compatibility or integrity every time.
