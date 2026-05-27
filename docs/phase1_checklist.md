@@ -16,6 +16,13 @@ Last verified: 2026-05-27
 - [x] Define allowed payload encoding values for Phase 1.
 - [ ] Document schema evolution rules.
 
+## Validation results and errors
+
+- [x] Define Python stable reason code constants.
+- [x] Define Python validation result type.
+- [x] Validate validation result objects against JSON Schema.
+- [x] Enforce docs, schema, and Python reason-code parity in tests.
+
 ## Python canonicalization and hashing
 
 - [x] Implement canonical JSON serialization.

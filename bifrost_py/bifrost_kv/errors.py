@@ -1,0 +1,140 @@
+"""Stable validation reason codes for BIFROST Phase 1."""
+
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+class ReasonCode(StrEnum):
+    ACCEPTED = "accepted"
+    PARSE_ERROR = "parse_error"
+    SCHEMA_VALIDATION_FAILED = "schema_validation_failed"
+    UNKNOWN_SCHEMA_VERSION = "unknown_schema_version"
+    UNKNOWN_OBJECT_TYPE = "unknown_object_type"
+    MISSING_REQUIRED_FIELD = "missing_required_field"
+    EXTRA_FIELD_REJECTED = "extra_field_rejected"
+    INVALID_FIELD_TYPE = "invalid_field_type"
+    BYTE_LENGTH_MISMATCH = "byte_length_mismatch"
+    PAYLOAD_HASH_MISMATCH = "payload_hash_mismatch"
+    DESCRIPTOR_HASH_MISMATCH = "descriptor_hash_mismatch"
+    OBJECT_ID_MISMATCH = "object_id_mismatch"
+    WRONG_MODEL_HASH = "wrong_model_hash"
+    WRONG_TOKENIZER_HASH = "wrong_tokenizer_hash"
+    WRONG_CONFIG_HASH = "wrong_config_hash"
+    WRONG_ROPE_HASH = "wrong_rope_hash"
+    WRONG_DTYPE = "wrong_dtype"
+    WRONG_NUM_LAYERS = "wrong_num_layers"
+    WRONG_NUM_KV_HEADS = "wrong_num_kv_heads"
+    WRONG_HEAD_DIM = "wrong_head_dim"
+    WRONG_ENGINE_NAME = "wrong_engine_name"
+    WRONG_ENGINE_VERSION = "wrong_engine_version"
+    WRONG_ATTENTION_IMPL = "wrong_attention_impl"
+    WRONG_KV_LAYOUT = "wrong_kv_layout"
+    WRONG_BLOCK_SIZE_TOKENS = "wrong_block_size_tokens"
+    WRONG_KV_CACHE_FORMAT = "wrong_kv_cache_format"
+    WRONG_PREFIX_HASH = "wrong_prefix_hash"
+    WRONG_TOKEN_RANGE = "wrong_token_range"
+    WRONG_ABSOLUTE_POSITION_RANGE = "wrong_absolute_position_range"
+    INVALID_LAYER_ID = "invalid_layer_id"
+    INVALID_KV_BLOCK_ID = "invalid_kv_block_id"
+    INVALID_BLOCK_TOKEN_COUNT = "invalid_block_token_count"
+    INVALID_TENSOR_SHAPE = "invalid_tensor_shape"
+    INVALID_TENSOR_DTYPE = "invalid_tensor_dtype"
+    INVALID_TENSOR_LAYOUT = "invalid_tensor_layout"
+    OPAQUE_WRONG_ENGINE_KEY = "opaque_wrong_engine_key"
+    OPAQUE_WRONG_ENGINE_NAME = "opaque_wrong_engine_name"
+    OPAQUE_WRONG_INTEGRATION_NAME = "opaque_wrong_integration_name"
+    OPAQUE_PAYLOAD_NOT_INTERPRETABLE = "opaque_payload_not_interpretable"
+    UNSUPPORTED_COMPRESSION = "unsupported_compression"
+    UNSUPPORTED_PAYLOAD_ENCODING = "unsupported_payload_encoding"
+
+
+REASON_CODES: tuple[str, ...] = tuple(code.value for code in ReasonCode)
+
+ACCEPTED = ReasonCode.ACCEPTED.value
+PARSE_ERROR = ReasonCode.PARSE_ERROR.value
+SCHEMA_VALIDATION_FAILED = ReasonCode.SCHEMA_VALIDATION_FAILED.value
+UNKNOWN_SCHEMA_VERSION = ReasonCode.UNKNOWN_SCHEMA_VERSION.value
+UNKNOWN_OBJECT_TYPE = ReasonCode.UNKNOWN_OBJECT_TYPE.value
+MISSING_REQUIRED_FIELD = ReasonCode.MISSING_REQUIRED_FIELD.value
+EXTRA_FIELD_REJECTED = ReasonCode.EXTRA_FIELD_REJECTED.value
+INVALID_FIELD_TYPE = ReasonCode.INVALID_FIELD_TYPE.value
+BYTE_LENGTH_MISMATCH = ReasonCode.BYTE_LENGTH_MISMATCH.value
+PAYLOAD_HASH_MISMATCH = ReasonCode.PAYLOAD_HASH_MISMATCH.value
+DESCRIPTOR_HASH_MISMATCH = ReasonCode.DESCRIPTOR_HASH_MISMATCH.value
+OBJECT_ID_MISMATCH = ReasonCode.OBJECT_ID_MISMATCH.value
+WRONG_MODEL_HASH = ReasonCode.WRONG_MODEL_HASH.value
+WRONG_TOKENIZER_HASH = ReasonCode.WRONG_TOKENIZER_HASH.value
+WRONG_CONFIG_HASH = ReasonCode.WRONG_CONFIG_HASH.value
+WRONG_ROPE_HASH = ReasonCode.WRONG_ROPE_HASH.value
+WRONG_DTYPE = ReasonCode.WRONG_DTYPE.value
+WRONG_NUM_LAYERS = ReasonCode.WRONG_NUM_LAYERS.value
+WRONG_NUM_KV_HEADS = ReasonCode.WRONG_NUM_KV_HEADS.value
+WRONG_HEAD_DIM = ReasonCode.WRONG_HEAD_DIM.value
+WRONG_ENGINE_NAME = ReasonCode.WRONG_ENGINE_NAME.value
+WRONG_ENGINE_VERSION = ReasonCode.WRONG_ENGINE_VERSION.value
+WRONG_ATTENTION_IMPL = ReasonCode.WRONG_ATTENTION_IMPL.value
+WRONG_KV_LAYOUT = ReasonCode.WRONG_KV_LAYOUT.value
+WRONG_BLOCK_SIZE_TOKENS = ReasonCode.WRONG_BLOCK_SIZE_TOKENS.value
+WRONG_KV_CACHE_FORMAT = ReasonCode.WRONG_KV_CACHE_FORMAT.value
+WRONG_PREFIX_HASH = ReasonCode.WRONG_PREFIX_HASH.value
+WRONG_TOKEN_RANGE = ReasonCode.WRONG_TOKEN_RANGE.value
+WRONG_ABSOLUTE_POSITION_RANGE = ReasonCode.WRONG_ABSOLUTE_POSITION_RANGE.value
+INVALID_LAYER_ID = ReasonCode.INVALID_LAYER_ID.value
+INVALID_KV_BLOCK_ID = ReasonCode.INVALID_KV_BLOCK_ID.value
+INVALID_BLOCK_TOKEN_COUNT = ReasonCode.INVALID_BLOCK_TOKEN_COUNT.value
+INVALID_TENSOR_SHAPE = ReasonCode.INVALID_TENSOR_SHAPE.value
+INVALID_TENSOR_DTYPE = ReasonCode.INVALID_TENSOR_DTYPE.value
+INVALID_TENSOR_LAYOUT = ReasonCode.INVALID_TENSOR_LAYOUT.value
+OPAQUE_WRONG_ENGINE_KEY = ReasonCode.OPAQUE_WRONG_ENGINE_KEY.value
+OPAQUE_WRONG_ENGINE_NAME = ReasonCode.OPAQUE_WRONG_ENGINE_NAME.value
+OPAQUE_WRONG_INTEGRATION_NAME = ReasonCode.OPAQUE_WRONG_INTEGRATION_NAME.value
+OPAQUE_PAYLOAD_NOT_INTERPRETABLE = ReasonCode.OPAQUE_PAYLOAD_NOT_INTERPRETABLE.value
+UNSUPPORTED_COMPRESSION = ReasonCode.UNSUPPORTED_COMPRESSION.value
+UNSUPPORTED_PAYLOAD_ENCODING = ReasonCode.UNSUPPORTED_PAYLOAD_ENCODING.value
+
+__all__ = [
+    "ACCEPTED",
+    "BYTE_LENGTH_MISMATCH",
+    "DESCRIPTOR_HASH_MISMATCH",
+    "EXTRA_FIELD_REJECTED",
+    "INVALID_BLOCK_TOKEN_COUNT",
+    "INVALID_FIELD_TYPE",
+    "INVALID_KV_BLOCK_ID",
+    "INVALID_LAYER_ID",
+    "INVALID_TENSOR_DTYPE",
+    "INVALID_TENSOR_LAYOUT",
+    "INVALID_TENSOR_SHAPE",
+    "MISSING_REQUIRED_FIELD",
+    "OBJECT_ID_MISMATCH",
+    "OPAQUE_PAYLOAD_NOT_INTERPRETABLE",
+    "OPAQUE_WRONG_ENGINE_KEY",
+    "OPAQUE_WRONG_ENGINE_NAME",
+    "OPAQUE_WRONG_INTEGRATION_NAME",
+    "PARSE_ERROR",
+    "PAYLOAD_HASH_MISMATCH",
+    "REASON_CODES",
+    "ReasonCode",
+    "SCHEMA_VALIDATION_FAILED",
+    "UNKNOWN_OBJECT_TYPE",
+    "UNKNOWN_SCHEMA_VERSION",
+    "UNSUPPORTED_COMPRESSION",
+    "UNSUPPORTED_PAYLOAD_ENCODING",
+    "WRONG_ABSOLUTE_POSITION_RANGE",
+    "WRONG_ATTENTION_IMPL",
+    "WRONG_BLOCK_SIZE_TOKENS",
+    "WRONG_CONFIG_HASH",
+    "WRONG_DTYPE",
+    "WRONG_ENGINE_NAME",
+    "WRONG_ENGINE_VERSION",
+    "WRONG_HEAD_DIM",
+    "WRONG_KV_CACHE_FORMAT",
+    "WRONG_KV_LAYOUT",
+    "WRONG_MODEL_HASH",
+    "WRONG_NUM_KV_HEADS",
+    "WRONG_NUM_LAYERS",
+    "WRONG_PREFIX_HASH",
+    "WRONG_ROPE_HASH",
+    "WRONG_TOKEN_RANGE",
+    "WRONG_TOKENIZER_HASH",
+]

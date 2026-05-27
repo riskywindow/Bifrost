@@ -5,12 +5,13 @@ description = "Phase 1 Python schema validation tests for BIFROST."
 requires-python = ">=3.11"
 dependencies = [
   # Phase 1 object identity requires BLAKE3; SHA-family hashes are not valid primary object identity hashes.
-  "blake3>=1.0.0"
+  "blake3>=1.0.0",
+  # Phase 1 exposes JSON Schema validation helpers used by validation-result contracts.
+  "jsonschema>=4.0.0"
 ]
 
 [project.optional-dependencies]
 dev = [
-  "jsonschema>=4.0.0",
   "pytest>=8.0.0"
 ]
 
