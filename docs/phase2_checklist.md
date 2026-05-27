@@ -56,14 +56,14 @@ Last verified: 2026-05-27
 
 - [ ] Create a minimal spool layout with `staging/`, `objects/`, and
       `quarantine/`.
-- [ ] Keep transfer state outside immutable descriptors.
-- [ ] Keep committed record state outside immutable descriptors.
-- [ ] Write incomplete transfers only under staging.
-- [ ] Atomically commit validated objects into `objects/{object_id}`.
-- [ ] Handle already-committed identical objects deterministically.
-- [ ] Reject conflicting object paths.
+- [x] Keep transfer state outside immutable descriptors.
+- [x] Keep committed record state outside immutable descriptors.
+- [x] Write incomplete transfers only under staging.
+- [x] Atomically commit validated objects into `objects/{object_id}`.
+- [x] Handle already-committed identical objects deterministically.
+- [x] Reject conflicting object paths.
 - [ ] Clean up or quarantine stale staging records on startup.
-- [ ] Never serve partial, corrupt, unknown, or staged objects.
+- [x] Never serve partial, corrupt, unknown, or staged objects.
 - [ ] Test crash-style restart cleanup with temporary directories.
 
 ## Metrics
@@ -120,7 +120,7 @@ Last verified: 2026-05-27
 - [ ] Run cross-language identity vector tests.
 - [ ] Run Phase 2 protocol unit tests.
 - [x] Run Phase 2 chunker and reassembly tests.
-- [ ] Run Phase 2 spool tests.
+- [x] Run Phase 2 spool tests.
 - [ ] Run local TCP PUT and GET smoke tests.
 - [ ] Run ContextStorm `tiny` smoke test.
 - [ ] Skip root-required network fault tests by default.
