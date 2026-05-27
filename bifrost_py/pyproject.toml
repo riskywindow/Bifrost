@@ -10,6 +10,9 @@ dependencies = [
   "jsonschema>=4.0.0"
 ]
 
+[project.scripts]
+bifrost-kv = "bifrost_kv.cli:main"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0.0"
@@ -18,3 +21,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

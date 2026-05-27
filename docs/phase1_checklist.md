@@ -75,14 +75,14 @@ Last verified: 2026-05-27
 
 ## CLI
 
-- [ ] Add command to validate one descriptor and payload pair.
+- [x] Add command to validate one descriptor and payload pair.
 - [ ] Add command to validate a fixture directory.
-- [ ] Print `accepted` for accepted objects.
-- [ ] Print stable reason codes for rejected objects.
-- [ ] Return non-zero exit status for rejected or malformed objects.
-- [ ] Add machine-readable output mode.
-- [ ] Add CLI tests for accepted fixtures.
-- [ ] Add CLI tests for rejected fixtures.
+- [x] Print `ACCEPTED` for accepted objects.
+- [x] Print stable reason codes for rejected objects.
+- [x] Return non-zero exit status for rejected or malformed objects.
+- [x] Add machine-readable output mode.
+- [x] Add CLI tests for accepted fixtures.
+- [x] Add CLI tests for rejected fixtures.
 
 ## Rust metadata mirror
 
@@ -127,7 +127,7 @@ Last verified: 2026-05-27
 - [ ] Python reference implementation is complete.
 - [ ] Rust metadata mirror is complete.
 - [x] Fixtures cover accepted and rejected paths.
-- [ ] CLI validates fixtures deterministically.
+- [x] CLI validates fixtures deterministically.
 - [ ] Python and Rust agree on all committed test vectors.
 - [ ] CI enforces Python tests, Rust tests, fixture determinism, and parity.
 - [ ] No networking, object storage, LMCache, vLLM, dashboard, inference, or real KV extraction work is required.
