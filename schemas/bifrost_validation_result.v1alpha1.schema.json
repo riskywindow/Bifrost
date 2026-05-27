@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bifrost.local/schemas/bifrost_validation_result.v1alpha1.schema.json",
+  "title": "BIFROST Validation Result v1alpha1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "reason_code",
+    "object_id",
+    "payload_hash",
+    "descriptor_hash",
+    "details"
+  ],
+  "properties": {
+    "schema_version": { "const": "bifrost.validation_result.v1alpha1" },
+    "status": { "enum": ["accepted", "rejected"] },
+    "reason_code": {
+      "enum": [
+        "accepted",
+        "parse_error",
+        "schema_validation_failed",
+        "unknown_schema_version",
+        "unknown_object_type",
+        "missing_required_field",
+        "extra_field_rejected",
+        "invalid_field_type",
+        "byte_length_mismatch",
+        "payload_hash_mismatch",
+        "descriptor_hash_mismatch",
+        "object_id_mismatch",
+        "wrong_model_hash",
+        "wrong_tokenizer_hash",
+        "wrong_config_hash",
+        "wrong_rope_hash",
+        "wrong_dtype",
+        "wrong_num_layers",
+        "wrong_num_kv_heads",
+        "wrong_head_dim",
+        "wrong_engine_name",
+        "wrong_engine_version",
+        "wrong_attention_impl",
+        "wrong_kv_layout",
+        "wrong_block_size_tokens",
+        "wrong_kv_cache_format",
+        "wrong_prefix_hash",
+        "wrong_token_range",
+        "wrong_absolute_position_range",
+        "invalid_layer_id",
+        "invalid_kv_block_id",
+        "invalid_block_token_count",
+        "invalid_tensor_shape",
+        "invalid_tensor_dtype",
+        "invalid_tensor_layout",
+        "opaque_wrong_engine_key",
+        "opaque_wrong_engine_name",
+        "opaque_wrong_integration_name",
+        "opaque_payload_not_interpretable",
+        "unsupported_compression",
+        "unsupported_payload_encoding"
+      ]
+    },
+    "object_id": {
+      "anyOf": [
+        { "$ref": "#/$defs/object_id" },
+        { "type": "null" }
+      ]
+    },
+    "payload_hash": {
+      "anyOf": [
+        { "$ref": "#/$defs/hash" },
+        { "type": "null" }
+      ]
+    },
+    "descriptor_hash": {
+      "anyOf": [
+        { "$ref": "#/$defs/hash" },
+        { "type": "null" }
+      ]
+    },
+    "details": {
+      "type": "object",
+      "additionalProperties": {
+        "type": ["string", "number", "integer", "boolean", "null", "array", "object"]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "accepted" } },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": { "reason_code": { "const": "accepted" } }
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "rejected" } },
+        "required": ["status"]
+      },
+      "then": {
+        "not": {
+          "properties": { "reason_code": { "const": "accepted" } },
+          "required": ["reason_code"]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^blake3:[0-9a-f]{64}$"
+    },
+    "object_id": {
+      "type": "string",
+      "pattern": "^bifrost://object/blake3/[0-9a-f]{64}$"
+    }
+  }
+}

@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bifrost.local/schemas/bifrost_target_profile.v1alpha1.schema.json",
+  "title": "BIFROST Target Profile v1alpha1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "accepts_object_type",
+    "model_profile",
+    "engine_profile",
+    "prefix_requirements",
+    "opaque_requirements"
+  ],
+  "properties": {
+    "schema_version": { "const": "bifrost.target_profile.v1alpha1" },
+    "accepts_object_type": { "enum": ["native_kv_page", "opaque_engine_blob"] },
+    "model_profile": {
+      "anyOf": [
+        { "$ref": "#/$defs/model_profile" },
+        { "type": "null" }
+      ]
+    },
+    "engine_profile": { "$ref": "#/$defs/engine_profile" },
+    "prefix_requirements": {
+      "anyOf": [
+        { "$ref": "#/$defs/prefix_requirements" },
+        { "type": "null" }
+      ]
+    },
+    "opaque_requirements": {
+      "anyOf": [
+        { "$ref": "#/$defs/opaque_requirements" },
+        { "type": "null" }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "accepts_object_type": { "const": "native_kv_page" } },
+        "required": ["accepts_object_type"]
+      },
+      "then": {
+        "properties": {
+          "model_profile": { "$ref": "#/$defs/model_profile" },
+          "prefix_requirements": { "$ref": "#/$defs/prefix_requirements" },
+          "opaque_requirements": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "accepts_object_type": { "const": "opaque_engine_blob" } },
+        "required": ["accepts_object_type"]
+      },
+      "then": {
+        "properties": {
+          "model_profile": { "type": "null" },
+          "prefix_requirements": { "type": "null" },
+          "opaque_requirements": { "$ref": "#/$defs/opaque_requirements" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "non_negative_integer": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "positive_integer": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^blake3:[0-9a-f]{64}$"
+    },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "$ref": "#/$defs/non_negative_integer" },
+        "end": { "$ref": "#/$defs/non_negative_integer" }
+      }
+    },
+    "model_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_id",
+        "model_revision",
+        "model_hash",
+        "tokenizer_hash",
+        "config_hash",
+        "rope_config_hash",
+        "quantization",
+        "dtype",
+        "num_layers",
+        "num_attention_heads",
+        "num_kv_heads",
+        "head_dim",
+        "max_position_embeddings"
+      ],
+      "properties": {
+        "model_id": { "$ref": "#/$defs/non_empty_string" },
+        "model_revision": { "$ref": "#/$defs/non_empty_string" },
+        "model_hash": { "$ref": "#/$defs/hash" },
+        "tokenizer_hash": { "$ref": "#/$defs/hash" },
+        "config_hash": { "$ref": "#/$defs/hash" },
+        "rope_config_hash": { "$ref": "#/$defs/hash" },
+        "quantization": { "$ref": "#/$defs/non_empty_string" },
+        "dtype": { "$ref": "#/$defs/non_empty_string" },
+        "num_layers": { "$ref": "#/$defs/positive_integer" },
+        "num_attention_heads": { "$ref": "#/$defs/positive_integer" },
+        "num_kv_heads": { "$ref": "#/$defs/positive_integer" },
+        "head_dim": { "$ref": "#/$defs/positive_integer" },
+        "max_position_embeddings": { "$ref": "#/$defs/positive_integer" }
+      }
+    },
+    "engine_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine_name",
+        "engine_version",
+        "integration_name",
+        "integration_version",
+        "attention_impl",
+        "kv_layout",
+        "block_size_tokens",
+        "kv_cache_format"
+      ],
+      "properties": {
+        "engine_name": { "$ref": "#/$defs/non_empty_string" },
+        "engine_version": { "$ref": "#/$defs/non_empty_string" },
+        "integration_name": { "$ref": "#/$defs/non_empty_string" },
+        "integration_version": { "$ref": "#/$defs/non_empty_string" },
+        "attention_impl": { "$ref": "#/$defs/non_empty_string" },
+        "kv_layout": { "$ref": "#/$defs/non_empty_string" },
+        "block_size_tokens": { "$ref": "#/$defs/positive_integer" },
+        "kv_cache_format": { "$ref": "#/$defs/non_empty_string" }
+      }
+    },
+    "prefix_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prefix_hash",
+        "token_hash",
+        "tokenizer_hash",
+        "rope_config_hash",
+        "token_range",
+        "absolute_position_range",
+        "allow_mm_hashes"
+      ],
+      "properties": {
+        "prefix_hash": { "$ref": "#/$defs/hash" },
+        "token_hash": { "$ref": "#/$defs/hash" },
+        "tokenizer_hash": { "$ref": "#/$defs/hash" },
+        "rope_config_hash": { "$ref": "#/$defs/hash" },
+        "token_range": { "$ref": "#/$defs/range" },
+        "absolute_position_range": { "$ref": "#/$defs/range" },
+        "allow_mm_hashes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/hash" }
+        }
+      }
+    },
+    "opaque_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine_key_hash",
+        "engine_payload_type",
+        "engine_key_repr_version"
+      ],
+      "properties": {
+        "engine_key_hash": { "$ref": "#/$defs/hash" },
+        "engine_payload_type": { "$ref": "#/$defs/non_empty_string" },
+        "engine_key_repr_version": { "$ref": "#/$defs/non_empty_string" }
+      }
+    }
+  }
+}

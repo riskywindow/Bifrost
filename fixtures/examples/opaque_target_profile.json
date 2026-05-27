@@ -1,0 +1,21 @@
+{
+  "schema_version": "bifrost.target_profile.v1alpha1",
+  "accepts_object_type": "opaque_engine_blob",
+  "model_profile": null,
+  "engine_profile": {
+    "engine_name": "bifrost-reference",
+    "engine_version": "0.1.0",
+    "integration_name": "bifrost-python-reference",
+    "integration_version": "0.1.0",
+    "attention_impl": "engine-owned",
+    "kv_layout": "opaque",
+    "block_size_tokens": 16,
+    "kv_cache_format": "opaque_engine_blob_v1"
+  },
+  "prefix_requirements": null,
+  "opaque_requirements": {
+    "engine_key_hash": "blake3:9999999999999999999999999999999999999999999999999999999999999999",
+    "engine_payload_type": "opaque_kv_block",
+    "engine_key_repr_version": "engine-key-v1"
+  }
+}

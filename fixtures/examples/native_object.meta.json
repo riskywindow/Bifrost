@@ -1,0 +1,83 @@
+{
+  "schema_version": "bifrost.kv_object.v1alpha1",
+  "object_type": "native_kv_page",
+  "object_id": "bifrost://object/blake3/1111111111111111111111111111111111111111111111111111111111111111",
+  "created_at_unix_ms": 1779900000000,
+  "created_by": "bifrost-phase1-example",
+  "model_profile": {
+    "model_id": "example/llama-tiny",
+    "model_revision": "rev-0001",
+    "model_hash": "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tokenizer_hash": "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "config_hash": "blake3:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "rope_config_hash": "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "quantization": "none",
+    "dtype": "float16",
+    "num_layers": 2,
+    "num_attention_heads": 4,
+    "num_kv_heads": 2,
+    "head_dim": 8,
+    "max_position_embeddings": 4096
+  },
+  "engine_profile": {
+    "engine_name": "bifrost-reference",
+    "engine_version": "0.1.0",
+    "integration_name": "bifrost-python-reference",
+    "integration_version": "0.1.0",
+    "attention_impl": "reference",
+    "kv_layout": "layer_block_role_token_head_dim",
+    "block_size_tokens": 16,
+    "kv_cache_format": "native_tensor_v1"
+  },
+  "prefix_profile": {
+    "token_count": 16,
+    "token_range": {
+      "start": 0,
+      "end": 16
+    },
+    "absolute_position_range": {
+      "start": 0,
+      "end": 16
+    },
+    "prefix_hash": "blake3:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "token_hash": "blake3:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "tokenizer_hash": "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "rope_config_hash": "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "mm_hashes": []
+  },
+  "payload_profile": {
+    "byte_length": 1024,
+    "compression": "none",
+    "payload_encoding": "raw_bytes"
+  },
+  "native_tensor_profile": {
+    "layer_id": 0,
+    "kv_block_id": 0,
+    "block_size_tokens": 16,
+    "block_token_count": 16,
+    "token_range": {
+      "start": 0,
+      "end": 16
+    },
+    "tensor_role": "kv",
+    "tensor_shape": [2, 16, 2, 8],
+    "tensor_dtype": "float16",
+    "tensor_layout": "role_token_kv_head_head_dim"
+  },
+  "opaque_engine_profile": null,
+  "integrity": {
+    "descriptor_hash": "blake3:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+    "payload_hash": "blake3:234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1",
+    "object_id_algorithm": "bifrost.object_id.v1",
+    "chunk_size_bytes": 1024,
+    "chunk_hashes": [
+      "blake3:234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1"
+    ]
+  },
+  "provenance": {
+    "source": "phase1-schema-example",
+    "notes": "Example metadata for schema validation only.",
+    "producer_commit": "0000000000000000000000000000000000000000",
+    "producer_hostname": "localhost"
+  }
+}

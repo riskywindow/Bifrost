@@ -1,0 +1,45 @@
+{
+  "schema_version": "bifrost.target_profile.v1alpha1",
+  "accepts_object_type": "native_kv_page",
+  "model_profile": {
+    "model_id": "example/llama-tiny",
+    "model_revision": "rev-0001",
+    "model_hash": "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tokenizer_hash": "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "config_hash": "blake3:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "rope_config_hash": "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "quantization": "none",
+    "dtype": "float16",
+    "num_layers": 2,
+    "num_attention_heads": 4,
+    "num_kv_heads": 2,
+    "head_dim": 8,
+    "max_position_embeddings": 4096
+  },
+  "engine_profile": {
+    "engine_name": "bifrost-reference",
+    "engine_version": "0.1.0",
+    "integration_name": "bifrost-python-reference",
+    "integration_version": "0.1.0",
+    "attention_impl": "reference",
+    "kv_layout": "layer_block_role_token_head_dim",
+    "block_size_tokens": 16,
+    "kv_cache_format": "native_tensor_v1"
+  },
+  "prefix_requirements": {
+    "prefix_hash": "blake3:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "token_hash": "blake3:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "tokenizer_hash": "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "rope_config_hash": "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "token_range": {
+      "start": 0,
+      "end": 16
+    },
+    "absolute_position_range": {
+      "start": 0,
+      "end": 16
+    },
+    "allow_mm_hashes": []
+  },
+  "opaque_requirements": null
+}

@@ -1,0 +1,9 @@
+{
+  "schema_version": "bifrost.validation_result.v1alpha1",
+  "status": "accepted",
+  "reason_code": "accepted",
+  "object_id": "bifrost://object/blake3/1111111111111111111111111111111111111111111111111111111111111111",
+  "payload_hash": "blake3:234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1",
+  "descriptor_hash": "blake3:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+  "details": {}
+}

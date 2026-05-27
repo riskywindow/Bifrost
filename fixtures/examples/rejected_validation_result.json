@@ -1,0 +1,11 @@
+{
+  "schema_version": "bifrost.validation_result.v1alpha1",
+  "status": "rejected",
+  "reason_code": "schema_validation_failed",
+  "object_id": null,
+  "payload_hash": null,
+  "descriptor_hash": null,
+  "details": {
+    "message": "Example rejected result for schema validation only."
+  }
+}

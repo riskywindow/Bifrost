@@ -1,0 +1,16 @@
+[project]
+name = "bifrost-py"
+version = "0.1.0"
+description = "Phase 1 Python schema validation tests for BIFROST."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "jsonschema>=4.0.0",
+  "pytest>=8.0.0"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -1,0 +1,59 @@
+{
+  "schema_version": "bifrost.kv_object.v1alpha1",
+  "object_type": "opaque_engine_blob",
+  "object_id": "bifrost://object/blake3/2222222222222222222222222222222222222222222222222222222222222222",
+  "created_at_unix_ms": 1779900000000,
+  "created_by": "bifrost-phase1-example",
+  "model_profile": {
+    "model_id": "example/opaque-compatible-model",
+    "model_revision": "rev-0001",
+    "model_hash": "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tokenizer_hash": "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "config_hash": "blake3:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "rope_config_hash": "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "quantization": "none",
+    "dtype": "float16",
+    "num_layers": 2,
+    "num_attention_heads": 4,
+    "num_kv_heads": 2,
+    "head_dim": 8,
+    "max_position_embeddings": 4096
+  },
+  "engine_profile": {
+    "engine_name": "bifrost-reference",
+    "engine_version": "0.1.0",
+    "integration_name": "bifrost-python-reference",
+    "integration_version": "0.1.0",
+    "attention_impl": "engine-owned",
+    "kv_layout": "opaque",
+    "block_size_tokens": 16,
+    "kv_cache_format": "opaque_engine_blob_v1"
+  },
+  "prefix_profile": null,
+  "payload_profile": {
+    "byte_length": 2048,
+    "compression": "none",
+    "payload_encoding": "raw_bytes"
+  },
+  "native_tensor_profile": null,
+  "opaque_engine_profile": {
+    "engine_key_hash": "blake3:9999999999999999999999999999999999999999999999999999999999999999",
+    "engine_payload_type": "opaque_kv_block",
+    "engine_key_repr_version": "engine-key-v1"
+  },
+  "integrity": {
+    "descriptor_hash": "blake3:34567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12",
+    "payload_hash": "blake3:4567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef123",
+    "object_id_algorithm": "bifrost.object_id.v1",
+    "chunk_size_bytes": 2048,
+    "chunk_hashes": [
+      "blake3:4567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef123"
+    ]
+  },
+  "provenance": {
+    "source": "phase1-schema-example",
+    "notes": "Opaque bytes are not interpreted as native tensors.",
+    "producer_commit": "0000000000000000000000000000000000000000",
+    "producer_hostname": "localhost"
+  }
+}
