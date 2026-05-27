@@ -16,14 +16,14 @@ Last verified: 2026-05-27
 
 ## Chunker
 
-- [ ] Chunk payload bytes deterministically by configured chunk size.
-- [ ] Record chunk index, offset, length, and chunk hash.
-- [ ] Reject invalid chunk sizes.
-- [ ] Reject chunk offset and length mismatches.
-- [ ] Reject chunk hash mismatches.
-- [ ] Accept duplicate chunks only when bytes and metadata match.
-- [ ] Detect missing chunks before commit.
-- [ ] Test zero-length, one-chunk, exact-boundary, and multi-chunk payloads.
+- [x] Chunk payload bytes deterministically by configured chunk size.
+- [x] Record chunk index, offset, length, and chunk hash.
+- [x] Reject invalid chunk sizes.
+- [x] Reject chunk offset and length mismatches.
+- [x] Reject chunk hash mismatches.
+- [x] Accept duplicate chunks only when bytes and metadata match.
+- [x] Detect missing chunks before commit.
+- [x] Test zero-length, one-chunk, exact-boundary, and multi-chunk payloads.
 
 ## Single-path PUT
 
@@ -119,7 +119,7 @@ Last verified: 2026-05-27
 - [ ] Run Phase 1 Rust tests.
 - [ ] Run cross-language identity vector tests.
 - [ ] Run Phase 2 protocol unit tests.
-- [ ] Run Phase 2 chunker and reassembly tests.
+- [x] Run Phase 2 chunker and reassembly tests.
 - [ ] Run Phase 2 spool tests.
 - [ ] Run local TCP PUT and GET smoke tests.
 - [ ] Run ContextStorm `tiny` smoke test.
