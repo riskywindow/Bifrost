@@ -10,7 +10,10 @@ pub mod server;
 pub mod tcp;
 
 pub use chunker::{chunk_bytes, iter_chunks, Chunk};
-pub use client::{put_object, put_validated_object, PutOutcome};
+pub use client::{
+    get_object, has_object, put_object, put_validated_object, receive_get_response, GetOutcome,
+    HasOutcome, PutOutcome,
+};
 pub use errors::{TransportError, TransportResult};
 pub use frame::{
     decode_frame, decode_frame_with_limits, encode_frame, DecodeLimits, Frame, FrameHeader,

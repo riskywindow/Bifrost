@@ -1,7 +1,7 @@
 use crate::cache::validate_object;
 use crate::transport::{
-    chunk_bytes, iter_chunks, read_frame, write_frame, ChunkManifest, FrameHeader, FrameType,
-    TransportResult, TRANSPORT_VERSION,
+    chunk_bytes, iter_chunks, read_frame, write_frame, ChunkInfo, ChunkManifest, Frame,
+    FrameHeader, FrameType, Reassembler, TransportResult, TRANSPORT_VERSION,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -13,6 +13,22 @@ pub struct PutOutcome {
     pub accepted: bool,
     pub object_id: String,
     pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HasOutcome {
+    pub present: bool,
+    pub object_id: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GetOutcome {
+    pub found: bool,
+    pub object_id: String,
+    pub reason: String,
+    pub metadata_bytes: Vec<u8>,
+    pub payload: Vec<u8>,
 }
 
 pub async fn put_object(
@@ -51,14 +67,10 @@ pub async fn put_validated_object(
         .object_id
         .clone()
         .ok_or_else(|| anyhow::anyhow!("PUT manifest requires object_id"))?;
-    let transfer_id = new_transfer_id();
+    let transfer_id = new_transfer_id("put");
     let mut stream = TcpStream::connect(endpoint).await?;
 
-    send_hello(&mut stream, &transfer_id).await?;
-    let hello = read_frame(&mut stream).await?;
-    if hello.header.frame_type != FrameType::Hello {
-        anyhow::bail!("expected daemon hello, got {:?}", hello.header.frame_type);
-    }
+    handshake(&mut stream, &transfer_id).await?;
 
     let mut begin = FrameHeader::new(
         FrameType::PutBegin,
@@ -124,6 +136,192 @@ pub async fn put_validated_object(
     })
 }
 
+pub async fn has_object(endpoint: &str, object_id: &str) -> anyhow::Result<HasOutcome> {
+    let transfer_id = new_transfer_id("has");
+    let mut stream = TcpStream::connect(endpoint).await?;
+    handshake(&mut stream, &transfer_id).await?;
+
+    let mut request = FrameHeader::new(FrameType::HasRequest, transfer_id, 0);
+    request.object_id = Some(object_id.to_string());
+    write_frame(&mut stream, &request, &[]).await?;
+
+    let result = read_frame(&mut stream).await?;
+    if result.header.frame_type != FrameType::HasResult {
+        anyhow::bail!("expected has_result, got {:?}", result.header.frame_type);
+    }
+    Ok(HasOutcome {
+        present: result.header.present.unwrap_or(false),
+        object_id: result
+            .header
+            .object_id
+            .unwrap_or_else(|| object_id.to_string()),
+        reason: result.header.reason.unwrap_or_default(),
+    })
+}
+
+pub async fn get_object(
+    endpoint: &str,
+    object_id: &str,
+    chunk_size: usize,
+) -> anyhow::Result<GetOutcome> {
+    if chunk_size == 0 {
+        anyhow::bail!("chunk_size must be greater than zero");
+    }
+
+    let transfer_id = new_transfer_id("get");
+    let mut stream = TcpStream::connect(endpoint).await?;
+    handshake(&mut stream, &transfer_id).await?;
+
+    let mut request = FrameHeader::new(FrameType::GetBegin, transfer_id, 0);
+    request.object_id = Some(object_id.to_string());
+    request.chunk_size = Some(chunk_size as u64);
+    write_frame(&mut stream, &request, &[]).await?;
+
+    receive_get_response(&mut stream, object_id).await
+}
+
+pub async fn receive_get_response(
+    stream: &mut TcpStream,
+    requested_object_id: &str,
+) -> anyhow::Result<GetOutcome> {
+    let result = read_frame(stream).await?;
+    if result.header.frame_type != FrameType::GetResult {
+        anyhow::bail!("expected get_result, got {:?}", result.header.frame_type);
+    }
+
+    let object_id = result
+        .header
+        .object_id
+        .clone()
+        .unwrap_or_else(|| requested_object_id.to_string());
+    let status = result.header.status.as_deref().unwrap_or("rejected");
+    if status != "found" {
+        return Ok(GetOutcome {
+            found: false,
+            object_id,
+            reason: result.header.reason.unwrap_or_else(|| status.to_string()),
+            metadata_bytes: Vec::new(),
+            payload: Vec::new(),
+        });
+    }
+
+    match receive_found_get(stream, result).await {
+        Ok(mut outcome) => {
+            if outcome.object_id.is_empty() {
+                outcome.object_id = requested_object_id.to_string();
+            }
+            Ok(outcome)
+        }
+        Err(error) => Ok(GetOutcome {
+            found: false,
+            object_id,
+            reason: error.to_string(),
+            metadata_bytes: Vec::new(),
+            payload: Vec::new(),
+        }),
+    }
+}
+
+async fn receive_found_get(stream: &mut TcpStream, result: Frame) -> anyhow::Result<GetOutcome> {
+    let object_id = result.header.object_id.clone().unwrap_or_default();
+    let metadata_bytes = result.payload;
+    let descriptor_len = result
+        .header
+        .descriptor_len
+        .ok_or_else(|| anyhow::anyhow!("get_result missing descriptor_len"))?;
+    if descriptor_len != metadata_bytes.len() as u64 {
+        anyhow::bail!("get_result descriptor_len mismatch");
+    }
+
+    let manifest = manifest_from_get_result(&result.header)?;
+    let mut reassembler = Reassembler::new(manifest.clone())?;
+    for _ in 0..manifest.total_chunks {
+        let frame = read_frame(stream).await?;
+        if frame.header.frame_type != FrameType::Chunk {
+            anyhow::bail!("expected chunk, got {:?}", frame.header.frame_type);
+        }
+        let chunk_info = chunk_info_from_frame(&frame)?;
+        reassembler.accept_chunk_info(&chunk_info, &frame.payload)?;
+    }
+
+    let done = read_frame(stream).await?;
+    if done.header.frame_type != FrameType::GetResult {
+        anyhow::bail!(
+            "expected final get_result, got {:?}",
+            done.header.frame_type
+        );
+    }
+    if done.header.status.as_deref() != Some("success") {
+        anyhow::bail!(
+            "GET failed after chunks: {}",
+            done.header.reason.unwrap_or_else(|| "unknown".to_string())
+        );
+    }
+
+    let payload = reassembler.finish()?;
+    let metadata: Value = serde_json::from_slice(&metadata_bytes)?;
+    let validation = validate_object(&metadata, &payload, None);
+    if validation.status != "accepted" {
+        return Ok(GetOutcome {
+            found: false,
+            object_id,
+            reason: validation.reason_code,
+            metadata_bytes: Vec::new(),
+            payload: Vec::new(),
+        });
+    }
+    if validation.object_id.as_deref() != Some(object_id.as_str()) {
+        return Ok(GetOutcome {
+            found: false,
+            object_id,
+            reason: "object_id_mismatch".to_string(),
+            metadata_bytes: Vec::new(),
+            payload: Vec::new(),
+        });
+    }
+
+    Ok(GetOutcome {
+        found: true,
+        object_id,
+        reason: String::new(),
+        metadata_bytes,
+        payload,
+    })
+}
+
+fn manifest_from_get_result(header: &FrameHeader) -> anyhow::Result<ChunkManifest> {
+    let value = header
+        .flags
+        .as_ref()
+        .and_then(|flags| flags.get("chunk_manifest"))
+        .ok_or_else(|| anyhow::anyhow!("get_result missing chunk_manifest"))?;
+    Ok(serde_json::from_value(value.clone())?)
+}
+
+fn chunk_info_from_frame(frame: &Frame) -> anyhow::Result<ChunkInfo> {
+    let info = ChunkInfo {
+        chunk_index: frame
+            .header
+            .chunk_index
+            .ok_or_else(|| anyhow::anyhow!("chunk missing chunk_index"))?,
+        offset: frame
+            .header
+            .chunk_offset
+            .ok_or_else(|| anyhow::anyhow!("chunk missing chunk_offset"))?,
+        len: frame
+            .header
+            .object_payload_len
+            .ok_or_else(|| anyhow::anyhow!("chunk missing payload_len"))?,
+        hash: frame
+            .header
+            .payload_hash
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("chunk missing chunk_hash"))?,
+    };
+    info.verify(&frame.payload)?;
+    Ok(info)
+}
+
 async fn send_hello(stream: &mut TcpStream, transfer_id: &str) -> TransportResult<()> {
     let mut hello = FrameHeader::new(FrameType::Hello, transfer_id, 0);
     hello.peer_role = Some("client".to_string());
@@ -135,10 +333,19 @@ async fn send_hello(stream: &mut TcpStream, transfer_id: &str) -> TransportResul
     write_frame(stream, &hello, &[]).await
 }
 
-fn new_transfer_id() -> String {
+async fn handshake(stream: &mut TcpStream, transfer_id: &str) -> anyhow::Result<()> {
+    send_hello(stream, transfer_id).await?;
+    let hello = read_frame(stream).await?;
+    if hello.header.frame_type != FrameType::Hello {
+        anyhow::bail!("expected daemon hello, got {:?}", hello.header.frame_type);
+    }
+    Ok(())
+}
+
+fn new_transfer_id(prefix: &str) -> String {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
-    format!("put-{}-{nanos}", std::process::id())
+    format!("{prefix}-{}-{nanos}", std::process::id())
 }

@@ -1,7 +1,7 @@
 use crate::spool::{CommitOutcome, Spool, SpoolError};
 use crate::transport::{
-    read_frame, write_frame, ChunkManifest, Frame, FrameHeader, FrameType, TransportError,
-    TransportResult, TRANSPORT_VERSION,
+    chunk_bytes, iter_chunks, read_frame, write_frame, ChunkManifest, Frame, FrameHeader,
+    FrameType, TransportError, TransportResult, TRANSPORT_VERSION,
 };
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
@@ -91,6 +91,14 @@ pub async fn handle_connection(
             }
             FrameType::PutCommit => {
                 send_put_result(&mut stream, &spool, &frame).await?;
+                return Ok(());
+            }
+            FrameType::HasRequest => {
+                send_has_result(&mut stream, &spool, &frame).await?;
+                return Ok(());
+            }
+            FrameType::GetBegin => {
+                send_get_response(&mut stream, &spool, &frame).await?;
                 return Ok(());
             }
             _ => {
@@ -187,6 +195,130 @@ async fn send_put_result(
     result.object_id = Some(object_id);
     result.status = Some(status.to_string());
     result.reason = Some(reason);
+    write_frame(stream, &result, &[]).await
+}
+
+async fn send_has_result(
+    stream: &mut TcpStream,
+    spool: &Spool,
+    request: &Frame,
+) -> TransportResult<()> {
+    let object_id = request.header.object_id.clone().unwrap_or_default();
+    let present = spool.has_object(&object_id);
+    let mut result = FrameHeader::new(FrameType::HasResult, request.header.transfer_id.clone(), 0);
+    result.object_id = Some(object_id);
+    result.present = Some(present);
+    result.reason = Some(if present {
+        String::new()
+    } else {
+        "not_found".to_string()
+    });
+    write_frame(stream, &result, &[]).await
+}
+
+async fn send_get_response(
+    stream: &mut TcpStream,
+    spool: &Spool,
+    request: &Frame,
+) -> TransportResult<()> {
+    let object_id = request.header.object_id.clone().unwrap_or_default();
+    let metadata = match spool.read_metadata(&object_id) {
+        Ok(metadata) => metadata,
+        Err(SpoolError::NotFound(_)) => {
+            send_get_result_miss(stream, request, &object_id, "not_found").await?;
+            return Ok(());
+        }
+        Err(error) => {
+            send_get_result_miss(stream, request, &object_id, &error.to_string()).await?;
+            return Ok(());
+        }
+    };
+    let payload = match spool.read_payload(&object_id) {
+        Ok(payload) => payload,
+        Err(SpoolError::NotFound(_)) => {
+            send_get_result_miss(stream, request, &object_id, "not_found").await?;
+            return Ok(());
+        }
+        Err(error) => {
+            send_get_result_miss(stream, request, &object_id, &error.to_string()).await?;
+            return Ok(());
+        }
+    };
+
+    let chunk_size = request
+        .header
+        .chunk_size
+        .map(|value| value as usize)
+        .unwrap_or(crate::transport::DEFAULT_CHUNK_SIZE);
+    let mut manifest = match chunk_bytes(&payload, chunk_size) {
+        Ok(manifest) => manifest,
+        Err(error) => {
+            send_get_result_miss(stream, request, &object_id, &error.to_string()).await?;
+            return Ok(());
+        }
+    };
+    manifest.object_id = Some(object_id.clone());
+
+    let mut result = FrameHeader::new(
+        FrameType::GetResult,
+        request.header.transfer_id.clone(),
+        metadata.len() as u64,
+    );
+    result.object_id = Some(object_id.clone());
+    result.status = Some("found".to_string());
+    result.reason = Some(String::new());
+    result.descriptor_len = Some(metadata.len() as u64);
+    result.object_payload_len = Some(manifest.payload_len);
+    result.chunk_size = Some(manifest.chunk_size as u64);
+    result.total_chunks = Some(manifest.total_chunks);
+    result.payload_hash = Some(manifest.payload_hash.clone());
+    result.flags = Some(BTreeMap::from([(
+        "chunk_manifest".to_string(),
+        serde_json::to_value(&manifest)?,
+    )]));
+    write_frame(stream, &result, &metadata).await?;
+
+    for chunk in iter_chunks(&payload, manifest.chunk_size)? {
+        let mut header = FrameHeader::new(
+            FrameType::Chunk,
+            request.header.transfer_id.clone(),
+            chunk.bytes.len() as u64,
+        );
+        header.object_id = Some(object_id.clone());
+        header.chunk_index = Some(chunk.info.chunk_index);
+        header.total_chunks = Some(manifest.total_chunks);
+        header.chunk_offset = Some(chunk.info.offset);
+        header.object_payload_len = Some(chunk.info.len);
+        header.payload_hash = Some(chunk.info.hash.clone());
+        write_frame(stream, &header, chunk.bytes).await?;
+    }
+
+    let mut done = FrameHeader::new(FrameType::GetResult, request.header.transfer_id.clone(), 0);
+    done.object_id = Some(object_id);
+    done.status = Some("success".to_string());
+    done.reason = Some(String::new());
+    done.descriptor_len = Some(metadata.len() as u64);
+    done.object_payload_len = Some(manifest.payload_len);
+    done.chunk_size = Some(manifest.chunk_size as u64);
+    done.total_chunks = Some(manifest.total_chunks);
+    done.payload_hash = Some(manifest.payload_hash);
+    write_frame(stream, &done, &[]).await
+}
+
+async fn send_get_result_miss(
+    stream: &mut TcpStream,
+    request: &Frame,
+    object_id: &str,
+    reason: &str,
+) -> TransportResult<()> {
+    let mut result = FrameHeader::new(FrameType::GetResult, request.header.transfer_id.clone(), 0);
+    result.object_id = Some(object_id.to_string());
+    result.status = Some("miss".to_string());
+    result.reason = Some(reason.to_string());
+    result.descriptor_len = Some(0);
+    result.object_payload_len = Some(0);
+    result.chunk_size = Some(0);
+    result.total_chunks = Some(0);
     write_frame(stream, &result, &[]).await
 }
 

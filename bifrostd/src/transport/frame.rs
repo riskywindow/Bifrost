@@ -75,6 +75,8 @@ pub struct FrameHeader {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub present: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub peer_role: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supported_versions: Option<Vec<String>>,
@@ -101,6 +103,7 @@ impl FrameHeader {
             object_payload_len: None,
             status: None,
             reason: None,
+            present: None,
             peer_role: None,
             supported_versions: None,
             target_profile_id: None,
@@ -158,6 +161,7 @@ impl FrameHeader {
             FrameType::HasResult => {
                 require_empty_payload(self)?;
                 require_object_id(self)?;
+                require_present(self)?;
             }
         }
 
@@ -311,5 +315,16 @@ fn require_payload_hash(header: &FrameHeader) -> TransportResult<()> {
             "{:?} requires payload_hash",
             header.frame_type
         ))),
+    }
+}
+
+fn require_present(header: &FrameHeader) -> TransportResult<()> {
+    if header.present.is_some() {
+        Ok(())
+    } else {
+        Err(TransportError::InvalidFrame(format!(
+            "{:?} requires present",
+            header.frame_type
+        )))
     }
 }

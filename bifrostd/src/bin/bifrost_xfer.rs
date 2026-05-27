@@ -1,5 +1,6 @@
-use bifrostd::transport::{put_object, DEFAULT_CHUNK_SIZE};
+use bifrostd::transport::{get_object, has_object, put_object, DEFAULT_CHUNK_SIZE};
 use clap::{Parser, Subcommand};
+use serde_json::json;
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
@@ -32,13 +33,17 @@ enum Command {
         #[arg(long)]
         object_id: String,
         #[arg(long)]
-        out: Option<PathBuf>,
+        out: PathBuf,
+        #[arg(long, default_value_t = DEFAULT_CHUNK_SIZE)]
+        chunk_size: usize,
     },
     Has {
         #[arg(long, default_value = "127.0.0.1:7420")]
         endpoint: String,
         #[arg(long)]
         object_id: String,
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -67,24 +72,32 @@ async fn main() {
             endpoint,
             object_id,
             out,
+            chunk_size,
         } => {
-            let out = out
-                .as_ref()
-                .map(|path| path.display().to_string())
-                .unwrap_or_else(|| "<stdout>".to_string());
-            println!(
-                "get is not implemented in this task: endpoint={} object_id={} out={}",
-                endpoint, object_id, out
-            );
+            let result = run_get(&endpoint, &object_id, out, chunk_size).await;
+            match result {
+                Ok(true) => std::process::exit(0),
+                Ok(false) => std::process::exit(1),
+                Err(error) => {
+                    eprintln!("bifrost-xfer: error: {error:#}");
+                    std::process::exit(2);
+                }
+            }
         }
         Command::Has {
             endpoint,
             object_id,
+            json,
         } => {
-            println!(
-                "has is not implemented in this task: endpoint={} object_id={}",
-                endpoint, object_id
-            );
+            let result = run_has(&endpoint, &object_id, json).await;
+            match result {
+                Ok(true) => std::process::exit(0),
+                Ok(false) => std::process::exit(1),
+                Err(error) => {
+                    eprintln!("bifrost-xfer: error: {error:#}");
+                    std::process::exit(2);
+                }
+            }
         }
     }
 }
@@ -119,4 +132,45 @@ async fn run_put(
         );
     }
     Ok(outcome.accepted)
+}
+
+async fn run_has(endpoint: &str, object_id: &str, as_json: bool) -> anyhow::Result<bool> {
+    let outcome = has_object(endpoint, object_id).await?;
+    if as_json {
+        println!(
+            "{}",
+            serde_json::to_string(&json!({
+                "object_id": outcome.object_id,
+                "present": outcome.present,
+                "reason": outcome.reason,
+            }))?
+        );
+    } else if outcome.present {
+        println!("yes");
+    } else {
+        println!("no");
+    }
+    Ok(outcome.present)
+}
+
+async fn run_get(
+    endpoint: &str,
+    object_id: &str,
+    out: PathBuf,
+    chunk_size: usize,
+) -> anyhow::Result<bool> {
+    let outcome = get_object(endpoint, object_id, chunk_size).await?;
+    if !outcome.found {
+        println!(
+            "miss object_id={} reason={}",
+            outcome.object_id, outcome.reason
+        );
+        return Ok(false);
+    }
+
+    fs::create_dir_all(&out)?;
+    fs::write(out.join("meta.json"), &outcome.metadata_bytes)?;
+    fs::write(out.join("payload.bin"), &outcome.payload)?;
+    println!("fetched object_id={}", outcome.object_id);
+    Ok(true)
 }

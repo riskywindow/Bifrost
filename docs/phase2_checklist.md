@@ -42,15 +42,15 @@ Last verified: 2026-05-27
 
 ## Single-path GET
 
-- [ ] Return miss for absent objects.
-- [ ] Return miss for staged objects.
+- [x] Return miss for absent objects.
+- [x] Return miss for staged objects.
 - [ ] Return miss or rejection for corrupt committed records.
-- [ ] Return descriptor bytes in `get_result` for committed objects.
-- [ ] Return payload bytes as chunk frames.
-- [ ] Verify chunks on the client side.
-- [ ] Verify returned descriptor and payload with Phase 1 validation.
-- [ ] Test GET after PUT round trip.
-- [ ] Test GET does not serve from staging.
+- [x] Return descriptor bytes in `get_result` for committed objects.
+- [x] Return payload bytes as chunk frames.
+- [x] Verify chunks on the client side.
+- [x] Verify returned descriptor and payload with Phase 1 validation.
+- [x] Test GET after PUT round trip.
+- [x] Test GET does not serve from staging.
 
 ## Spool
 
@@ -121,7 +121,7 @@ Last verified: 2026-05-27
 - [ ] Run Phase 2 protocol unit tests.
 - [x] Run Phase 2 chunker and reassembly tests.
 - [x] Run Phase 2 spool tests.
-- [ ] Run local TCP PUT and GET smoke tests.
+- [x] Run local TCP PUT and GET smoke tests.
 - [ ] Run ContextStorm `tiny` smoke test.
 - [ ] Skip root-required network fault tests by default.
 
@@ -130,9 +130,9 @@ Last verified: 2026-05-27
 - [x] A valid Phase 1 object can be PUT over single-path TCP.
 - [x] The daemon chunks, reassembles, and revalidates the object before commit.
 - [x] The daemon never commits incomplete or invalid objects.
-- [ ] The daemon never serves from staging.
-- [ ] A committed object can be fetched with GET and revalidated by the client.
-- [ ] HAS returns true only for committed and servable objects.
+- [x] The daemon never serves from staging.
+- [x] A committed object can be fetched with GET and revalidated by the client.
+- [x] HAS returns true only for committed and servable objects.
 - [ ] Metrics exist for successful and failed transfer paths.
 - [ ] ContextStorm can run a CPU-only local benchmark.
 - [ ] Multipath synthetic transfer is implemented or explicitly deferred with
