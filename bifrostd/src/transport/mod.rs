@@ -4,17 +4,20 @@ pub mod errors;
 pub mod frame;
 pub mod manifest;
 pub mod metrics;
+pub mod path;
 pub mod protocol;
 pub mod reassembler;
+pub mod scheduler;
 pub mod server;
 pub mod tcp;
 pub mod trace;
 
 pub use chunker::{chunk_bytes, iter_chunks, Chunk};
 pub use client::{
-    get_object, get_object_observed, has_object, put_object, put_object_observed,
-    put_validated_object, put_validated_object_observed, receive_get_response, ClientTelemetry,
-    GetOutcome, HasOutcome, PutOutcome,
+    get_object, get_object_observed, has_object, put_object, put_object_multipath_observed,
+    put_object_observed, put_validated_object, put_validated_object_multipath_observed,
+    put_validated_object_observed, receive_get_response, ClientTelemetry, GetOutcome, HasOutcome,
+    PutOutcome,
 };
 pub use errors::{TransportError, TransportResult};
 pub use frame::{
@@ -23,7 +26,9 @@ pub use frame::{
 };
 pub use manifest::{ChunkInfo, ChunkManifest, ChunkSpec, DEFAULT_CHUNK_SIZE};
 pub use metrics::{TransportMetrics, TransportMetricsSnapshot};
+pub use path::PathSpec;
 pub use reassembler::{ChunkAcceptStatus, Reassembler};
+pub use scheduler::{PathStats, PathStatus, RoundRobinScheduler, ScheduledPath};
 pub use server::{
     handle_connection, handle_connection_observed, serve, serve_listener, serve_listener_observed,
     ServerConfig,

@@ -80,20 +80,20 @@ Last verified: 2026-05-27
 
 ## Multipath
 
-- [ ] Start only after single-path PUT and GET are correct.
-- [ ] Use multiple local TCP connections for synthetic transfer.
-- [ ] Preserve one object identity across all paths.
-- [ ] Reassemble chunks deterministically regardless of arrival path.
-- [ ] Handle duplicate chunks from different paths.
-- [ ] Commit only after all chunks and Phase 1 validation pass.
-- [ ] Report per-path bytes, chunks, errors, and latency.
+- [x] Start only after single-path PUT and GET are correct.
+- [x] Use multiple local TCP connections for synthetic transfer.
+- [x] Preserve one object identity across all paths.
+- [x] Reassemble chunks deterministically regardless of arrival path.
+- [x] Handle duplicate chunks from different paths.
+- [x] Commit only after all chunks and Phase 1 validation pass.
+- [ ] Report per-path bytes, chunks, errors, and latency in public snapshots.
 - [ ] Keep QUIC, RDMA, compression, and parity chunks out of scope.
 
 ## Retry and timeout
 
 - [ ] Define request timeout behavior.
-- [ ] Define chunk retry limits.
-- [ ] Define connection close behavior for in-flight PUT and GET.
+- [x] Define initial chunk retry behavior for multipath PUT path failures.
+- [x] Define connection close behavior for in-flight multipath PUT chunk retry.
 - [ ] Reject PUT on commit if any chunk is missing.
 - [ ] Remove or quarantine abandoned staging state.
 - [ ] Make timeout tests deterministic and local.
@@ -135,7 +135,6 @@ Last verified: 2026-05-27
 - [x] HAS returns true only for committed and servable objects.
 - [x] Metrics exist for successful and failed transfer paths.
 - [ ] ContextStorm can run a CPU-only local benchmark.
-- [ ] Multipath synthetic transfer is implemented or explicitly deferred with
-      single-path Phase 2 acceptance documented.
+- [x] Multipath synthetic PUT transfer is implemented.
 - [ ] No LMCache, vLLM, real KV extraction, GPU inference, dashboard, QUIC,
       compression, RDMA, production auth, or cache eviction work is included.

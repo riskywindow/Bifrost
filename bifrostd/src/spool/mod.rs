@@ -9,6 +9,7 @@ use serde_json::Value;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
 pub use committed::CommittedObjectPaths;
@@ -47,12 +48,14 @@ pub enum CommitOutcome {
 #[derive(Debug, Clone)]
 pub struct Spool {
     layout: SpoolLayout,
+    staging_lock: Arc<Mutex<()>>,
 }
 
 impl Spool {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self {
             layout: SpoolLayout::new(root),
+            staging_lock: Arc::new(Mutex::new(())),
         }
     }
 
@@ -66,6 +69,10 @@ impl Spool {
         metadata_json: &[u8],
         manifest: &ChunkManifest,
     ) -> SpoolResult<()> {
+        let _guard = self
+            .staging_lock
+            .lock()
+            .expect("spool staging lock poisoned");
         manifest.validate_shape()?;
         let paths = self.layout.staging_paths(transfer_id)?;
         if paths.transfer_dir.exists() {
@@ -85,6 +92,10 @@ impl Spool {
         chunk_index: u64,
         bytes: &[u8],
     ) -> SpoolResult<()> {
+        let _guard = self
+            .staging_lock
+            .lock()
+            .expect("spool staging lock poisoned");
         let paths = self.layout.staging_paths(transfer_id)?;
         let manifest = read_manifest(&paths)?;
         let info = manifest.chunks.get(chunk_index as usize).ok_or_else(|| {
@@ -119,6 +130,10 @@ impl Spool {
     }
 
     pub fn abort_staging_transfer(&self, transfer_id: &str) -> SpoolResult<()> {
+        let _guard = self
+            .staging_lock
+            .lock()
+            .expect("spool staging lock poisoned");
         let paths = self.layout.staging_paths(transfer_id)?;
         if paths.transfer_dir.exists() {
             fs::remove_dir_all(paths.transfer_dir)?;
@@ -131,6 +146,10 @@ impl Spool {
         transfer_id: &str,
         target_profile: Option<&Value>,
     ) -> SpoolResult<CommitOutcome> {
+        let _guard = self
+            .staging_lock
+            .lock()
+            .expect("spool staging lock poisoned");
         let paths = self.layout.staging_paths(transfer_id)?;
         let metadata_bytes = fs::read(&paths.metadata)?;
         let metadata: Value = serde_json::from_slice(&metadata_bytes)?;

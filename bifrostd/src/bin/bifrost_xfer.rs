@@ -1,6 +1,6 @@
 use bifrostd::transport::{
-    get_object_observed, has_object, put_object_observed, ClientTelemetry, TraceSink,
-    TransportMetrics, DEFAULT_CHUNK_SIZE,
+    get_object_observed, has_object, put_object_multipath_observed, put_object_observed,
+    ClientTelemetry, PathSpec, TraceSink, TransportMetrics, DEFAULT_CHUNK_SIZE,
 };
 use clap::{Parser, Subcommand};
 use serde_json::json;
@@ -23,6 +23,8 @@ enum Command {
     Put {
         #[arg(long, default_value = "127.0.0.1:7420")]
         endpoint: String,
+        #[arg(long = "path")]
+        paths: Vec<PathSpec>,
         #[arg(long)]
         meta: PathBuf,
         #[arg(long)]
@@ -61,6 +63,7 @@ async fn main() {
     match args.command {
         Command::Put {
             endpoint,
+            paths,
             meta,
             payload,
             chunk_size,
@@ -69,6 +72,7 @@ async fn main() {
         } => {
             let result = run_put(
                 &endpoint,
+                paths,
                 meta,
                 payload,
                 chunk_size,
@@ -123,6 +127,7 @@ async fn main() {
 
 async fn run_put(
     endpoint: &str,
+    paths: Vec<PathSpec>,
     meta: PathBuf,
     payload: PathBuf,
     chunk_size: usize,
@@ -137,15 +142,27 @@ async fn run_put(
         .transpose()?;
     let telemetry = telemetry(trace_jsonl)?;
 
-    let outcome = put_object_observed(
-        endpoint,
-        metadata_bytes,
-        payload,
-        chunk_size,
-        target_profile,
-        telemetry.clone(),
-    )
-    .await?;
+    let outcome = if paths.is_empty() {
+        put_object_observed(
+            endpoint,
+            metadata_bytes,
+            payload,
+            chunk_size,
+            target_profile,
+            telemetry.clone(),
+        )
+        .await?
+    } else {
+        put_object_multipath_observed(
+            paths,
+            metadata_bytes,
+            payload,
+            chunk_size,
+            target_profile,
+            telemetry.clone(),
+        )
+        .await?
+    };
     if as_json {
         println!(
             "{}",

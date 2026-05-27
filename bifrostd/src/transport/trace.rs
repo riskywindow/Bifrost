@@ -76,6 +76,11 @@ impl TraceEvent {
         }
         self
     }
+
+    pub fn path_name(mut self, path_name: impl Into<String>) -> Self {
+        self.path_name = path_name.into();
+        self
+    }
 }
 
 #[derive(Debug, Clone)]

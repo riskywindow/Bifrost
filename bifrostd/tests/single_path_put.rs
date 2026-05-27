@@ -242,7 +242,7 @@ async fn multiple_sequential_puts_work() {
 }
 
 #[test]
-fn xfer_put_help_mentions_endpoint_and_chunk_size() {
+fn xfer_put_help_mentions_endpoint_path_and_chunk_size() {
     let output = Command::new(env!("CARGO_BIN_EXE_bifrost-xfer"))
         .args(["put", "--help"])
         .output()
@@ -251,6 +251,7 @@ fn xfer_put_help_mentions_endpoint_and_chunk_size() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("--endpoint"));
+    assert!(stdout.contains("--path"));
     assert!(stdout.contains("--chunk-size"));
 }
 

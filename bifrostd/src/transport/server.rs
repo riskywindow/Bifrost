@@ -121,7 +121,11 @@ pub async fn handle_connection_observed(
                 );
                 let result = begin_put(&spool, &frame);
                 match result {
-                    Ok(()) => active_transfer = Some(transfer_id),
+                    Ok(()) => {
+                        if !is_multipath_begin(&frame) {
+                            active_transfer = Some(transfer_id);
+                        }
+                    }
                     Err(error) => {
                         metrics.record_transfer_failed();
                         emit_trace(
@@ -175,7 +179,8 @@ pub async fn handle_connection_observed(
                         .transfer_id(frame.header.transfer_id.clone())
                         .maybe_object_id(frame.header.object_id.as_deref())
                         .chunk_index(frame.header.chunk_index.unwrap_or_default())
-                        .bytes(frame.payload.len() as u64),
+                        .bytes(frame.payload.len() as u64)
+                        .path_name(path_name_from_frame(&frame)),
                 );
                 send_chunk_ack(&mut stream, &frame, status.0, status.1, &trace).await?;
             }
@@ -212,6 +217,27 @@ pub async fn handle_connection_observed(
             }
         }
     }
+}
+
+fn is_multipath_begin(frame: &Frame) -> bool {
+    frame
+        .header
+        .flags
+        .as_ref()
+        .and_then(|flags| flags.get("multipath"))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+}
+
+fn path_name_from_frame(frame: &Frame) -> String {
+    frame
+        .header
+        .flags
+        .as_ref()
+        .and_then(|flags| flags.get("path_name"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("primary")
+        .to_string()
 }
 
 fn begin_put(spool: &Spool, frame: &Frame) -> anyhow::Result<()> {
@@ -275,6 +301,11 @@ async fn send_chunk_ack(
     ack.chunk_index = request.header.chunk_index;
     ack.status = Some(status.to_string());
     ack.reason = Some(reason.to_string());
+    let path_name = path_name_from_frame(request);
+    ack.flags = Some(BTreeMap::from([(
+        "path_name".to_string(),
+        serde_json::json!(path_name.clone()),
+    )]));
     write_frame(stream, &ack, &[]).await?;
     emit_trace(
         trace,
@@ -282,6 +313,7 @@ async fn send_chunk_ack(
             .transfer_id(request.header.transfer_id.clone())
             .maybe_object_id(request.header.object_id.as_deref())
             .chunk_index(request.header.chunk_index.unwrap_or_default())
+            .path_name(path_name)
             .reason_code(reason),
     );
     Ok(())
