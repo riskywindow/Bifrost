@@ -56,21 +56,21 @@ Last verified: 2026-05-27
 - [x] Validate opaque engine key fields.
 - [x] Validate opaque engine and integration fields.
 - [x] Return stable reason codes.
-- [ ] Add known-good fixture tests.
-- [ ] Add known-bad fixture tests for every reason code where practical.
+- [x] Add known-good fixture tests.
+- [x] Add known-bad fixture tests for every reason code where practical.
 
 ## Fixture generator
 
-- [ ] Generate deterministic native accepted fixture.
-- [ ] Generate deterministic opaque accepted fixture.
+- [x] Generate deterministic native accepted fixture.
+- [x] Generate deterministic opaque accepted fixture.
 - [ ] Generate descriptor-only test vectors.
-- [ ] Generate payload hash mismatch fixture.
-- [ ] Generate descriptor hash mismatch fixture.
-- [ ] Generate object ID mismatch fixture.
-- [ ] Generate byte length mismatch fixture.
-- [ ] Generate compatibility mismatch fixtures.
-- [ ] Generate malformed schema fixtures.
-- [ ] Store expected reason code with each rejected fixture.
+- [x] Generate payload hash mismatch fixture.
+- [x] Generate descriptor hash mismatch fixture.
+- [x] Generate object ID mismatch fixture.
+- [x] Generate byte length mismatch fixture.
+- [x] Generate compatibility mismatch fixtures.
+- [x] Generate malformed schema fixtures.
+- [x] Store expected reason code with each rejected fixture.
 - [ ] Make fixture generation reproducible in CI.
 
 ## CLI
@@ -126,7 +126,7 @@ Last verified: 2026-05-27
 - [ ] Documentation defines scope, identity, validation, and error codes.
 - [ ] Python reference implementation is complete.
 - [ ] Rust metadata mirror is complete.
-- [ ] Fixtures cover accepted and rejected paths.
+- [x] Fixtures cover accepted and rejected paths.
 - [ ] CLI validates fixtures deterministically.
 - [ ] Python and Rust agree on all committed test vectors.
 - [ ] CI enforces Python tests, Rust tests, fixture determinism, and parity.

@@ -1,0 +1,21 @@
+{
+  "accepts_object_type": "opaque_engine_blob",
+  "engine_profile": {
+    "attention_impl": "engine_owned",
+    "block_size_tokens": 256,
+    "engine_name": "lmcache",
+    "engine_version": "0.1.0-fixture",
+    "integration_name": "lmcache_bifrost_remote_storage",
+    "integration_version": "0.1.0-fixture",
+    "kv_cache_format": "opaque_lmcache_memory_obj",
+    "kv_layout": "opaque"
+  },
+  "model_profile": null,
+  "opaque_requirements": {
+    "engine_key_hash": "blake3:484074ef39b4e5b785ae58db3bee3f12499a1dc54045b2c1ac7afa4632d3f744",
+    "engine_key_repr_version": "fixture-v1",
+    "engine_payload_type": "lmcache_memory_obj"
+  },
+  "prefix_requirements": null,
+  "schema_version": "bifrost.target_profile.v1alpha1"
+}

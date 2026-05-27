@@ -1,0 +1,9 @@
+{
+  "descriptor_hash": null,
+  "details": {},
+  "object_id": null,
+  "payload_hash": null,
+  "reason_code": "unknown_object_type",
+  "schema_version": "bifrost.validation_result.v1alpha1",
+  "status": "rejected"
+}

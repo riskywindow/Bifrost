@@ -1,0 +1,9 @@
+{
+  "descriptor_hash": "blake3:d97b3b11e17696f72fad3fc123e453051a2117c3a190469065cdb6d89a13ec2f",
+  "details": {},
+  "object_id": "bifrost://object/blake3/5e515c8340de72c52cc23e54345c51f185c06e49f8cadd8a4808da95e1854e32",
+  "payload_hash": "blake3:acca1229e537587e75108d1a25c3e28d7ce8036556137dc2973d9289187e58d4",
+  "reason_code": "wrong_token_range",
+  "schema_version": "bifrost.validation_result.v1alpha1",
+  "status": "rejected"
+}

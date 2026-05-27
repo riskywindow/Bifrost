@@ -1,0 +1,9 @@
+{
+  "descriptor_hash": "blake3:390ecf0f18371deea2a78892eafaa4083f0c03d26d4e4eb4720fe7e72bc23396",
+  "details": {},
+  "object_id": "bifrost://object/blake3/b1234bd38513a690fea9d958acdcf31a64e17cffa681ea7f1a41f38c508f188f",
+  "payload_hash": "blake3:acca1229e537587e75108d1a25c3e28d7ce8036556137dc2973d9289187e58d4",
+  "reason_code": "invalid_tensor_layout",
+  "schema_version": "bifrost.validation_result.v1alpha1",
+  "status": "rejected"
+}
