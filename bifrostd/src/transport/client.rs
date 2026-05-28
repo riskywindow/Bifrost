@@ -1,18 +1,40 @@
 use crate::cache::validate_object;
 use crate::transport::{
     chunk_bytes, iter_chunks, read_frame, write_frame, ChunkInfo, ChunkManifest, Frame,
-    FrameHeader, FrameType, PathSpec, Reassembler, RoundRobinScheduler, TraceEvent, TraceSink,
-    TransportMetrics, TransportResult, TRANSPORT_VERSION,
+    FrameHeader, FrameType, PathSpec, PathStatus, Reassembler, RoundRobinScheduler, TraceEvent,
+    TraceSink, TransportMetrics, TransportResult, TRANSPORT_VERSION,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::net::TcpStream;
+use tokio::time::timeout;
+
+pub const DEFAULT_CHUNK_TIMEOUT_MS: u64 = 5_000;
+pub const DEFAULT_MAX_RETRIES_PER_CHUNK: u32 = 3;
+pub const DEFAULT_MAX_INFLIGHT_PER_PATH: u64 = 16;
 
 #[derive(Debug, Default, Clone)]
 pub struct ClientTelemetry {
     pub metrics: TransportMetrics,
     pub trace: Option<TraceSink>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MultipathPutOptions {
+    pub chunk_timeout: Duration,
+    pub max_retries_per_chunk: u32,
+    pub max_inflight_per_path: u64,
+}
+
+impl Default for MultipathPutOptions {
+    fn default() -> Self {
+        Self {
+            chunk_timeout: Duration::from_millis(DEFAULT_CHUNK_TIMEOUT_MS),
+            max_retries_per_chunk: DEFAULT_MAX_RETRIES_PER_CHUNK,
+            max_inflight_per_path: DEFAULT_MAX_INFLIGHT_PER_PATH,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,6 +120,27 @@ pub async fn put_object_multipath_observed(
     target_profile: Option<Value>,
     telemetry: ClientTelemetry,
 ) -> anyhow::Result<PutOutcome> {
+    put_object_multipath_observed_with_options(
+        paths,
+        metadata_bytes,
+        payload,
+        chunk_size,
+        target_profile,
+        telemetry,
+        MultipathPutOptions::default(),
+    )
+    .await
+}
+
+pub async fn put_object_multipath_observed_with_options(
+    paths: Vec<PathSpec>,
+    metadata_bytes: Vec<u8>,
+    payload: Vec<u8>,
+    chunk_size: usize,
+    target_profile: Option<Value>,
+    telemetry: ClientTelemetry,
+    options: MultipathPutOptions,
+) -> anyhow::Result<PutOutcome> {
     let metadata: Value = serde_json::from_slice(&metadata_bytes)?;
     let validation = validate_object(&metadata, &payload, target_profile.as_ref());
     if validation.status != "accepted" {
@@ -121,8 +164,15 @@ pub async fn put_object_multipath_observed(
         .ok_or_else(|| anyhow::anyhow!("local validation accepted without object_id"))?;
     let mut manifest = chunk_bytes(&payload, chunk_size)?;
     manifest.object_id = Some(object_id);
-    put_validated_object_multipath_observed(paths, metadata_bytes, payload, manifest, telemetry)
-        .await
+    put_validated_object_multipath_observed_with_options(
+        paths,
+        metadata_bytes,
+        payload,
+        manifest,
+        telemetry,
+        options,
+    )
+    .await
 }
 
 pub async fn put_validated_object(
@@ -280,6 +330,25 @@ pub async fn put_validated_object_multipath_observed(
     manifest: ChunkManifest,
     telemetry: ClientTelemetry,
 ) -> anyhow::Result<PutOutcome> {
+    put_validated_object_multipath_observed_with_options(
+        paths,
+        metadata_bytes,
+        payload,
+        manifest,
+        telemetry,
+        MultipathPutOptions::default(),
+    )
+    .await
+}
+
+pub async fn put_validated_object_multipath_observed_with_options(
+    paths: Vec<PathSpec>,
+    metadata_bytes: Vec<u8>,
+    payload: Vec<u8>,
+    manifest: ChunkManifest,
+    telemetry: ClientTelemetry,
+    options: MultipathPutOptions,
+) -> anyhow::Result<PutOutcome> {
     if paths.is_empty() {
         anyhow::bail!("multipath PUT requires at least one path");
     }
@@ -299,6 +368,7 @@ pub async fn put_validated_object_multipath_observed(
                 Ok(()) => connections.push(Some(stream)),
                 Err(error) => {
                     scheduler.mark_dead(index);
+                    telemetry.metrics.record_path_dead();
                     emit_trace(
                         &telemetry.trace,
                         TraceEvent::new("path_dead")
@@ -312,6 +382,7 @@ pub async fn put_validated_object_multipath_observed(
             },
             Err(error) => {
                 scheduler.mark_dead(index);
+                telemetry.metrics.record_path_dead();
                 emit_trace(
                     &telemetry.trace,
                     TraceEvent::new("path_dead")
@@ -327,6 +398,13 @@ pub async fn put_validated_object_multipath_observed(
 
     if scheduler.healthy_path_count() == 0 {
         telemetry.metrics.record_transfer_failed();
+        emit_trace(
+            &telemetry.trace,
+            TraceEvent::new("transfer_failed")
+                .transfer_id(transfer_id.clone())
+                .object_id(object_id.clone())
+                .reason_code("all paths failed before PUT started"),
+        )?;
         anyhow::bail!("all paths failed before PUT started");
     }
 
@@ -359,8 +437,12 @@ pub async fn put_validated_object_multipath_observed(
 
     for chunk in iter_chunks(&payload, manifest.chunk_size)? {
         let mut last_error = None;
+        let mut retry_count = 0u32;
+        let mut last_path_index = None;
         loop {
-            let path_index = match scheduler.select_path() {
+            let path_index = match scheduler
+                .select_path_avoiding(last_path_index, options.max_inflight_per_path)
+            {
                 Some(index) => index,
                 None => {
                     telemetry.metrics.record_transfer_failed();
@@ -373,14 +455,61 @@ pub async fn put_validated_object_multipath_observed(
                             .chunk_index(chunk.info.chunk_index)
                             .reason_code(reason.clone()),
                     )?;
+                    emit_trace(
+                        &telemetry.trace,
+                        TraceEvent::new("transfer_failed")
+                            .transfer_id(transfer_id.clone())
+                            .object_id(object_id.clone())
+                            .chunk_index(chunk.info.chunk_index)
+                            .reason_code(reason.clone()),
+                    )?;
                     anyhow::bail!(reason);
                 }
             };
             let path_name = scheduler.path_name(path_index).to_string();
-            let Some(stream) = connections[path_index].as_mut() else {
-                scheduler.mark_dead(path_index);
-                continue;
-            };
+            if connections[path_index].is_none() {
+                let endpoint = scheduler.paths()[path_index].spec.endpoint.clone();
+                match TcpStream::connect(&endpoint).await {
+                    Ok(mut stream) => match handshake(&mut stream, &transfer_id).await {
+                        Ok(()) => {
+                            connections[path_index] = Some(stream);
+                        }
+                        Err(error) => {
+                            last_error = Some(error.to_string());
+                            scheduler.mark_dead(path_index);
+                            telemetry.metrics.record_path_dead();
+                            emit_trace(
+                                &telemetry.trace,
+                                TraceEvent::new("path_dead")
+                                    .transfer_id(transfer_id.clone())
+                                    .object_id(object_id.clone())
+                                    .chunk_index(chunk.info.chunk_index)
+                                    .path_name(path_name)
+                                    .reason_code(last_error.clone().unwrap_or_default()),
+                            )?;
+                            continue;
+                        }
+                    },
+                    Err(error) => {
+                        last_error = Some(error.to_string());
+                        scheduler.mark_dead(path_index);
+                        telemetry.metrics.record_path_dead();
+                        emit_trace(
+                            &telemetry.trace,
+                            TraceEvent::new("path_dead")
+                                .transfer_id(transfer_id.clone())
+                                .object_id(object_id.clone())
+                                .chunk_index(chunk.info.chunk_index)
+                                .path_name(path_name)
+                                .reason_code(last_error.clone().unwrap_or_default()),
+                        )?;
+                        continue;
+                    }
+                }
+            }
+            let stream = connections[path_index]
+                .as_mut()
+                .ok_or_else(|| anyhow::anyhow!("selected path has no connection"))?;
 
             let mut header = FrameHeader::new(
                 FrameType::Chunk,
@@ -403,16 +532,43 @@ pub async fn put_validated_object_multipath_observed(
             if let Err(error) = write_frame(stream, &header, chunk.bytes).await {
                 last_error = Some(error.to_string());
                 connections[path_index] = None;
-                scheduler.mark_dead(path_index);
+                let status = scheduler.mark_failure(path_index);
+                retry_count += 1;
+                if retry_count > options.max_retries_per_chunk {
+                    telemetry.metrics.record_transfer_failed();
+                    emit_transfer_failed(
+                        &telemetry.trace,
+                        &transfer_id,
+                        &object_id,
+                        chunk.info.chunk_index,
+                        "max_retries_exceeded",
+                    )?;
+                    anyhow::bail!(
+                        "chunk {} exceeded max retries after send failure: {}",
+                        chunk.info.chunk_index,
+                        last_error.clone().unwrap_or_default()
+                    );
+                }
                 telemetry.metrics.record_chunk_retried();
-                emit_trace(
+                emit_retry_trace(
                     &telemetry.trace,
-                    TraceEvent::new("path_dead")
-                        .transfer_id(transfer_id.clone())
-                        .object_id(object_id.clone())
-                        .path_name(path_name)
-                        .reason_code(last_error.clone().unwrap_or_default()),
+                    &transfer_id,
+                    &object_id,
+                    chunk.info.chunk_index,
+                    &path_name,
+                    retry_count,
+                    last_error.clone().unwrap_or_default(),
                 )?;
+                emit_path_status_trace(
+                    &telemetry,
+                    &transfer_id,
+                    &object_id,
+                    chunk.info.chunk_index,
+                    &path_name,
+                    status,
+                    last_error.clone().unwrap_or_default(),
+                )?;
+                last_path_index = Some(path_index);
                 continue;
             }
             telemetry
@@ -428,22 +584,100 @@ pub async fn put_validated_object_multipath_observed(
                     .path_name(path_name.clone()),
             )?;
 
-            let ack = match read_frame(stream).await {
-                Ok(ack) => ack,
-                Err(error) => {
-                    last_error = Some(error.to_string());
+            let ack = match timeout(options.chunk_timeout, read_frame(stream)).await {
+                Ok(Ok(ack)) => ack,
+                Err(_) => {
+                    last_error = Some("chunk_ack_timeout".to_string());
                     connections[path_index] = None;
-                    scheduler.mark_dead(path_index);
-                    telemetry.metrics.record_chunk_retried();
+                    let status = scheduler.mark_timeout(path_index);
+                    telemetry.metrics.record_chunk_timeout();
+                    retry_count += 1;
                     emit_trace(
                         &telemetry.trace,
-                        TraceEvent::new("path_dead")
+                        TraceEvent::new("chunk_timeout")
                             .transfer_id(transfer_id.clone())
                             .object_id(object_id.clone())
                             .chunk_index(chunk.info.chunk_index)
-                            .path_name(path_name)
-                            .reason_code(last_error.clone().unwrap_or_default()),
+                            .duration_ms(options.chunk_timeout.as_millis() as u64)
+                            .path_name(path_name.clone())
+                            .reason_code("chunk_ack_timeout"),
                     )?;
+                    if retry_count > options.max_retries_per_chunk {
+                        telemetry.metrics.record_transfer_failed();
+                        emit_transfer_failed(
+                            &telemetry.trace,
+                            &transfer_id,
+                            &object_id,
+                            chunk.info.chunk_index,
+                            "max_retries_exceeded",
+                        )?;
+                        anyhow::bail!(
+                            "chunk {} exceeded max retries after ack timeout",
+                            chunk.info.chunk_index
+                        );
+                    }
+                    telemetry.metrics.record_chunk_retried();
+                    emit_retry_trace(
+                        &telemetry.trace,
+                        &transfer_id,
+                        &object_id,
+                        chunk.info.chunk_index,
+                        &path_name,
+                        retry_count,
+                        "chunk_ack_timeout",
+                    )?;
+                    emit_path_status_trace(
+                        &telemetry,
+                        &transfer_id,
+                        &object_id,
+                        chunk.info.chunk_index,
+                        &path_name,
+                        status,
+                        "chunk_ack_timeout",
+                    )?;
+                    last_path_index = Some(path_index);
+                    continue;
+                }
+                Ok(Err(error)) => {
+                    last_error = Some(error.to_string());
+                    connections[path_index] = None;
+                    let status = scheduler.mark_failure(path_index);
+                    retry_count += 1;
+                    if retry_count > options.max_retries_per_chunk {
+                        telemetry.metrics.record_transfer_failed();
+                        emit_transfer_failed(
+                            &telemetry.trace,
+                            &transfer_id,
+                            &object_id,
+                            chunk.info.chunk_index,
+                            "max_retries_exceeded",
+                        )?;
+                        anyhow::bail!(
+                            "chunk {} exceeded max retries after ack failure: {}",
+                            chunk.info.chunk_index,
+                            last_error.clone().unwrap_or_default()
+                        );
+                    }
+                    telemetry.metrics.record_chunk_retried();
+                    emit_retry_trace(
+                        &telemetry.trace,
+                        &transfer_id,
+                        &object_id,
+                        chunk.info.chunk_index,
+                        &path_name,
+                        retry_count,
+                        last_error.clone().unwrap_or_default(),
+                    )?;
+                    emit_path_status_trace(
+                        &telemetry,
+                        &transfer_id,
+                        &object_id,
+                        chunk.info.chunk_index,
+                        &path_name,
+                        status,
+                        last_error.clone().unwrap_or_default(),
+                    )?;
+                    last_path_index = Some(path_index);
                     continue;
                 }
             };
@@ -512,8 +746,22 @@ pub async fn put_validated_object_multipath_observed(
     let status = result.header.status.as_deref().unwrap_or("rejected");
     if status == "committed" {
         telemetry.metrics.record_transfer_completed();
+        emit_trace(
+            &telemetry.trace,
+            TraceEvent::new("transfer_completed")
+                .transfer_id(transfer_id.clone())
+                .object_id(object_id.clone())
+                .path_name(scheduler.path_name(commit_index).to_string()),
+        )?;
     } else {
         telemetry.metrics.record_transfer_failed();
+        emit_transfer_failed(
+            &telemetry.trace,
+            &transfer_id,
+            &object_id,
+            0,
+            result.header.reason.clone().unwrap_or_default(),
+        )?;
     }
     Ok(PutOutcome {
         accepted: status == "committed",
@@ -804,6 +1052,80 @@ fn new_transfer_id(prefix: &str) -> String {
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
     format!("{prefix}-{}-{nanos}", std::process::id())
+}
+
+fn emit_retry_trace(
+    trace: &Option<TraceSink>,
+    transfer_id: &str,
+    object_id: &str,
+    chunk_index: u64,
+    path_name: &str,
+    retry_count: u32,
+    reason: impl Into<String>,
+) -> anyhow::Result<()> {
+    emit_trace(
+        trace,
+        TraceEvent::new("chunk_retry")
+            .transfer_id(transfer_id.to_string())
+            .object_id(object_id.to_string())
+            .chunk_index(chunk_index)
+            .path_name(path_name.to_string())
+            .bytes(retry_count as u64)
+            .reason_code(reason),
+    )
+}
+
+fn emit_transfer_failed(
+    trace: &Option<TraceSink>,
+    transfer_id: &str,
+    object_id: &str,
+    chunk_index: u64,
+    reason: impl Into<String>,
+) -> anyhow::Result<()> {
+    emit_trace(
+        trace,
+        TraceEvent::new("transfer_failed")
+            .transfer_id(transfer_id.to_string())
+            .object_id(object_id.to_string())
+            .chunk_index(chunk_index)
+            .reason_code(reason),
+    )
+}
+
+fn emit_path_status_trace(
+    telemetry: &ClientTelemetry,
+    transfer_id: &str,
+    object_id: &str,
+    chunk_index: u64,
+    path_name: &str,
+    status: PathStatus,
+    reason: impl Into<String>,
+) -> anyhow::Result<()> {
+    let reason = reason.into();
+    match status {
+        PathStatus::Healthy => Ok(()),
+        PathStatus::Degraded => emit_trace(
+            &telemetry.trace,
+            TraceEvent::new("path_degraded")
+                .transfer_id(transfer_id.to_string())
+                .object_id(object_id.to_string())
+                .chunk_index(chunk_index)
+                .path_name(path_name.to_string())
+                .reason_code(reason),
+        ),
+        PathStatus::Dead => {
+            telemetry.metrics.record_path_dead();
+            emit_trace(
+                &telemetry.trace,
+                TraceEvent::new("path_dead")
+                    .transfer_id(transfer_id.to_string())
+                    .object_id(object_id.to_string())
+                    .chunk_index(chunk_index)
+                    .path_name(path_name.to_string())
+                    .reason_code(reason),
+            )
+        }
+    }
 }
 
 fn emit_trace(trace: &Option<TraceSink>, event: TraceEvent) -> anyhow::Result<()> {

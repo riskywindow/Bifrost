@@ -77,6 +77,8 @@ Last verified: 2026-05-27
 - [ ] Report ContextStorm throughput.
 - [x] Keep metrics local and dependency-light.
 - [x] Test that expected metrics are emitted for success and failure paths.
+- [x] Count multipath chunk retries, ack timeouts, dead paths, and transfer
+      failures.
 
 ## Multipath
 
@@ -91,12 +93,15 @@ Last verified: 2026-05-27
 
 ## Retry and timeout
 
-- [ ] Define request timeout behavior.
+- [x] Define request timeout behavior.
 - [x] Define initial chunk retry behavior for multipath PUT path failures.
 - [x] Define connection close behavior for in-flight multipath PUT chunk retry.
-- [ ] Reject PUT on commit if any chunk is missing.
+- [x] Retry timed-out multipath PUT chunks on another healthy path when
+      available.
+- [x] Enforce a per-chunk retry ceiling.
+- [x] Reject PUT on commit if any chunk is missing.
 - [ ] Remove or quarantine abandoned staging state.
-- [ ] Make timeout tests deterministic and local.
+- [x] Make timeout tests deterministic and local.
 - [ ] Keep root-required network fault tests opt-in and skipped by default.
 
 ## ContextStorm

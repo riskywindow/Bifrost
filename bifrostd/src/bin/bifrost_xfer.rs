@@ -1,12 +1,15 @@
 use bifrostd::transport::{
-    get_object_observed, has_object, put_object_multipath_observed, put_object_observed,
-    ClientTelemetry, PathSpec, TraceSink, TransportMetrics, DEFAULT_CHUNK_SIZE,
+    get_object_observed, has_object, put_object_multipath_observed_with_options,
+    put_object_observed, ClientTelemetry, MultipathPutOptions, PathSpec, TraceSink,
+    TransportMetrics, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_TIMEOUT_MS, DEFAULT_MAX_INFLIGHT_PER_PATH,
+    DEFAULT_MAX_RETRIES_PER_CHUNK,
 };
 use clap::{Parser, Subcommand};
 use serde_json::json;
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
+use std::time::Duration;
 
 #[derive(Debug, Parser)]
 #[command(name = "bifrost-xfer")]
@@ -35,6 +38,12 @@ enum Command {
         target: Option<PathBuf>,
         #[arg(long)]
         trace_jsonl: Option<PathBuf>,
+        #[arg(long, default_value_t = DEFAULT_CHUNK_TIMEOUT_MS)]
+        chunk_timeout_ms: u64,
+        #[arg(long, default_value_t = DEFAULT_MAX_RETRIES_PER_CHUNK)]
+        max_retries_per_chunk: u32,
+        #[arg(long, default_value_t = DEFAULT_MAX_INFLIGHT_PER_PATH)]
+        max_inflight_per_path: u64,
     },
     Get {
         #[arg(long, default_value = "127.0.0.1:7420")]
@@ -69,6 +78,9 @@ async fn main() {
             chunk_size,
             target,
             trace_jsonl,
+            chunk_timeout_ms,
+            max_retries_per_chunk,
+            max_inflight_per_path,
         } => {
             let result = run_put(
                 &endpoint,
@@ -78,6 +90,11 @@ async fn main() {
                 chunk_size,
                 target,
                 trace_jsonl,
+                MultipathPutOptions {
+                    chunk_timeout: Duration::from_millis(chunk_timeout_ms),
+                    max_retries_per_chunk,
+                    max_inflight_per_path,
+                },
                 as_json,
             )
             .await;
@@ -133,6 +150,7 @@ async fn run_put(
     chunk_size: usize,
     target: Option<PathBuf>,
     trace_jsonl: Option<PathBuf>,
+    multipath_options: MultipathPutOptions,
     as_json: bool,
 ) -> anyhow::Result<bool> {
     let metadata_bytes = fs::read(meta)?;
@@ -153,13 +171,14 @@ async fn run_put(
         )
         .await?
     } else {
-        put_object_multipath_observed(
+        put_object_multipath_observed_with_options(
             paths,
             metadata_bytes,
             payload,
             chunk_size,
             target_profile,
             telemetry.clone(),
+            multipath_options,
         )
         .await?
     };

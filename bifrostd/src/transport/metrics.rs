@@ -16,6 +16,8 @@ pub struct TransportMetricsSnapshot {
     pub chunks_sent_total: u64,
     pub chunks_received_total: u64,
     pub chunks_retried_total: u64,
+    pub chunk_timeouts_total: u64,
+    pub paths_dead_total: u64,
     pub chunk_ack_latency_ms_p50: Option<u64>,
     pub chunk_ack_latency_ms_p95: Option<u64>,
     pub chunk_ack_latency_ms: Vec<u64>,
@@ -108,6 +110,20 @@ impl TransportMetrics {
             .lock()
             .expect("metrics lock poisoned")
             .chunks_retried_total += 1;
+    }
+
+    pub fn record_chunk_timeout(&self) {
+        self.inner
+            .lock()
+            .expect("metrics lock poisoned")
+            .chunk_timeouts_total += 1;
+    }
+
+    pub fn record_path_dead(&self) {
+        self.inner
+            .lock()
+            .expect("metrics lock poisoned")
+            .paths_dead_total += 1;
     }
 
     pub fn record_chunk_ack_latency_ms(&self, duration_ms: u64) {

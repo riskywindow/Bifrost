@@ -15,9 +15,11 @@ pub mod trace;
 pub use chunker::{chunk_bytes, iter_chunks, Chunk};
 pub use client::{
     get_object, get_object_observed, has_object, put_object, put_object_multipath_observed,
-    put_object_observed, put_validated_object, put_validated_object_multipath_observed,
+    put_object_multipath_observed_with_options, put_object_observed, put_validated_object,
+    put_validated_object_multipath_observed, put_validated_object_multipath_observed_with_options,
     put_validated_object_observed, receive_get_response, ClientTelemetry, GetOutcome, HasOutcome,
-    PutOutcome,
+    MultipathPutOptions, PutOutcome, DEFAULT_CHUNK_TIMEOUT_MS, DEFAULT_MAX_INFLIGHT_PER_PATH,
+    DEFAULT_MAX_RETRIES_PER_CHUNK,
 };
 pub use errors::{TransportError, TransportResult};
 pub use frame::{
