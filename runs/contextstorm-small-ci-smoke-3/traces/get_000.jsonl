@@ -1,0 +1,2 @@
+{"timestamp_unix_ms":1779927488446,"event_type":"get_begin","transfer_id":"get-97035-1779927488446212000","object_id":"bifrost://object/blake3/b5aab7d85fc5f8d19ee7f2353ccfe06e649ed6ae85a9e3f8e8bb6c03997cda2e","path_name":"primary"}
+{"timestamp_unix_ms":1779927488524,"event_type":"get_completed","transfer_id":"get-97035-1779927488446212000","object_id":"bifrost://object/blake3/b5aab7d85fc5f8d19ee7f2353ccfe06e649ed6ae85a9e3f8e8bb6c03997cda2e","bytes":1048576,"path_name":"primary"}

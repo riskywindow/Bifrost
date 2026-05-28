@@ -1,0 +1,72 @@
+{
+  "command": [
+    "/Users/rishivinodkumar/BiFrost/bifrostd/target/debug/bifrost-xfer",
+    "--json",
+    "put",
+    "--meta",
+    "../runs/contextstorm-small-ci-smoke-3/inputs/rep_000/meta.json",
+    "--payload",
+    "../runs/contextstorm-small-ci-smoke-3/inputs/rep_000/payload.bin",
+    "--target",
+    "../runs/contextstorm-small-ci-smoke-3/inputs/rep_000/target_profile.json",
+    "--chunk-size",
+    "262144",
+    "--trace-jsonl",
+    "../runs/contextstorm-small-ci-smoke-3/traces/put_000.jsonl",
+    "--endpoint",
+    "127.0.0.1:53614"
+  ],
+  "exit_code": 0,
+  "metrics": {
+    "bytes_received": 0,
+    "bytes_sent": 1050876,
+    "chunks_sent": 4,
+    "committed_object_verified": false,
+    "effective_throughput_mib_s": 7.210024826818232,
+    "get_payload_matches_put_payload": null,
+    "operation": "put",
+    "reason_code": "",
+    "repetition": 0,
+    "retries": 0,
+    "success": true,
+    "timeouts": 0,
+    "transfer_duration_ms": 139
+  },
+  "operation": "put",
+  "parsed_stdout": {
+    "accepted": true,
+    "metrics": {
+      "bytes_payload_decoded": 0,
+      "bytes_payload_encoded": 0,
+      "bytes_received_total": 0,
+      "bytes_sent_total": 1050876,
+      "chunk_ack_latency_ms": [
+        6,
+        7,
+        7,
+        8
+      ],
+      "chunk_ack_latency_ms_p50": 7,
+      "chunk_ack_latency_ms_p95": 8,
+      "chunk_timeouts_total": 0,
+      "chunks_received_total": 0,
+      "chunks_retried_total": 0,
+      "chunks_sent_total": 4,
+      "commit_failures_total": 0,
+      "frames_decoded": 0,
+      "frames_encoded": 0,
+      "paths_dead_total": 0,
+      "protocol_errors": 0,
+      "transfers_completed_total": 1,
+      "transfers_failed_total": 0,
+      "transfers_started_total": 1,
+      "validation_failures_total": 0
+    },
+    "object_id": "bifrost://object/blake3/b5aab7d85fc5f8d19ee7f2353ccfe06e649ed6ae85a9e3f8e8bb6c03997cda2e",
+    "reason": ""
+  },
+  "repetition": 0,
+  "stderr": "",
+  "stdout": "{\"accepted\":true,\"metrics\":{\"bytes_payload_decoded\":0,\"bytes_payload_encoded\":0,\"bytes_received_total\":0,\"bytes_sent_total\":1050876,\"chunk_ack_latency_ms\":[6,7,7,8],\"chunk_ack_latency_ms_p50\":7,\"chunk_ack_latency_ms_p95\":8,\"chunk_timeouts_total\":0,\"chunks_received_total\":0,\"chunks_retried_total\":0,\"chunks_sent_total\":4,\"commit_failures_total\":0,\"frames_decoded\":0,\"frames_encoded\":0,\"paths_dead_total\":0,\"protocol_errors\":0,\"transfers_completed_total\":1,\"transfers_failed_total\":0,\"transfers_started_total\":1,\"validation_failures_total\":0},\"object_id\":\"bifrost://object/blake3/b5aab7d85fc5f8d19ee7f2353ccfe06e649ed6ae85a9e3f8e8bb6c03997cda2e\",\"reason\":\"\"}\n",
+  "trace_jsonl": "../runs/contextstorm-small-ci-smoke-3/traces/put_000.jsonl"
+}

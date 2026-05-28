@@ -1,0 +1,10 @@
+name: local_single_path
+object_size_bytes: 16777216
+chunk_size_bytes: 1048576
+object_type: opaque_engine_blob
+paths:
+  - name: primary
+    start_daemon: true
+operations: [put, has, get]
+repetitions: 3
+timeout_seconds: 60

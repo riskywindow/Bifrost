@@ -1,0 +1,10 @@
+name: small_ci
+object_size_bytes: 1048576
+chunk_size_bytes: 262144
+object_type: opaque_engine_blob
+paths:
+  - name: primary
+    start_daemon: true
+operations: [put, has, get]
+repetitions: 1
+timeout_seconds: 30

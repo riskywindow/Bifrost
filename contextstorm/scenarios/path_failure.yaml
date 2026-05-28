@@ -1,0 +1,14 @@
+name: path_failure
+object_size_bytes: 4194304
+chunk_size_bytes: 524288
+object_type: opaque_engine_blob
+paths:
+  - name: primary
+    start_daemon: true
+  - name: failed
+    endpoint: 127.0.0.1:9
+    start_daemon: false
+operations: [put, has, get]
+repetitions: 1
+fault_profile: missing_second_path
+timeout_seconds: 30

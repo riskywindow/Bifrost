@@ -1,0 +1,228 @@
+{
+  "daemons": [
+    {
+      "command": [
+        "/Users/rishivinodkumar/BiFrost/bifrostd/target/debug/bifrost-daemon",
+        "--listen",
+        "127.0.0.1:53614",
+        "--spool",
+        "/var/folders/6p/mx_9010d5t72qm6b08mznnq80000gn/T/contextstorm-pqkxw1e3/spool_primary",
+        "--trace-jsonl",
+        "../runs/contextstorm-small-ci-smoke-3/traces/daemon_primary.jsonl"
+      ],
+      "exit_code": -15,
+      "path_name": "primary",
+      "stderr": "bifrost-daemon: connection 127.0.0.1:53616 ended with error: I/O error: early eof\n",
+      "stdout": "",
+      "trace_jsonl": "../runs/contextstorm-small-ci-smoke-3/traces/daemon_primary.jsonl"
+    }
+  ],
+  "environment": {
+    "machine": "arm64",
+    "platform": "macOS-15.6.1-arm64-arm-64bit",
+    "processor": "arm",
+    "python_version": "3.12.7",
+    "repo_root": "/Users/rishivinodkumar/BiFrost"
+  },
+  "finished_at_unix_ms": 1779927488528,
+  "operations": [
+    {
+      "command": [
+        "/Users/rishivinodkumar/BiFrost/bifrostd/target/debug/bifrost-xfer",
+        "--json",
+        "put",
+        "--meta",
+        "../runs/contextstorm-small-ci-smoke-3/inputs/rep_000/meta.json",
+        "--payload",
+        "../runs/contextstorm-small-ci-smoke-3/inputs/rep_000/payload.bin",
+        "--target",
+        "../runs/contextstorm-small-ci-smoke-3/inputs/rep_000/target_profile.json",
+        "--chunk-size",
+        "262144",
+        "--trace-jsonl",
+        "../runs/contextstorm-small-ci-smoke-3/traces/put_000.jsonl",
+        "--endpoint",
+        "127.0.0.1:53614"
+      ],
+      "exit_code": 0,
+      "metrics": {
+        "bytes_received": 0,
+        "bytes_sent": 1050876,
+        "chunks_sent": 4,
+        "committed_object_verified": true,
+        "effective_throughput_mib_s": 7.210024826818232,
+        "get_payload_matches_put_payload": true,
+        "operation": "put",
+        "reason_code": "",
+        "repetition": 0,
+        "retries": 0,
+        "success": true,
+        "timeouts": 0,
+        "transfer_duration_ms": 139
+      },
+      "operation": "put",
+      "parsed_stdout": {
+        "accepted": true,
+        "metrics": {
+          "bytes_payload_decoded": 0,
+          "bytes_payload_encoded": 0,
+          "bytes_received_total": 0,
+          "bytes_sent_total": 1050876,
+          "chunk_ack_latency_ms": [
+            6,
+            7,
+            7,
+            8
+          ],
+          "chunk_ack_latency_ms_p50": 7,
+          "chunk_ack_latency_ms_p95": 8,
+          "chunk_timeouts_total": 0,
+          "chunks_received_total": 0,
+          "chunks_retried_total": 0,
+          "chunks_sent_total": 4,
+          "commit_failures_total": 0,
+          "frames_decoded": 0,
+          "frames_encoded": 0,
+          "paths_dead_total": 0,
+          "protocol_errors": 0,
+          "transfers_completed_total": 1,
+          "transfers_failed_total": 0,
+          "transfers_started_total": 1,
+          "validation_failures_total": 0
+        },
+        "object_id": "bifrost://object/blake3/b5aab7d85fc5f8d19ee7f2353ccfe06e649ed6ae85a9e3f8e8bb6c03997cda2e",
+        "reason": ""
+      },
+      "repetition": 0,
+      "stderr": "",
+      "stdout": "{\"accepted\":true,\"metrics\":{\"bytes_payload_decoded\":0,\"bytes_payload_encoded\":0,\"bytes_received_total\":0,\"bytes_sent_total\":1050876,\"chunk_ack_latency_ms\":[6,7,7,8],\"chunk_ack_latency_ms_p50\":7,\"chunk_ack_latency_ms_p95\":8,\"chunk_timeouts_total\":0,\"chunks_received_total\":0,\"chunks_retried_total\":0,\"chunks_sent_total\":4,\"commit_failures_total\":0,\"frames_decoded\":0,\"frames_encoded\":0,\"paths_dead_total\":0,\"protocol_errors\":0,\"transfers_completed_total\":1,\"transfers_failed_total\":0,\"transfers_started_total\":1,\"validation_failures_total\":0},\"object_id\":\"bifrost://object/blake3/b5aab7d85fc5f8d19ee7f2353ccfe06e649ed6ae85a9e3f8e8bb6c03997cda2e\",\"reason\":\"\"}\n",
+      "trace_jsonl": "../runs/contextstorm-small-ci-smoke-3/traces/put_000.jsonl"
+    },
+    {
+      "command": [
+        "/Users/rishivinodkumar/BiFrost/bifrostd/target/debug/bifrost-xfer",
+        "--json",
+        "has",
+        "--endpoint",
+        "127.0.0.1:53614",
+        "--object-id",
+        "bifrost://object/blake3/b5aab7d85fc5f8d19ee7f2353ccfe06e649ed6ae85a9e3f8e8bb6c03997cda2e"
+      ],
+      "exit_code": 0,
+      "metrics": {
+        "bytes_received": 0,
+        "bytes_sent": 0,
+        "chunks_sent": 0,
+        "committed_object_verified": true,
+        "effective_throughput_mib_s": 0.0,
+        "get_payload_matches_put_payload": true,
+        "operation": "has",
+        "reason_code": "",
+        "repetition": 0,
+        "retries": 0,
+        "success": true,
+        "timeouts": 0,
+        "transfer_duration_ms": 3
+      },
+      "operation": "has",
+      "parsed_stdout": {
+        "object_id": "bifrost://object/blake3/b5aab7d85fc5f8d19ee7f2353ccfe06e649ed6ae85a9e3f8e8bb6c03997cda2e",
+        "present": true,
+        "reason": ""
+      },
+      "repetition": 0,
+      "stderr": "",
+      "stdout": "{\"object_id\":\"bifrost://object/blake3/b5aab7d85fc5f8d19ee7f2353ccfe06e649ed6ae85a9e3f8e8bb6c03997cda2e\",\"present\":true,\"reason\":\"\"}\n",
+      "trace_jsonl": null
+    },
+    {
+      "command": [
+        "/Users/rishivinodkumar/BiFrost/bifrostd/target/debug/bifrost-xfer",
+        "--json",
+        "get",
+        "--endpoint",
+        "127.0.0.1:53614",
+        "--object-id",
+        "bifrost://object/blake3/b5aab7d85fc5f8d19ee7f2353ccfe06e649ed6ae85a9e3f8e8bb6c03997cda2e",
+        "--out",
+        "../runs/contextstorm-small-ci-smoke-3/outputs/rep_000",
+        "--chunk-size",
+        "262144",
+        "--trace-jsonl",
+        "../runs/contextstorm-small-ci-smoke-3/traces/get_000.jsonl"
+      ],
+      "exit_code": 0,
+      "metrics": {
+        "bytes_received": 1048576,
+        "bytes_sent": 0,
+        "chunks_sent": 0,
+        "committed_object_verified": true,
+        "effective_throughput_mib_s": 11.904761904761903,
+        "get_payload_matches_put_payload": true,
+        "operation": "get",
+        "reason_code": null,
+        "repetition": 0,
+        "retries": 0,
+        "success": true,
+        "timeouts": 0,
+        "transfer_duration_ms": 84
+      },
+      "operation": "get",
+      "parsed_stdout": {
+        "bytes": 1048576,
+        "found": true,
+        "metrics": {
+          "bytes_payload_decoded": 0,
+          "bytes_payload_encoded": 0,
+          "bytes_received_total": 1048576,
+          "bytes_sent_total": 0,
+          "chunk_ack_latency_ms": [],
+          "chunk_ack_latency_ms_p50": null,
+          "chunk_ack_latency_ms_p95": null,
+          "chunk_timeouts_total": 0,
+          "chunks_received_total": 0,
+          "chunks_retried_total": 0,
+          "chunks_sent_total": 0,
+          "commit_failures_total": 0,
+          "frames_decoded": 0,
+          "frames_encoded": 0,
+          "paths_dead_total": 0,
+          "protocol_errors": 0,
+          "transfers_completed_total": 1,
+          "transfers_failed_total": 0,
+          "transfers_started_total": 1,
+          "validation_failures_total": 0
+        },
+        "object_id": "bifrost://object/blake3/b5aab7d85fc5f8d19ee7f2353ccfe06e649ed6ae85a9e3f8e8bb6c03997cda2e"
+      },
+      "repetition": 0,
+      "stderr": "",
+      "stdout": "{\"bytes\":1048576,\"found\":true,\"metrics\":{\"bytes_payload_decoded\":0,\"bytes_payload_encoded\":0,\"bytes_received_total\":1048576,\"bytes_sent_total\":0,\"chunk_ack_latency_ms\":[],\"chunk_ack_latency_ms_p50\":null,\"chunk_ack_latency_ms_p95\":null,\"chunk_timeouts_total\":0,\"chunks_received_total\":0,\"chunks_retried_total\":0,\"chunks_sent_total\":0,\"commit_failures_total\":0,\"frames_decoded\":0,\"frames_encoded\":0,\"paths_dead_total\":0,\"protocol_errors\":0,\"transfers_completed_total\":1,\"transfers_failed_total\":0,\"transfers_started_total\":1,\"validation_failures_total\":0},\"object_id\":\"bifrost://object/blake3/b5aab7d85fc5f8d19ee7f2353ccfe06e649ed6ae85a9e3f8e8bb6c03997cda2e\"}\n",
+      "trace_jsonl": "../runs/contextstorm-small-ci-smoke-3/traces/get_000.jsonl"
+    }
+  ],
+  "scenario": {
+    "chunk_size_bytes": 262144,
+    "fault_profile": null,
+    "model_shape": null,
+    "name": "small_ci",
+    "object_size_bytes": 1048576,
+    "object_type": "opaque_engine_blob",
+    "operations": [
+      "put",
+      "has",
+      "get"
+    ],
+    "paths": [
+      {
+        "endpoint": null,
+        "name": "primary",
+        "start_daemon": true
+      }
+    ],
+    "repetitions": 1,
+    "timeout_seconds": 30
+  },
+  "schema_version": "contextstorm.run.v1",
+  "started_at_unix_ms": 1779927488207
+}

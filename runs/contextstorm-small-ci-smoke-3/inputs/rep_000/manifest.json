@@ -1,0 +1,7 @@
+{
+  "meta": "../runs/contextstorm-small-ci-smoke-3/inputs/rep_000/meta.json",
+  "object_id": "bifrost://object/blake3/b5aab7d85fc5f8d19ee7f2353ccfe06e649ed6ae85a9e3f8e8bb6c03997cda2e",
+  "payload": "../runs/contextstorm-small-ci-smoke-3/inputs/rep_000/payload.bin",
+  "payload_bytes": 1048576,
+  "target_profile": "../runs/contextstorm-small-ci-smoke-3/inputs/rep_000/target_profile.json"
+}

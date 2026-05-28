@@ -106,15 +106,15 @@ Last verified: 2026-05-27
 
 ## ContextStorm
 
-- [ ] Define `tiny`, `small`, `medium`, and `large` workloads.
-- [ ] Keep `tiny` suitable for CI.
-- [ ] Generate or select valid Phase 1 objects for benchmark inputs.
-- [ ] Run PUT workloads through the daemon.
-- [ ] Run GET workloads only against committed objects.
-- [ ] Validate returned objects.
-- [ ] Record latency, throughput, chunks, validation failures, misses, and
+- [x] Define `tiny`, `small`, `medium`, and `large` workload guidance.
+- [x] Keep `small_ci` suitable for CI.
+- [x] Generate or select valid Phase 1 objects for benchmark inputs.
+- [x] Run PUT workloads through the daemon.
+- [x] Run GET workloads only against committed objects.
+- [x] Validate returned payload bytes against generated payload bytes.
+- [x] Record latency, throughput, chunks, validation failures, misses, and
       retries.
-- [ ] Add loopback baseline and slow-reader profiles.
+- [x] Add loopback single-path, two-path, and local path-failure scenarios.
 - [ ] Keep root-required fault profiles local opt-in.
 
 ## CI
@@ -139,7 +139,7 @@ Last verified: 2026-05-27
 - [x] A committed object can be fetched with GET and revalidated by the client.
 - [x] HAS returns true only for committed and servable objects.
 - [x] Metrics exist for successful and failed transfer paths.
-- [ ] ContextStorm can run a CPU-only local benchmark.
+- [x] ContextStorm can run a CPU-only local benchmark.
 - [x] Multipath synthetic PUT transfer is implemented.
 - [ ] No LMCache, vLLM, real KV extraction, GPU inference, dashboard, QUIC,
       compression, RDMA, production auth, or cache eviction work is included.
