@@ -1,0 +1,3 @@
+type: process_kill
+target_path: secondary
+apply_at_ms: 250

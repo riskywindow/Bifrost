@@ -1,0 +1,5 @@
+type: tc_netem
+interface: lo
+rate_mbit: 50
+apply_at_ms: 0
+remove_at_ms: 30000

@@ -1,6 +1,6 @@
 # ContextStorm Synthetic Benchmark
 
-Last verified: 2026-05-27
+Last verified: 2026-05-28
 
 ContextStorm is the Phase 2 synthetic KV benchmark harness. It exercises local
 BIFROST transport with deterministic Phase 1-style KV objects and records the
@@ -8,7 +8,8 @@ artifacts needed to inspect correctness and basic transfer behavior.
 
 ContextStorm is not a model benchmark. It does not run inference, allocate GPU
 KV cache, call LMCache, call vLLM, emulate QUIC, compress payloads, or use
-root-required network mutation.
+root-required network mutation unless an operator explicitly passes the local
+fault opt-in flag.
 
 ## Commands
 
@@ -25,6 +26,13 @@ When running directly from the source tree without installing the package:
 ```text
 PYTHONPATH=. python -m contextstorm.cli run scenarios/small_ci.yaml
 PYTHONPATH=. python -m contextstorm.cli report ../runs/RUN_ID
+```
+
+Root-required local network profiles are disabled by default. To run a `tc`
+profile on a local machine where you intentionally allow qdisc changes:
+
+```text
+sudo PYTHONPATH=. python -m contextstorm.cli run scenarios/lossy_two_path.yaml --allow-root-faults
 ```
 
 The process-level runner requires built Rust binaries:
@@ -67,7 +75,7 @@ Supported fields:
    and `start_daemon`
 7. `operations`: `put`, `has`, and/or `get`
 8. `repetitions`
-9. `fault_profile`, optional label for later opt-in fault profiles
+9. `fault_profile`, optional profile name or profile path
 10. `timeout_seconds`
 
 The built-in scenarios are:
@@ -78,6 +86,10 @@ The built-in scenarios are:
    repetitions.
 4. `path_failure.yaml`: one live local path plus one intentionally missing
    endpoint. This remains local and does not require root.
+5. `lossy_two_path.yaml`: two local daemons with `loss_1pct`; requires
+   `--allow-root-faults` and root to apply `tc_netem`.
+6. `dead_path.yaml`: two local daemons with `path_death`; kills the secondary
+   daemon and does not require root.
 
 ## Workload Classes
 
@@ -141,6 +153,48 @@ summary.md
 `run.json` records stdout, stderr, exit code, parsed CLI JSON, trace paths,
 environment notes, and per-operation metrics.
 
+Fault-enabled runs also write:
+
+```text
+fault_events.jsonl
+```
+
+`fault_events.jsonl` records profile loading, apply, skip, and cleanup events.
+For `tc_netem`, ContextStorm prints the exact `tc` apply and cleanup commands
+before any command is run.
+
+## Fault Profiles
+
+Profiles live under `contextstorm/network_profiles/` and use these fields:
+
+1. `type`: `none`, `tc_netem`, `process_kill`, or `artificial_delay`
+2. `interface`: network interface for `tc_netem`, such as `lo`
+3. `delay_ms`
+4. `jitter_ms`
+5. `loss_percent`
+6. `rate_mbit`
+7. `apply_at_ms`
+8. `remove_at_ms`
+9. `target_path`: path name for process and ContextStorm-side timing faults
+
+Safe-by-default profiles:
+
+1. `clean.yaml`: no fault.
+2. `path_death.yaml`: process kill of one ContextStorm-managed daemon. This is
+   local, CPU-only, and does not require root.
+
+Root-required profiles:
+
+1. `delay_50ms.yaml`
+2. `loss_1pct.yaml`
+3. `loss_5pct.yaml`
+4. `bandwidth_50mbit.yaml`
+
+`tc_netem` profiles are skipped unless `--allow-root-faults` is passed. Even
+with the flag, ContextStorm checks for root privileges and the `tc` command
+before applying the profile. Cleanup is attempted in the runner `finally` path,
+and skipped cleanup is recorded clearly when permissions or tools are absent.
+
 ## Metrics
 
 ContextStorm computes:
@@ -175,10 +229,15 @@ notes, and a reminder that the benchmark is local synthetic transport only.
 ## Tests
 
 The default Python tests cover deterministic synthetic generation, scenario
-loading, trace metric parsing, report writing, and a process-level `small_ci`
-smoke test. The process-level test skips when Rust binaries are not built.
+loading, trace metric parsing, fault profile loading and skip behavior, report
+writing, and a process-level `small_ci` smoke test. Process-level tests skip
+when Rust binaries are not built.
 
 ```text
 cd contextstorm
 PYTHONPATH=. pytest
 ```
+
+CI should not require root, Docker, `tc`, netem, GPU hardware, internet access,
+LMCache, or vLLM. Root-required fault tests must stay opt-in and skipped by
+default.

@@ -3,7 +3,11 @@ name = "contextstorm"
 version = "0.1.0"
 description = "Phase 2 synthetic KV benchmark harness for BIFROST."
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+  # ContextStorm generates Phase 1-compatible synthetic objects through bifrost_py helpers.
+  "blake3>=1.0.0",
+  "jsonschema>=4.0.0"
+]
 
 [project.scripts]
 contextstorm = "contextstorm.cli:main"
@@ -16,6 +20,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [".", "../bifrost_py"]
+
+[tool.setuptools.packages.find]
+include = ["contextstorm*"]
 
 [build-system]
 requires = ["setuptools>=68"]

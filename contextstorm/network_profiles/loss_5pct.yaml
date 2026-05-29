@@ -1,0 +1,5 @@
+type: tc_netem
+interface: lo
+loss_percent: 5
+apply_at_ms: 0
+remove_at_ms: 30000

@@ -18,6 +18,11 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("scenario", type=Path)
     run_parser.add_argument("--runs-root", type=Path, default=None)
     run_parser.add_argument("--run-id", default=None)
+    run_parser.add_argument(
+        "--allow-root-faults",
+        action="store_true",
+        help="allow root-required local tc/netem fault profiles",
+    )
 
     report_parser = subparsers.add_parser("report", help="write summary reports")
     report_parser.add_argument("run_dir", type=Path)
@@ -37,7 +42,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "run":
             run_dir = run_scenario(
-                args.scenario, runs_root=args.runs_root, run_id=args.run_id
+                args.scenario,
+                runs_root=args.runs_root,
+                run_id=args.run_id,
+                allow_root_faults=args.allow_root_faults,
             )
             print(run_dir)
             return 0

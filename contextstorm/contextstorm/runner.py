@@ -22,6 +22,7 @@ from .metrics import (
     summarize_trace_events,
     throughput_mib_s,
 )
+from .faults import FaultController, load_fault_profile
 from .synthetic_kv import generate_synthetic_object, write_synthetic_object
 
 
@@ -90,8 +91,10 @@ def run_scenario(
     *,
     runs_root: Path | None = None,
     run_id: str | None = None,
+    allow_root_faults: bool = False,
 ) -> Path:
     scenario = load_scenario(scenario_path)
+    fault_profile = load_fault_profile(scenario.fault_profile)
     daemon_bin = _find_binary("bifrost-daemon")
     xfer_bin = _find_binary("bifrost-xfer")
     if daemon_bin is None or xfer_bin is None:
@@ -124,10 +127,21 @@ def run_scenario(
         "started_at_unix_ms": int(time.time() * 1000),
         "environment": _environment(),
         "operations": [],
+        "fault_profile": {
+            "type": fault_profile.type,
+            "path": str(fault_profile.path) if fault_profile.path else None,
+            "allow_root_faults": allow_root_faults,
+        },
+        "fault_events_jsonl": str(run_dir / "fault_events.jsonl"),
     }
 
     daemons: list[dict[str, Any]] = []
     temp_root = tempfile.TemporaryDirectory(prefix="contextstorm-")
+    fault_controller = FaultController(
+        fault_profile,
+        allow_root_faults=allow_root_faults,
+        events_path=run_dir / "fault_events.jsonl",
+    )
     try:
         resolved_paths = _resolve_paths(scenario.paths)
         for path_config in resolved_paths:
@@ -159,6 +173,8 @@ def run_scenario(
                 }
             )
             _wait_for_endpoint(str(path_config.endpoint), scenario.timeout_seconds)
+        fault_controller.register_daemons(daemons)
+        fault_controller.start()
 
         for repetition in range(scenario.repetitions):
             synthetic = generate_synthetic_object(
@@ -173,6 +189,7 @@ def run_scenario(
             get_matches: bool | None = None
 
             if "put" in scenario.operations:
+                fault_controller.maybe_apply_artificial_delay(_primary_path_name(resolved_paths))
                 result = _run_put(
                     xfer_bin,
                     scenario,
@@ -183,6 +200,7 @@ def run_scenario(
                 )
                 run_record["operations"].append(result)
             if "has" in scenario.operations:
+                fault_controller.maybe_apply_artificial_delay(_primary_path_name(resolved_paths))
                 result = _run_has(
                     xfer_bin,
                     scenario,
@@ -194,6 +212,7 @@ def run_scenario(
                 has_verified = bool(result.get("parsed_stdout", {}).get("present"))
                 run_record["operations"].append(result)
             if "get" in scenario.operations:
+                fault_controller.maybe_apply_artificial_delay(_primary_path_name(resolved_paths))
                 out_dir = run_dir / "outputs" / f"rep_{repetition:03d}"
                 result = _run_get(
                     xfer_bin,
@@ -214,6 +233,7 @@ def run_scenario(
                     if get_matches is not None:
                         operation["metrics"]["get_payload_matches_put_payload"] = get_matches
     finally:
+        fault_controller.cleanup()
         daemon_records = []
         for daemon in daemons:
             daemon_records.append(_stop_daemon(daemon, run_dir))
@@ -423,6 +443,13 @@ def _primary_endpoint(paths: tuple[PathConfig, ...]) -> str:
         if path.start_daemon:
             return str(path.endpoint)
     return str(paths[0].endpoint)
+
+
+def _primary_path_name(paths: tuple[PathConfig, ...]) -> str:
+    for path in paths:
+        if path.start_daemon:
+            return path.name
+    return paths[0].name
 
 
 def _free_port() -> int:

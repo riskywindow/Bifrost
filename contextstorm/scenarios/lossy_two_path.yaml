@@ -1,0 +1,13 @@
+name: lossy_two_path
+object_size_bytes: 16777216
+chunk_size_bytes: 1048576
+object_type: opaque_engine_blob
+paths:
+  - name: primary
+    start_daemon: true
+  - name: secondary
+    start_daemon: true
+operations: [put, has, get]
+repetitions: 1
+fault_profile: loss_1pct
+timeout_seconds: 60

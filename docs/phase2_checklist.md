@@ -1,6 +1,6 @@
 # Phase 2 Checklist
 
-Last verified: 2026-05-27
+Last verified: 2026-05-28
 
 ## Protocol
 
@@ -102,7 +102,7 @@ Last verified: 2026-05-27
 - [x] Reject PUT on commit if any chunk is missing.
 - [ ] Remove or quarantine abandoned staging state.
 - [x] Make timeout tests deterministic and local.
-- [ ] Keep root-required network fault tests opt-in and skipped by default.
+- [x] Keep root-required network fault tests opt-in and skipped by default.
 
 ## ContextStorm
 
@@ -115,7 +115,7 @@ Last verified: 2026-05-27
 - [x] Record latency, throughput, chunks, validation failures, misses, and
       retries.
 - [x] Add loopback single-path, two-path, and local path-failure scenarios.
-- [ ] Keep root-required fault profiles local opt-in.
+- [x] Keep root-required fault profiles local opt-in.
 
 ## CI
 
@@ -128,7 +128,7 @@ Last verified: 2026-05-27
 - [x] Run Phase 2 spool tests.
 - [x] Run local TCP PUT and GET smoke tests.
 - [ ] Run ContextStorm `tiny` smoke test.
-- [ ] Skip root-required network fault tests by default.
+- [x] Skip root-required network fault tests by default.
 
 ## Phase 2 done criteria
 

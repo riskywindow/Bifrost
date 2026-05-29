@@ -1,0 +1,13 @@
+name: dead_path
+object_size_bytes: 4194304
+chunk_size_bytes: 524288
+object_type: opaque_engine_blob
+paths:
+  - name: primary
+    start_daemon: true
+  - name: secondary
+    start_daemon: true
+operations: [put, has, get]
+repetitions: 1
+fault_profile: path_death
+timeout_seconds: 30
