@@ -1,7 +1,7 @@
 use crate::store::{
-    EvictionReport, ManifestCompletenessReport, ManifestInspection, ManifestListFilter,
-    ManifestRecord, ObjectCompatibility, ObjectInspection, ObjectListFilter, ObjectRecord,
-    ObjectState, StoreStats,
+    EvictionReport, FsckMode, FsckResult, ManifestCompletenessReport, ManifestInspection,
+    ManifestListFilter, ManifestRecord, ObjectCompatibility, ObjectInspection, ObjectListFilter,
+    ObjectRecord, ObjectState, StoreStats,
 };
 use crate::transport::frame::TRANSPORT_VERSION;
 use serde::{Deserialize, Serialize};
@@ -263,6 +263,17 @@ pub struct StoreEvictResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoreFsckRequest {
+    #[serde(default = "default_fsck_mode")]
+    pub mode: FsckMode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoreFsckResponse {
+    pub result: FsckResult,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum StoreManifestRequest {
     CreatePrefix {
@@ -330,4 +341,8 @@ impl StoreManifestResponse {
 
 fn default_required() -> bool {
     true
+}
+
+fn default_fsck_mode() -> FsckMode {
+    FsckMode::Check
 }

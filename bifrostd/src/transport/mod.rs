@@ -14,7 +14,7 @@ pub mod trace;
 
 pub use chunker::{chunk_bytes, iter_chunks, Chunk};
 pub use client::{
-    check_manifest, clear_ttl, create_prefix_manifest, evict_store, get_object,
+    check_manifest, clear_ttl, create_prefix_manifest, evict_store, fsck_store, get_object,
     get_object_observed, has_object, inspect_manifest, inspect_store_object, list_manifests,
     list_store_objects, manifest_add_member, manifest_pin, manifest_unpin, pin_object, put_object,
     put_object_multipath_observed, put_object_multipath_observed_with_options, put_object_observed,
@@ -22,8 +22,8 @@ pub use client::{
     put_validated_object_multipath_observed_with_options, put_validated_object_observed,
     quarantine_object, query_store_objects, receive_get_response, set_ttl, store_stats,
     unpin_object, ClientTelemetry, GetOutcome, HasOutcome, MultipathPutOptions, PutOutcome,
-    StoreEvictOutcome, StoreInspectOutcome, StoreListOutcome, StoreManifestOutcome,
-    StoreOperationOutcome, StoreStatsOutcome, DEFAULT_CHUNK_TIMEOUT_MS,
+    StoreEvictOutcome, StoreFsckOutcome, StoreInspectOutcome, StoreListOutcome,
+    StoreManifestOutcome, StoreOperationOutcome, StoreStatsOutcome, DEFAULT_CHUNK_TIMEOUT_MS,
     DEFAULT_MAX_INFLIGHT_PER_PATH, DEFAULT_MAX_RETRIES_PER_CHUNK,
 };
 pub use errors::{TransportError, TransportResult};
@@ -35,10 +35,10 @@ pub use manifest::{ChunkInfo, ChunkManifest, ChunkSpec, DEFAULT_CHUNK_SIZE};
 pub use metrics::{TransportMetrics, TransportMetricsSnapshot};
 pub use path::PathSpec;
 pub use protocol::{
-    StoreEvictRequest, StoreEvictResponse, StoreInspectResponse, StoreLifecycleRequest,
-    StoreListResponse, StoreManifestRequest, StoreManifestResponse, StoreObjectFilter,
-    StoreObjectSummary, StoreOperationResponse, StoreStatsResponse, StoreTtlRequest,
-    PROTOCOL_VERSION,
+    StoreEvictRequest, StoreEvictResponse, StoreFsckRequest, StoreFsckResponse,
+    StoreInspectResponse, StoreLifecycleRequest, StoreListResponse, StoreManifestRequest,
+    StoreManifestResponse, StoreObjectFilter, StoreObjectSummary, StoreOperationResponse,
+    StoreStatsResponse, StoreTtlRequest, PROTOCOL_VERSION,
 };
 pub use reassembler::{ChunkAcceptStatus, Reassembler};
 pub use scheduler::{PathStats, PathStatus, RoundRobinScheduler, ScheduledPath};

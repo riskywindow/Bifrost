@@ -1,6 +1,6 @@
-use bifrostd::store::ManifestListFilter;
+use bifrostd::store::{FsckMode, ManifestListFilter};
 use bifrostd::transport::{
-    check_manifest, clear_ttl, create_prefix_manifest, evict_store, inspect_manifest,
+    check_manifest, clear_ttl, create_prefix_manifest, evict_store, fsck_store, inspect_manifest,
     inspect_store_object, list_manifests, list_store_objects, manifest_add_member, manifest_pin,
     manifest_unpin, pin_object, quarantine_object, query_store_objects, set_ttl, store_stats,
     unpin_object, StoreEvictRequest, StoreObjectFilter, StoreObjectSummary, StoreOperationOutcome,
@@ -75,6 +75,18 @@ enum Command {
         max_objects: Option<usize>,
         #[arg(long)]
         dry_run: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    Fsck {
+        #[arg(long, default_value = "127.0.0.1:7420")]
+        endpoint: String,
+        #[arg(long)]
+        check: bool,
+        #[arg(long)]
+        repair: bool,
+        #[arg(long)]
+        quarantine: bool,
         #[arg(long)]
         json: bool,
     },
@@ -271,6 +283,13 @@ async fn main() {
             )
             .await
         }
+        Command::Fsck {
+            endpoint,
+            check,
+            repair,
+            quarantine,
+            json,
+        } => run_fsck(&endpoint, check, repair, quarantine, json).await,
         Command::Pin {
             endpoint,
             object_id,
@@ -315,6 +334,56 @@ async fn main() {
             std::process::exit(2);
         }
     }
+}
+
+async fn run_fsck(
+    endpoint: &str,
+    check: bool,
+    repair: bool,
+    quarantine: bool,
+    as_json: bool,
+) -> anyhow::Result<i32> {
+    let selected = check as u8 + repair as u8 + quarantine as u8;
+    if selected > 1 {
+        anyhow::bail!("choose only one of --check, --repair, or --quarantine");
+    }
+    let mode = if repair {
+        FsckMode::Repair
+    } else if quarantine {
+        FsckMode::Quarantine
+    } else {
+        FsckMode::Check
+    };
+    let outcome = fsck_store(endpoint, mode).await?;
+    if !outcome.reason.is_empty() {
+        anyhow::bail!(outcome.reason);
+    }
+    if as_json {
+        println!("{}", serde_json::to_string(&outcome.result)?);
+    } else {
+        println!(
+            "status={:?} findings={} mutations={}",
+            outcome.result.status,
+            outcome.result.findings.len(),
+            outcome.result.mutations_applied.len()
+        );
+        for finding in &outcome.result.findings {
+            println!(
+                "finding type={} severity={:?} object_id={} manifest_id={} path={} message={}",
+                finding.finding_type,
+                finding.severity,
+                finding.object_id.as_deref().unwrap_or("-"),
+                finding.manifest_id.as_deref().unwrap_or("-"),
+                finding.path.as_deref().unwrap_or("-"),
+                finding.message
+            );
+        }
+    }
+    Ok(if outcome.result.findings.is_empty() {
+        0
+    } else {
+        1
+    })
 }
 
 async fn run_manifest(command: ManifestCommand) -> anyhow::Result<i32> {

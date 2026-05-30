@@ -2,6 +2,7 @@ pub mod catalog;
 pub mod disk_tier;
 pub mod errors;
 pub mod eviction;
+pub mod fsck;
 pub mod lifecycle;
 pub mod locations;
 pub mod manifest;
@@ -18,6 +19,7 @@ pub use eviction::{
     EvictedObject, EvictionCandidate, EvictionFailure, EvictionPolicy, EvictionReport,
     EvictionRequest,
 };
+pub use fsck::{FsckFinding, FsckMode, FsckMutation, FsckResult, FsckSeverity, FsckStatus};
 pub use lifecycle::{can_evict, can_serve, valid_state_transition};
 pub use locations::{StoreLayout, StorePaths};
 pub use manifest::{

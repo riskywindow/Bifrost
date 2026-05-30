@@ -253,6 +253,10 @@ pub async fn handle_connection_observed(
                 send_manifest_result(&mut stream, &store, &frame).await?;
                 return Ok(());
             }
+            FrameType::FsckRequest => {
+                send_fsck_result(&mut stream, &store, &frame).await?;
+                return Ok(());
+            }
             _ => {
                 metrics.record_transfer_failed();
                 send_error(
@@ -265,6 +269,42 @@ pub async fn handle_connection_observed(
                 .await?;
                 return Ok(());
             }
+        }
+    }
+}
+
+async fn send_fsck_result(
+    stream: &mut TcpStream,
+    store: &Store,
+    request: &Frame,
+) -> TransportResult<()> {
+    let operation: crate::transport::StoreFsckRequest = if request.payload.is_empty() {
+        crate::transport::StoreFsckRequest {
+            mode: crate::store::FsckMode::Check,
+        }
+    } else {
+        serde_json::from_slice(&request.payload)?
+    };
+    match store.fsck(operation.mode) {
+        Ok(result) => {
+            let payload = serde_json::to_vec(&crate::transport::StoreFsckResponse { result })?;
+            let mut header = FrameHeader::new(
+                FrameType::FsckResult,
+                request.header.transfer_id.clone(),
+                payload.len() as u64,
+            );
+            header.status = Some("ok".to_string());
+            header.reason = Some(String::new());
+            write_frame(stream, &header, &payload).await
+        }
+        Err(error) => {
+            send_store_result_error(
+                stream,
+                FrameType::FsckResult,
+                &request.header.transfer_id,
+                &error.to_string(),
+            )
+            .await
         }
     }
 }

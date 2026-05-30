@@ -89,6 +89,12 @@ pub struct StoreEvictOutcome {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreFsckOutcome {
+    pub result: crate::store::FsckResult,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreManifestOutcome {
     pub response: StoreManifestResponse,
     pub reason: String,
@@ -987,6 +993,41 @@ pub async fn evict_store(
     let response: StoreEvictResponse = serde_json::from_slice(&result.payload)?;
     Ok(StoreEvictOutcome {
         report: response.report,
+        reason: result.header.reason.unwrap_or_default(),
+    })
+}
+
+pub async fn fsck_store(
+    endpoint: &str,
+    mode: crate::store::FsckMode,
+) -> anyhow::Result<StoreFsckOutcome> {
+    let payload = serde_json::to_vec(&crate::transport::StoreFsckRequest { mode })?;
+    let result = store_json_request(
+        endpoint,
+        FrameType::FsckRequest,
+        FrameType::FsckResult,
+        None,
+        payload,
+    )
+    .await?;
+    if result.header.status.as_deref() != Some("ok") {
+        return Ok(StoreFsckOutcome {
+            result: crate::store::FsckResult {
+                status: crate::store::FsckStatus::Dirty,
+                findings: Vec::new(),
+                counts_by_severity: Default::default(),
+                mutations_applied: Vec::new(),
+                warnings: Vec::new(),
+            },
+            reason: result
+                .header
+                .reason
+                .unwrap_or_else(|| "store_fsck_failed".to_string()),
+        });
+    }
+    let response: crate::transport::StoreFsckResponse = serde_json::from_slice(&result.payload)?;
+    Ok(StoreFsckOutcome {
+        result: response.result,
         reason: result.header.reason.unwrap_or_default(),
     })
 }

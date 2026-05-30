@@ -31,6 +31,8 @@ The store API uses these frame types:
 - `evict_result`
 - `manifest_request`
 - `manifest_result`
+- `fsck_request`
+- `fsck_result`
 
 List and query requests carry a JSON `StoreObjectFilter` payload. Inspect and
 stats requests have empty payloads. Result payloads are JSON and are stable for
@@ -71,6 +73,14 @@ Manifest requests carry a JSON payload tagged by operation:
 { "operation": "unpin", "manifest_id": "bifrost://manifest/blake3/..." }
 ```
 
+Fsck requests carry a JSON payload and no object ID:
+
+```json
+{ "mode": "check" }
+{ "mode": "repair" }
+{ "mode": "quarantine" }
+```
+
 List, query, and inspect results only report servable objects. Staging,
 missing, corrupt, quarantined, evicting, and catalog/filesystem-inconsistent
 objects do not satisfy these availability APIs.
@@ -88,6 +98,7 @@ bifrost-store ttl set --endpoint HOST:PORT --object-id OBJECT_ID --expires-at-un
 bifrost-store ttl clear --endpoint HOST:PORT --object-id OBJECT_ID
 bifrost-store quarantine --endpoint HOST:PORT --object-id OBJECT_ID --reason TEXT
 bifrost-store evict --endpoint HOST:PORT --policy lru|size-aware-lru|ttl-expired [--target-bytes N] [--max-objects N] [--dry-run] [--json]
+bifrost-store fsck --endpoint HOST:PORT [--check|--repair|--quarantine] [--json]
 bifrost-store manifest create-prefix --endpoint HOST:PORT --prefix-hash HASH --model-hash HASH --token-range-start N --token-range-end N [--tokenizer-hash HASH] [--rope-config-hash HASH] [--json]
 bifrost-store manifest add-member --endpoint HOST:PORT --manifest-id ID --object-id OBJECT_ID [--required true|false]
 bifrost-store manifest inspect --endpoint HOST:PORT --manifest-id ID [--json]
@@ -214,6 +225,28 @@ pinned count, skipped unsafe count, and final reason:
 }
 ```
 
+JSON fsck output includes status, structured findings, severity counts,
+applied mutations, and warnings:
+
+```json
+{
+  "status": "dirty",
+  "findings": [
+    {
+      "finding_type": "catalog_object_missing_payload_file",
+      "severity": "error",
+      "object_id": "bifrost://object/blake3/...",
+      "path": "/store/objects/...",
+      "message": "catalog object is missing its payload file",
+      "suggested_action": "repair should mark the object missing"
+    }
+  ],
+  "counts_by_severity": { "error": 1 },
+  "mutations_applied": [],
+  "warnings": []
+}
+```
+
 JSON manifest output uses a common envelope:
 
 ```json
@@ -258,8 +291,8 @@ JSON manifest output uses a common envelope:
 ## Exit codes
 
 - `0`: command succeeded.
-- `1`: inspect did not find a servable object, query returned no matches, or a
-  lifecycle operation was rejected by the store.
+- `1`: inspect did not find a servable object, query returned no matches, fsck
+  found findings, or a lifecycle operation was rejected by the store.
 - `2`: usage, connection, I/O, protocol, or JSON error.
 
 Pinning increments `pin_count`; unpinning decrements it and remains at zero if
@@ -272,4 +305,5 @@ Manifest pinning increments the manifest `pin_count` and increments `pin_count`
 on required member objects, so existing deterministic eviction candidate
 selection automatically skips those members. Unpinning reverses that protection.
 
-fsck is intentionally not exposed by this CLI yet.
+Fsck defaults to `--check`; choose at most one of `--check`, `--repair`, or
+`--quarantine`.

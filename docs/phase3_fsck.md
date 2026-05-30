@@ -120,3 +120,55 @@ Disallowed repairs:
 4. Mark an object verified without Phase 1 validation.
 5. Serve from staging.
 6. Evict or delete pinned objects as a repair shortcut.
+
+## Result schema
+
+`fsck` returns a structured JSON result through the daemon and CLI:
+
+```json
+{
+  "status": "clean",
+  "findings": [],
+  "counts_by_severity": {},
+  "mutations_applied": [],
+  "warnings": []
+}
+```
+
+`status` is one of `clean`, `dirty`, `repaired`, or `quarantined`.
+
+Each finding includes:
+
+- `finding_type`
+- `severity`
+- optional `object_id`
+- optional `manifest_id`
+- optional `path`
+- `message`
+- `suggested_action`
+
+Implemented finding types include missing catalog files, committed orphan
+metadata and payload files, descriptor hash mismatch, payload hash mismatch,
+object ID mismatch, byte length mismatch, deterministic location path mismatch,
+manifest missing or unavailable members, abandoned staging transfers, and
+complete manifests that still reference corrupt or quarantined objects.
+
+## Modes
+
+`check` is the default and does not mutate catalog or filesystem state.
+
+`repair` applies only safe local repairs:
+
+1. Remove abandoned staging directories.
+2. Import a committed orphan object only when metadata and payload validate
+   through the Phase 1 Rust validator and the derived object ID matches the
+   committed path.
+3. Mark catalog objects missing when referenced files are absent.
+4. Refresh derivable disk location fields after full validation.
+5. Recompute manifest completeness to incomplete or corrupt when required
+   members are unavailable.
+
+`quarantine` moves corrupt object files under `quarantine/<object-id-suffix>/`,
+marks the catalog object `quarantined`, and marks complete manifests corrupt
+when they reference corrupt or quarantined members. Quarantine never creates a
+servable object.

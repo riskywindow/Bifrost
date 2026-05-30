@@ -7,6 +7,7 @@ use crate::spool::{Spool, SpoolError};
 use crate::store::disk_tier::{DiskTier, StoredObject};
 use crate::store::errors::{StoreError, StoreResult};
 use crate::store::eviction::{EvictedObject, EvictionFailure, EvictionReport, EvictionRequest};
+use crate::store::fsck::{run_fsck, FsckMode, FsckResult};
 use crate::store::lifecycle::can_serve;
 use crate::store::locations::StoreLayout;
 use crate::store::manifest::{
@@ -271,6 +272,10 @@ impl Store {
 
     pub fn stats(&self) -> StoreResult<StoreStats> {
         self.open_catalog()?.store_stats()
+    }
+
+    pub fn fsck(&self, mode: FsckMode) -> StoreResult<FsckResult> {
+        run_fsck(self, mode)
     }
 
     pub fn evict(&self, request: EvictionRequest) -> StoreResult<EvictionReport> {
@@ -734,7 +739,7 @@ impl From<Spool> for Store {
     }
 }
 
-fn compatibility_from_descriptor(
+pub(crate) fn compatibility_from_descriptor(
     descriptor: &BifrostKvObjectDescriptor,
 ) -> StoreResult<ObjectCompatibility> {
     let engine = &descriptor.engine_profile;

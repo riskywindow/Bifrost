@@ -49,7 +49,7 @@ Last verified: 2026-05-30
 - [x] Add store stats endpoint or command surface.
 - [x] Add pin and unpin endpoint or command surface.
 - [x] Add eviction dry-run and apply endpoint or command surface.
-- [ ] Add fsck dry-run and repair endpoint or command surface.
+- [x] Add fsck dry-run and repair endpoint or command surface.
 - [x] Keep protocol errors separate from store errors.
 
 ## CLI
@@ -63,8 +63,8 @@ Last verified: 2026-05-30
 - [x] Add eviction apply.
 - [x] Add manifest inspect.
 - [x] Add manifest missing.
-- [ ] Add fsck dry-run.
-- [ ] Add fsck repair.
+- [x] Add fsck dry-run.
+- [x] Add fsck repair.
 - [x] Keep outputs deterministic enough for tests.
 
 ## Pinning
@@ -107,21 +107,21 @@ Last verified: 2026-05-30
 
 ## fsck
 
-- [ ] Add catalog scan.
-- [ ] Add committed filesystem scan.
-- [ ] Add staging scan.
+- [x] Add catalog scan.
+- [x] Add committed filesystem scan.
+- [x] Add staging scan.
 - [ ] Add quarantine scan.
-- [ ] Detect corrupt descriptors.
-- [ ] Detect corrupt payloads.
-- [ ] Detect object ID mismatches.
-- [ ] Detect missing descriptor files.
-- [ ] Detect missing payload files.
-- [ ] Detect orphan descriptor and payload files.
+- [x] Detect corrupt descriptors.
+- [x] Detect corrupt payloads.
+- [x] Detect object ID mismatches.
+- [x] Detect missing descriptor files.
+- [x] Detect missing payload files.
+- [x] Detect orphan descriptor and payload files.
 - [x] Detect manifest members that are unavailable.
-- [ ] Add dry-run report mode.
-- [ ] Add conservative repair mode.
-- [ ] Quarantine suspect objects.
-- [ ] Never serve suspect objects during or after fsck.
+- [x] Add dry-run report mode.
+- [x] Add conservative repair mode.
+- [x] Quarantine suspect objects.
+- [x] Never serve suspect objects during or after fsck.
 
 ## Memory tier
 
@@ -158,7 +158,7 @@ Last verified: 2026-05-30
 - [x] Add Phase 3 store API tests.
 - [x] Add Phase 3 eviction tests.
 - [x] Add Phase 3 manifest tests.
-- [ ] Add Phase 3 fsck tests.
+- [x] Add Phase 3 fsck tests.
 - [ ] Add ContextStorm store smoke scenario.
 - [ ] Keep all default CI tests CPU-only and local.
 
@@ -173,7 +173,7 @@ Last verified: 2026-05-30
 - [x] Pinning is durable and prevents eviction.
 - [x] Eviction is deterministic, testable, and never evicts pinned objects.
 - [x] Prefix manifests support completeness and missing-block queries.
-- [ ] fsck detects catalog/filesystem drift and quarantines suspect objects.
+- [x] fsck detects catalog/filesystem drift and quarantines suspect objects.
 - [ ] ContextStorm includes CPU-only deterministic store benchmarks.
 - [ ] No LMCache, language-model integration, vLLM, real KV extraction, GPU
       inference, dashboard, QUIC, compression, RDMA, parity chunk, production

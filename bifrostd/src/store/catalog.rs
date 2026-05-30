@@ -1005,6 +1005,105 @@ impl Catalog {
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(StoreError::from)
     }
+
+    pub fn list_object_locations(&self) -> StoreResult<Vec<ObjectLocation>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT object_id, tier, meta_path, payload_path, bytes_on_disk
+             FROM object_locations ORDER BY object_id ASC, tier ASC",
+        )?;
+        let rows = stmt.query_map([], object_location_from_row)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    }
+
+    pub fn list_all_manifest_members(&self) -> StoreResult<Vec<ManifestMember>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT manifest_id, object_id, layer_id, kv_block_id, token_range_start,
+                    token_range_end, required
+             FROM manifest_members
+             ORDER BY manifest_id ASC, object_id ASC",
+        )?;
+        let rows = stmt.query_map([], manifest_member_from_row)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    }
+
+    pub fn fsck_mark_object_state(
+        &mut self,
+        object_id: &str,
+        state: ObjectState,
+        reason: &str,
+    ) -> StoreResult<()> {
+        let record = self
+            .get_object_record(object_id)?
+            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "UPDATE objects SET state = ?2, quarantine_reason = ?3 WHERE object_id = ?1",
+            params![object_id, state, reason],
+        )?;
+        log_event(
+            &tx,
+            "fsck_object_state",
+            Some(object_id),
+            None,
+            Some(json!({"from": record.state.as_str(), "to": state.as_str(), "reason": reason})),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn fsck_update_location(
+        &mut self,
+        object_id: &str,
+        meta_path: &str,
+        payload_path: &str,
+        bytes_on_disk: i64,
+    ) -> StoreResult<()> {
+        let tx = self.conn.transaction()?;
+        let changed = tx.execute(
+            "UPDATE object_locations
+             SET meta_path = ?2, payload_path = ?3, bytes_on_disk = ?4
+             WHERE object_id = ?1 AND tier = 'disk'",
+            params![object_id, meta_path, payload_path, bytes_on_disk],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::NotFound(object_id.to_string()));
+        }
+        log_event(
+            &tx,
+            "fsck_location_updated",
+            Some(object_id),
+            None,
+            Some(json!({"bytes_on_disk": bytes_on_disk})),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn fsck_update_byte_length(
+        &mut self,
+        object_id: &str,
+        byte_length: i64,
+    ) -> StoreResult<()> {
+        let tx = self.conn.transaction()?;
+        let changed = tx.execute(
+            "UPDATE objects SET byte_length = ?2 WHERE object_id = ?1",
+            params![object_id, byte_length],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::NotFound(object_id.to_string()));
+        }
+        log_event(
+            &tx,
+            "fsck_byte_length_updated",
+            Some(object_id),
+            None,
+            Some(json!({"byte_length": byte_length})),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
 }
 
 fn configure_connection(conn: &Connection) -> StoreResult<()> {
