@@ -44,6 +44,14 @@ pub enum FrameType {
     QueryResult,
     StatsRequest,
     StatsResult,
+    PinRequest,
+    PinResult,
+    UnpinRequest,
+    UnpinResult,
+    TtlRequest,
+    TtlResult,
+    LifecycleRequest,
+    LifecycleResult,
     Ping,
     Pong,
     Error,
@@ -225,10 +233,21 @@ impl FrameHeader {
             FrameType::StatsRequest => {
                 require_empty_payload(self)?;
             }
+            FrameType::PinRequest | FrameType::UnpinRequest => {
+                require_empty_payload(self)?;
+                require_object_id(self)?;
+            }
+            FrameType::TtlRequest | FrameType::LifecycleRequest => {
+                require_object_id(self)?;
+            }
             FrameType::ListResult
             | FrameType::InspectResult
             | FrameType::QueryResult
-            | FrameType::StatsResult => {
+            | FrameType::StatsResult
+            | FrameType::PinResult
+            | FrameType::UnpinResult
+            | FrameType::TtlResult
+            | FrameType::LifecycleResult => {
                 require_non_empty(self.status.as_deref(), "status", self.frame_type)?;
                 let status = self.status.as_deref().unwrap_or_default();
                 if status != "ok"

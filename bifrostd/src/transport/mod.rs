@@ -14,12 +14,13 @@ pub mod trace;
 
 pub use chunker::{chunk_bytes, iter_chunks, Chunk};
 pub use client::{
-    get_object, get_object_observed, has_object, inspect_store_object, list_store_objects,
-    put_object, put_object_multipath_observed, put_object_multipath_observed_with_options,
-    put_object_observed, put_validated_object, put_validated_object_multipath_observed,
-    put_validated_object_multipath_observed_with_options, put_validated_object_observed,
-    query_store_objects, receive_get_response, store_stats, ClientTelemetry, GetOutcome,
-    HasOutcome, MultipathPutOptions, PutOutcome, StoreInspectOutcome, StoreListOutcome,
+    clear_ttl, get_object, get_object_observed, has_object, inspect_store_object,
+    list_store_objects, pin_object, put_object, put_object_multipath_observed,
+    put_object_multipath_observed_with_options, put_object_observed, put_validated_object,
+    put_validated_object_multipath_observed, put_validated_object_multipath_observed_with_options,
+    put_validated_object_observed, quarantine_object, query_store_objects, receive_get_response,
+    set_ttl, store_stats, unpin_object, ClientTelemetry, GetOutcome, HasOutcome,
+    MultipathPutOptions, PutOutcome, StoreInspectOutcome, StoreListOutcome, StoreOperationOutcome,
     StoreStatsOutcome, DEFAULT_CHUNK_TIMEOUT_MS, DEFAULT_MAX_INFLIGHT_PER_PATH,
     DEFAULT_MAX_RETRIES_PER_CHUNK,
 };
@@ -32,8 +33,9 @@ pub use manifest::{ChunkInfo, ChunkManifest, ChunkSpec, DEFAULT_CHUNK_SIZE};
 pub use metrics::{TransportMetrics, TransportMetricsSnapshot};
 pub use path::PathSpec;
 pub use protocol::{
-    StoreInspectResponse, StoreListResponse, StoreObjectFilter, StoreObjectSummary,
-    StoreStatsResponse, PROTOCOL_VERSION,
+    StoreInspectResponse, StoreLifecycleRequest, StoreListResponse, StoreObjectFilter,
+    StoreObjectSummary, StoreOperationResponse, StoreStatsResponse, StoreTtlRequest,
+    PROTOCOL_VERSION,
 };
 pub use reassembler::{ChunkAcceptStatus, Reassembler};
 pub use scheduler::{PathStats, PathStatus, RoundRobinScheduler, ScheduledPath};

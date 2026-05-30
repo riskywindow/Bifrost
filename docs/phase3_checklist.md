@@ -47,7 +47,7 @@ Last verified: 2026-05-30
 - [x] Index successful PUT commits in the Phase 3 catalog.
 - [x] Add local store lookup endpoint or command surface.
 - [x] Add store stats endpoint or command surface.
-- [ ] Add pin and unpin endpoint or command surface.
+- [x] Add pin and unpin endpoint or command surface.
 - [ ] Add eviction dry-run and apply endpoint or command surface.
 - [ ] Add fsck dry-run and repair endpoint or command surface.
 - [x] Keep protocol errors separate from store errors.
@@ -57,8 +57,8 @@ Last verified: 2026-05-30
 - [ ] Add `store init` or equivalent if explicit initialization is needed.
 - [x] Add object lookup.
 - [x] Add object stats.
-- [ ] Add object pin.
-- [ ] Add object unpin.
+- [x] Add object pin.
+- [x] Add object unpin.
 - [ ] Add eviction dry-run.
 - [ ] Add eviction apply.
 - [ ] Add manifest inspect.
@@ -73,8 +73,8 @@ Last verified: 2026-05-30
 - [ ] Persist optional pin reason.
 - [x] Record pin and unpin events.
 - [x] Ensure pinned objects are never disk eviction victims.
-- [ ] Test pinning does not make corrupt or missing objects servable.
-- [ ] Test unpinning returns an otherwise eligible object to eviction
+- [x] Test pinning does not make corrupt or missing objects servable.
+- [x] Test unpinning returns an otherwise eligible object to eviction
       eligibility.
 
 ## Eviction
@@ -170,7 +170,7 @@ Last verified: 2026-05-30
 - [x] HAS and GET only serve verified, catalog-consistent objects.
 - [x] Staging objects are never listed as available cache hits.
 - [x] File-level integrity and catalog consistency are checked before serving.
-- [ ] Pinning is durable and prevents eviction.
+- [x] Pinning is durable and prevents eviction.
 - [ ] Eviction is deterministic, testable, and never evicts pinned objects.
 - [ ] Prefix manifests support completeness and missing-block queries.
 - [ ] fsck detects catalog/filesystem drift and quarantines suspect objects.

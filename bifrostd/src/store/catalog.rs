@@ -372,6 +372,48 @@ impl Catalog {
         self.transition_object_state(object_id, ObjectState::Quarantined, Some(reason))
     }
 
+    pub fn mark_verified(&mut self, object_id: &str) -> StoreResult<()> {
+        self.transition_object_state(object_id, ObjectState::Verified, None)
+    }
+
+    pub fn set_ttl(&mut self, object_id: &str, expires_at_unix_ms: i64) -> StoreResult<()> {
+        self.get_object_record(object_id)?
+            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "UPDATE objects SET ttl_expires_at_unix_ms = ?2 WHERE object_id = ?1",
+            params![object_id, expires_at_unix_ms],
+        )?;
+        log_event(
+            &tx,
+            "object_ttl_set",
+            Some(object_id),
+            None,
+            Some(json!({"expires_at_unix_ms": expires_at_unix_ms})),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn clear_ttl(&mut self, object_id: &str) -> StoreResult<()> {
+        self.get_object_record(object_id)?
+            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "UPDATE objects SET ttl_expires_at_unix_ms = NULL WHERE object_id = ?1",
+            params![object_id],
+        )?;
+        log_event(
+            &tx,
+            "object_ttl_cleared",
+            Some(object_id),
+            None,
+            Some(json!({})),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn mark_evicted(&mut self, object_id: &str) -> StoreResult<()> {
         let record = self
             .get_object_record(object_id)?

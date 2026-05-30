@@ -3,8 +3,8 @@ use crate::transport::{
     chunk_bytes, iter_chunks, read_frame, write_frame, ChunkInfo, ChunkManifest, Frame,
     FrameHeader, FrameType, PathSpec, PathStatus, Reassembler, RoundRobinScheduler,
     StoreInspectResponse, StoreListResponse, StoreObjectFilter, StoreObjectSummary,
-    StoreStatsResponse, TraceEvent, TraceSink, TransportMetrics, TransportResult,
-    TRANSPORT_VERSION,
+    StoreOperationResponse, StoreStatsResponse, StoreTtlRequest, TraceEvent, TraceSink,
+    TransportMetrics, TransportResult, TRANSPORT_VERSION,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -78,6 +78,13 @@ pub struct StoreInspectOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreStatsOutcome {
     pub stats: StoreStatsResponse,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreOperationOutcome {
+    pub accepted: bool,
+    pub object_id: String,
     pub reason: String,
 }
 
@@ -930,6 +937,74 @@ pub async fn store_stats(endpoint: &str) -> anyhow::Result<StoreStatsOutcome> {
     })
 }
 
+pub async fn pin_object(endpoint: &str, object_id: &str) -> anyhow::Result<StoreOperationOutcome> {
+    store_operation_request(
+        endpoint,
+        FrameType::PinRequest,
+        FrameType::PinResult,
+        object_id,
+        Vec::new(),
+    )
+    .await
+}
+
+pub async fn unpin_object(
+    endpoint: &str,
+    object_id: &str,
+) -> anyhow::Result<StoreOperationOutcome> {
+    store_operation_request(
+        endpoint,
+        FrameType::UnpinRequest,
+        FrameType::UnpinResult,
+        object_id,
+        Vec::new(),
+    )
+    .await
+}
+
+pub async fn set_ttl(
+    endpoint: &str,
+    object_id: &str,
+    expires_at_unix_ms: i64,
+) -> anyhow::Result<StoreOperationOutcome> {
+    store_operation_request(
+        endpoint,
+        FrameType::TtlRequest,
+        FrameType::TtlResult,
+        object_id,
+        serde_json::to_vec(&StoreTtlRequest::Set { expires_at_unix_ms })?,
+    )
+    .await
+}
+
+pub async fn clear_ttl(endpoint: &str, object_id: &str) -> anyhow::Result<StoreOperationOutcome> {
+    store_operation_request(
+        endpoint,
+        FrameType::TtlRequest,
+        FrameType::TtlResult,
+        object_id,
+        serde_json::to_vec(&StoreTtlRequest::Clear)?,
+    )
+    .await
+}
+
+pub async fn quarantine_object(
+    endpoint: &str,
+    object_id: &str,
+    reason: &str,
+) -> anyhow::Result<StoreOperationOutcome> {
+    store_operation_request(
+        endpoint,
+        FrameType::LifecycleRequest,
+        FrameType::LifecycleResult,
+        object_id,
+        serde_json::to_vec(&crate::transport::StoreLifecycleRequest::Quarantine {
+            reason: reason.to_string(),
+        })?,
+    )
+    .await
+}
+
 pub async fn get_object(
     endpoint: &str,
     object_id: &str,
@@ -1056,6 +1131,40 @@ async fn store_json_request(
         );
     }
     Ok(result)
+}
+
+async fn store_operation_request(
+    endpoint: &str,
+    request_type: FrameType,
+    response_type: FrameType,
+    object_id: &str,
+    payload: Vec<u8>,
+) -> anyhow::Result<StoreOperationOutcome> {
+    let result = store_json_request(
+        endpoint,
+        request_type,
+        response_type,
+        Some(object_id.to_string()),
+        payload,
+    )
+    .await?;
+    let status = result.header.status.as_deref().unwrap_or("error");
+    if status != "ok" {
+        return Ok(StoreOperationOutcome {
+            accepted: false,
+            object_id: result
+                .header
+                .object_id
+                .unwrap_or_else(|| object_id.to_string()),
+            reason: result.header.reason.unwrap_or_default(),
+        });
+    }
+    let response: StoreOperationResponse = serde_json::from_slice(&result.payload)?;
+    Ok(StoreOperationOutcome {
+        accepted: response.status == "ok",
+        object_id: response.object_id,
+        reason: response.reason,
+    })
 }
 
 async fn receive_found_get(stream: &mut TcpStream, result: Frame) -> anyhow::Result<GetOutcome> {

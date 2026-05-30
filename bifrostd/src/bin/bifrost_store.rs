@@ -1,6 +1,7 @@
 use bifrostd::transport::{
-    inspect_store_object, list_store_objects, query_store_objects, store_stats, StoreObjectFilter,
-    StoreObjectSummary,
+    clear_ttl, inspect_store_object, list_store_objects, pin_object, quarantine_object,
+    query_store_objects, set_ttl, store_stats, unpin_object, StoreObjectFilter, StoreObjectSummary,
+    StoreOperationOutcome,
 };
 use clap::{Parser, Subcommand};
 use serde_json::json;
@@ -61,6 +62,48 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    Pin {
+        #[arg(long, default_value = "127.0.0.1:7420")]
+        endpoint: String,
+        #[arg(long)]
+        object_id: String,
+    },
+    Unpin {
+        #[arg(long, default_value = "127.0.0.1:7420")]
+        endpoint: String,
+        #[arg(long)]
+        object_id: String,
+    },
+    Ttl {
+        #[command(subcommand)]
+        command: TtlCommand,
+    },
+    Quarantine {
+        #[arg(long, default_value = "127.0.0.1:7420")]
+        endpoint: String,
+        #[arg(long)]
+        object_id: String,
+        #[arg(long)]
+        reason: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum TtlCommand {
+    Set {
+        #[arg(long, default_value = "127.0.0.1:7420")]
+        endpoint: String,
+        #[arg(long)]
+        object_id: String,
+        #[arg(long)]
+        expires_at_unix_ms: i64,
+    },
+    Clear {
+        #[arg(long, default_value = "127.0.0.1:7420")]
+        endpoint: String,
+        #[arg(long)]
+        object_id: String,
+    },
 }
 
 #[tokio::main]
@@ -119,6 +162,40 @@ async fn main() {
             .await
         }
         Command::Stats { endpoint, json } => run_stats(&endpoint, json).await,
+        Command::Pin {
+            endpoint,
+            object_id,
+        } => pin_object(&endpoint, &object_id)
+            .await
+            .and_then(run_operation),
+        Command::Unpin {
+            endpoint,
+            object_id,
+        } => unpin_object(&endpoint, &object_id)
+            .await
+            .and_then(run_operation),
+        Command::Ttl { command } => match command {
+            TtlCommand::Set {
+                endpoint,
+                object_id,
+                expires_at_unix_ms,
+            } => set_ttl(&endpoint, &object_id, expires_at_unix_ms)
+                .await
+                .and_then(run_operation),
+            TtlCommand::Clear {
+                endpoint,
+                object_id,
+            } => clear_ttl(&endpoint, &object_id)
+                .await
+                .and_then(run_operation),
+        },
+        Command::Quarantine {
+            endpoint,
+            object_id,
+            reason,
+        } => quarantine_object(&endpoint, &object_id, &reason)
+            .await
+            .and_then(run_operation),
     };
 
     match result {
@@ -201,6 +278,19 @@ async fn run_stats(endpoint: &str, as_json: bool) -> anyhow::Result<i32> {
         );
     }
     Ok(0)
+}
+
+fn run_operation(outcome: StoreOperationOutcome) -> anyhow::Result<i32> {
+    if outcome.accepted {
+        println!("ok object_id={}", outcome.object_id);
+        Ok(0)
+    } else {
+        println!(
+            "error object_id={} reason={}",
+            outcome.object_id, outcome.reason
+        );
+        Ok(1)
+    }
 }
 
 fn print_objects(objects: &[StoreObjectSummary]) {

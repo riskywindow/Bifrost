@@ -267,6 +267,52 @@ impl Store {
         self.open_catalog()?.store_stats()
     }
 
+    pub fn pin_object(&self, object_id: &str) -> StoreResult<()> {
+        let mut catalog = self.open_catalog()?;
+        catalog.increment_pin(object_id)
+    }
+
+    pub fn unpin_object(&self, object_id: &str) -> StoreResult<()> {
+        let mut catalog = self.open_catalog()?;
+        catalog.decrement_pin(object_id)
+    }
+
+    pub fn set_ttl(&self, object_id: &str, expires_at_unix_ms: i64) -> StoreResult<()> {
+        let mut catalog = self.open_catalog()?;
+        catalog.set_ttl(object_id, expires_at_unix_ms)
+    }
+
+    pub fn clear_ttl(&self, object_id: &str) -> StoreResult<()> {
+        let mut catalog = self.open_catalog()?;
+        catalog.clear_ttl(object_id)
+    }
+
+    pub fn mark_quarantined(&self, object_id: &str, reason: &str) -> StoreResult<()> {
+        let mut catalog = self.open_catalog()?;
+        catalog.mark_quarantined(object_id, reason)
+    }
+
+    pub fn mark_verified(&self, object_id: &str) -> StoreResult<()> {
+        let object = DiskTier::new(&self.root).read_validated(object_id)?;
+        let metadata: Value = serde_json::from_slice(&object.metadata)?;
+        let validation = validate_object(&metadata, &object.payload, None);
+        if validation.status != "accepted" {
+            return Err(StoreError::Integrity(validation.reason_code));
+        }
+        let catalog = self.open_catalog()?;
+        let record = catalog
+            .get_object_record(object_id)?
+            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
+        if Some(record.descriptor_hash.as_str()) != validation.descriptor_hash.as_deref()
+            || Some(record.payload_hash.as_str()) != validation.payload_hash.as_deref()
+        {
+            return Err(StoreError::Integrity("catalog_hash_mismatch".to_string()));
+        }
+        drop(catalog);
+        let mut catalog = self.open_catalog()?;
+        catalog.mark_verified(object_id)
+    }
+
     fn ensure_servable(&self, object_id: &str) -> StoreResult<()> {
         if self.inspect_object(object_id)?.servable {
             Ok(())

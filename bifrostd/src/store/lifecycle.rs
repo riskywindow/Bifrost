@@ -30,7 +30,10 @@ pub fn valid_state_transition(from: ObjectState, to: ObjectState) -> bool {
             | (ObjectState::Evicting, ObjectState::Evicted)
             | (ObjectState::Evicting, ObjectState::Quarantined)
             | (ObjectState::Missing, ObjectState::Quarantined)
+            | (ObjectState::Missing, ObjectState::Verified)
             | (ObjectState::Corrupt, ObjectState::Quarantined)
+            | (ObjectState::Corrupt, ObjectState::Verified)
+            | (ObjectState::Quarantined, ObjectState::Verified)
     )
 }
 

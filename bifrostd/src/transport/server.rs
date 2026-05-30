@@ -1,9 +1,9 @@
 use crate::store::{Store, StoreError};
 use crate::transport::{
     chunk_bytes, iter_chunks, read_frame, write_frame, ChunkManifest, Frame, FrameHeader,
-    FrameType, StoreInspectResponse, StoreListResponse, StoreObjectFilter, StoreObjectSummary,
-    StoreStatsResponse, TraceEvent, TraceSink, TransportError, TransportMetrics, TransportResult,
-    TRANSPORT_VERSION,
+    FrameType, StoreInspectResponse, StoreLifecycleRequest, StoreListResponse, StoreObjectFilter,
+    StoreObjectSummary, StoreOperationResponse, StoreStatsResponse, StoreTtlRequest, TraceEvent,
+    TraceSink, TransportError, TransportMetrics, TransportResult, TRANSPORT_VERSION,
 };
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
@@ -227,6 +227,22 @@ pub async fn handle_connection_observed(
                 send_stats_result(&mut stream, &store, &frame).await?;
                 return Ok(());
             }
+            FrameType::PinRequest => {
+                send_pin_result(&mut stream, &store, &frame).await?;
+                return Ok(());
+            }
+            FrameType::UnpinRequest => {
+                send_unpin_result(&mut stream, &store, &frame).await?;
+                return Ok(());
+            }
+            FrameType::TtlRequest => {
+                send_ttl_result(&mut stream, &store, &frame).await?;
+                return Ok(());
+            }
+            FrameType::LifecycleRequest => {
+                send_lifecycle_result(&mut stream, &store, &frame).await?;
+                return Ok(());
+            }
             _ => {
                 metrics.record_transfer_failed();
                 send_error(
@@ -239,6 +255,105 @@ pub async fn handle_connection_observed(
                 .await?;
                 return Ok(());
             }
+        }
+    }
+}
+
+async fn send_pin_result(
+    stream: &mut TcpStream,
+    store: &Store,
+    request: &Frame,
+) -> TransportResult<()> {
+    let object_id = request.header.object_id.clone().unwrap_or_default();
+    send_operation_result(
+        stream,
+        FrameType::PinResult,
+        request,
+        &object_id,
+        store.pin_object(&object_id),
+    )
+    .await
+}
+
+async fn send_unpin_result(
+    stream: &mut TcpStream,
+    store: &Store,
+    request: &Frame,
+) -> TransportResult<()> {
+    let object_id = request.header.object_id.clone().unwrap_or_default();
+    send_operation_result(
+        stream,
+        FrameType::UnpinResult,
+        request,
+        &object_id,
+        store.unpin_object(&object_id),
+    )
+    .await
+}
+
+async fn send_ttl_result(
+    stream: &mut TcpStream,
+    store: &Store,
+    request: &Frame,
+) -> TransportResult<()> {
+    let object_id = request.header.object_id.clone().unwrap_or_default();
+    let operation: StoreTtlRequest = serde_json::from_slice(&request.payload)?;
+    let result = match operation {
+        StoreTtlRequest::Set { expires_at_unix_ms } => {
+            store.set_ttl(&object_id, expires_at_unix_ms)
+        }
+        StoreTtlRequest::Clear => store.clear_ttl(&object_id),
+    };
+    send_operation_result(stream, FrameType::TtlResult, request, &object_id, result).await
+}
+
+async fn send_lifecycle_result(
+    stream: &mut TcpStream,
+    store: &Store,
+    request: &Frame,
+) -> TransportResult<()> {
+    let object_id = request.header.object_id.clone().unwrap_or_default();
+    let operation: StoreLifecycleRequest = serde_json::from_slice(&request.payload)?;
+    let result = match operation {
+        StoreLifecycleRequest::Quarantine { reason } => store.mark_quarantined(&object_id, &reason),
+        StoreLifecycleRequest::MarkVerified => store.mark_verified(&object_id),
+    };
+    send_operation_result(
+        stream,
+        FrameType::LifecycleResult,
+        request,
+        &object_id,
+        result,
+    )
+    .await
+}
+
+async fn send_operation_result(
+    stream: &mut TcpStream,
+    frame_type: FrameType,
+    request: &Frame,
+    object_id: &str,
+    operation: crate::store::errors::StoreResult<()>,
+) -> TransportResult<()> {
+    match operation {
+        Ok(()) => {
+            let payload = serde_json::to_vec(&StoreOperationResponse::ok(object_id))?;
+            let mut result = FrameHeader::new(
+                frame_type,
+                request.header.transfer_id.clone(),
+                payload.len() as u64,
+            );
+            result.object_id = Some(object_id.to_string());
+            result.status = Some("ok".to_string());
+            result.reason = Some(String::new());
+            write_frame(stream, &result, &payload).await
+        }
+        Err(error) => {
+            let mut result = FrameHeader::new(frame_type, request.header.transfer_id.clone(), 0);
+            result.object_id = Some(object_id.to_string());
+            result.status = Some("error".to_string());
+            result.reason = Some(error.to_string());
+            write_frame(stream, &result, &[]).await
         }
     }
 }

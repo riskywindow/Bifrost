@@ -210,3 +210,34 @@ impl From<StoreStats> for StoreStatsResponse {
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoreOperationResponse {
+    pub object_id: String,
+    pub status: String,
+    pub reason: String,
+}
+
+impl StoreOperationResponse {
+    pub fn ok(object_id: impl Into<String>) -> Self {
+        Self {
+            object_id: object_id.into(),
+            status: "ok".to_string(),
+            reason: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "operation", rename_all = "snake_case")]
+pub enum StoreTtlRequest {
+    Set { expires_at_unix_ms: i64 },
+    Clear,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "operation", rename_all = "snake_case")]
+pub enum StoreLifecycleRequest {
+    Quarantine { reason: String },
+    MarkVerified,
+}

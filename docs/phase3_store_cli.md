@@ -2,8 +2,8 @@
 
 Last verified: 2026-05-30
 
-`bifrost-store` exposes read-only Phase 3 local store operations through the
-daemon transport protocol. The protocol version remains
+`bifrost-store` exposes Phase 3 local store operations through the daemon
+transport protocol. The protocol version remains
 `bifrost.transport.v1alpha1`; the Phase 3 store API adds frame types without
 changing existing PUT, HAS, or GET frame meaning.
 
@@ -19,10 +19,28 @@ The store API uses these frame types:
 - `query_result`
 - `stats_request`
 - `stats_result`
+- `pin_request`
+- `pin_result`
+- `unpin_request`
+- `unpin_result`
+- `ttl_request`
+- `ttl_result`
+- `lifecycle_request`
+- `lifecycle_result`
 
 List and query requests carry a JSON `StoreObjectFilter` payload. Inspect and
 stats requests have empty payloads. Result payloads are JSON and are stable for
 tests and scripts.
+
+Pin and unpin requests carry an `object_id` in the frame header and no payload.
+TTL and lifecycle requests carry an `object_id` in the frame header and a small
+JSON payload:
+
+```json
+{ "operation": "set", "expires_at_unix_ms": 1900000000000 }
+{ "operation": "clear" }
+{ "operation": "quarantine", "reason": "operator_requested" }
+```
 
 List, query, and inspect results only report servable objects. Staging,
 missing, corrupt, quarantined, evicting, and catalog/filesystem-inconsistent
@@ -35,6 +53,11 @@ bifrost-store list --endpoint HOST:PORT [--state STATE] [--model-hash HASH] [--p
 bifrost-store inspect --endpoint HOST:PORT --object-id OBJECT_ID [--json]
 bifrost-store query --endpoint HOST:PORT [--model-hash HASH] [--prefix-hash HASH] [--engine-name NAME] [--opaque-engine-key-hash HASH] [--layer-id N] [--kv-block-id N] [--json]
 bifrost-store stats --endpoint HOST:PORT [--json]
+bifrost-store pin --endpoint HOST:PORT --object-id OBJECT_ID
+bifrost-store unpin --endpoint HOST:PORT --object-id OBJECT_ID
+bifrost-store ttl set --endpoint HOST:PORT --object-id OBJECT_ID --expires-at-unix-ms N
+bifrost-store ttl clear --endpoint HOST:PORT --object-id OBJECT_ID
+bifrost-store quarantine --endpoint HOST:PORT --object-id OBJECT_ID --reason TEXT
 ```
 
 Human-readable object output includes:
@@ -124,8 +147,13 @@ JSON stats output includes catalog counts and byte totals:
 ## Exit codes
 
 - `0`: command succeeded.
-- `1`: inspect did not find a servable object, or query returned no matches.
+- `1`: inspect did not find a servable object, query returned no matches, or a
+  lifecycle operation was rejected by the store.
 - `2`: usage, connection, I/O, protocol, or JSON error.
 
-Pin, unpin, eviction, manifests, and fsck are intentionally not exposed by this
-CLI yet.
+Pinning increments `pin_count`; unpinning decrements it and remains at zero if
+the object is already unpinned. Objects with `pin_count > 0` are protected from
+future eviction policies. Quarantined objects are not servable through HAS, GET,
+list, query, or inspect availability APIs.
+
+Eviction, manifests, and fsck are intentionally not exposed by this CLI yet.
