@@ -1,0 +1,49 @@
+name: Phase 2
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  phase2:
+    name: Python, Rust, and ContextStorm Phase 2 checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python test dependencies
+        run: python -m pip install -e "bifrost_py[dev]" -e "contextstorm[dev]"
+
+      - name: Run Python Phase 1 tests
+        run: pytest bifrost_py/tests tests
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run bifrostd Rust tests
+        run: cargo test --manifest-path bifrostd/Cargo.toml
+
+      - name: Build Phase 2 Rust binaries
+        run: cargo build --manifest-path bifrostd/Cargo.toml --bins
+
+      - name: Run ContextStorm unit tests
+        working-directory: contextstorm
+        run: pytest tests
+
+      - name: Run small local ContextStorm smoke scenario
+        run: |
+          contextstorm run contextstorm/scenarios/small_ci.yaml \
+            --runs-root /tmp/contextstorm-runs \
+            --run-id phase2-ci-small

@@ -243,6 +243,9 @@ def run_scenario(
         (run_dir / "run.json").write_text(
             json.dumps(run_record, indent=2, sort_keys=True) + "\n"
         )
+        from .report import write_report
+
+        write_report(run_dir)
 
     return run_dir
 

@@ -23,7 +23,7 @@ impl Default for DecodeLimits {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FrameType {
     Hello,
@@ -128,35 +128,115 @@ impl FrameHeader {
         }
 
         match self.frame_type {
-            FrameType::Hello | FrameType::Ping | FrameType::Pong | FrameType::Error => {
+            FrameType::Hello => {
                 require_empty_payload(self)?;
+                require_non_empty(self.peer_role.as_deref(), "peer_role", self.frame_type)?;
+                match self.supported_versions.as_ref() {
+                    Some(versions)
+                        if versions
+                            .iter()
+                            .any(|version| version.as_str() == TRANSPORT_VERSION) => {}
+                    _ => {
+                        return Err(TransportError::InvalidFrame(
+                            "Hello requires supported_versions containing current version"
+                                .to_string(),
+                        ));
+                    }
+                }
+            }
+            FrameType::Ping | FrameType::Pong => {
+                require_empty_payload(self)?;
+            }
+            FrameType::Error => {
+                require_empty_payload(self)?;
+                require_non_empty(self.status.as_deref(), "status", self.frame_type)?;
+                require_non_empty(self.reason.as_deref(), "reason", self.frame_type)?;
             }
             FrameType::PutBegin => {
                 require_object_id(self)?;
                 require_total_chunks(self)?;
+                require_descriptor_len_matches_payload(self)?;
+                require_object_payload_len(self)?;
+                require_chunk_size(self)?;
+                require_non_empty(
+                    self.target_profile_id.as_deref(),
+                    "target_profile_id",
+                    self.frame_type,
+                )?;
             }
             FrameType::Chunk => {
                 require_object_id(self)?;
                 require_chunk_index(self)?;
                 require_total_chunks(self)?;
                 require_payload_hash(self)?;
+                require_chunk_offset(self)?;
+                require_object_payload_len_matches_payload(self)?;
             }
             FrameType::ChunkAck => {
                 require_empty_payload(self)?;
                 require_object_id(self)?;
                 require_chunk_index(self)?;
+                require_non_empty(self.status.as_deref(), "status", self.frame_type)?;
+                let status = self.status.as_deref().unwrap_or_default();
+                if status != "accepted"
+                    && require_non_empty(self.reason.as_deref(), "reason", self.frame_type).is_err()
+                {
+                    return Err(TransportError::InvalidFrame(
+                        "ChunkAck requires reason unless status is accepted".to_string(),
+                    ));
+                }
             }
             FrameType::PutCommit => {
                 require_empty_payload(self)?;
                 require_object_id(self)?;
                 require_total_chunks(self)?;
+                require_object_payload_len(self)?;
             }
-            FrameType::PutResult | FrameType::GetBegin | FrameType::HasRequest => {
+            FrameType::PutResult => {
+                require_empty_payload(self)?;
+                require_object_id(self)?;
+                require_non_empty(self.status.as_deref(), "status", self.frame_type)?;
+                let status = self.status.as_deref().unwrap_or_default();
+                if status != "committed"
+                    && require_non_empty(self.reason.as_deref(), "reason", self.frame_type).is_err()
+                {
+                    return Err(TransportError::InvalidFrame(
+                        "PutResult requires reason unless status is committed".to_string(),
+                    ));
+                }
+            }
+            FrameType::GetBegin | FrameType::HasRequest => {
                 require_empty_payload(self)?;
                 require_object_id(self)?;
             }
             FrameType::GetResult => {
                 require_object_id(self)?;
+                require_non_empty(self.status.as_deref(), "status", self.frame_type)?;
+                match self.status.as_deref() {
+                    Some("found") => {
+                        require_descriptor_len_matches_payload(self)?;
+                        require_object_payload_len(self)?;
+                        require_chunk_size(self)?;
+                        require_total_chunks(self)?;
+                        require_payload_hash(self)?;
+                    }
+                    Some("success") => {
+                        require_empty_payload(self)?;
+                        require_descriptor_len(self)?;
+                        require_object_payload_len(self)?;
+                        require_chunk_size(self)?;
+                        require_total_chunks(self)?;
+                        require_payload_hash(self)?;
+                    }
+                    _ => {
+                        require_empty_payload(self)?;
+                        require_descriptor_len(self)?;
+                        require_object_payload_len_present(self)?;
+                        require_chunk_size_present(self)?;
+                        require_total_chunks_present(self)?;
+                        require_non_empty(self.reason.as_deref(), "reason", self.frame_type)?;
+                    }
+                }
             }
             FrameType::HasResult => {
                 require_empty_payload(self)?;
@@ -308,6 +388,17 @@ fn require_total_chunks(header: &FrameHeader) -> TransportResult<()> {
     }
 }
 
+fn require_total_chunks_present(header: &FrameHeader) -> TransportResult<()> {
+    if header.total_chunks.is_some() {
+        Ok(())
+    } else {
+        Err(TransportError::InvalidFrame(format!(
+            "{:?} requires total_chunks",
+            header.frame_type
+        )))
+    }
+}
+
 fn require_payload_hash(header: &FrameHeader) -> TransportResult<()> {
     match header.payload_hash.as_deref() {
         Some(value) if !value.is_empty() => Ok(()),
@@ -315,6 +406,94 @@ fn require_payload_hash(header: &FrameHeader) -> TransportResult<()> {
             "{:?} requires payload_hash",
             header.frame_type
         ))),
+    }
+}
+
+fn require_descriptor_len(header: &FrameHeader) -> TransportResult<()> {
+    if header.descriptor_len.is_some() {
+        Ok(())
+    } else {
+        Err(TransportError::InvalidFrame(format!(
+            "{:?} requires descriptor_len",
+            header.frame_type
+        )))
+    }
+}
+
+fn require_descriptor_len_matches_payload(header: &FrameHeader) -> TransportResult<()> {
+    require_descriptor_len(header)?;
+    if header.descriptor_len == Some(header.payload_len) {
+        Ok(())
+    } else {
+        Err(TransportError::InvalidFrame(format!(
+            "{:?} descriptor_len must match payload length",
+            header.frame_type
+        )))
+    }
+}
+
+fn require_object_payload_len(header: &FrameHeader) -> TransportResult<()> {
+    match header.object_payload_len {
+        Some(value) if value > 0 => Ok(()),
+        _ => Err(TransportError::InvalidFrame(format!(
+            "{:?} requires payload_len greater than zero",
+            header.frame_type
+        ))),
+    }
+}
+
+fn require_object_payload_len_present(header: &FrameHeader) -> TransportResult<()> {
+    if header.object_payload_len.is_some() {
+        Ok(())
+    } else {
+        Err(TransportError::InvalidFrame(format!(
+            "{:?} requires payload_len",
+            header.frame_type
+        )))
+    }
+}
+
+fn require_object_payload_len_matches_payload(header: &FrameHeader) -> TransportResult<()> {
+    require_object_payload_len(header)?;
+    if header.object_payload_len == Some(header.payload_len) {
+        Ok(())
+    } else {
+        Err(TransportError::InvalidFrame(format!(
+            "{:?} payload_len must match body length",
+            header.frame_type
+        )))
+    }
+}
+
+fn require_chunk_size(header: &FrameHeader) -> TransportResult<()> {
+    match header.chunk_size {
+        Some(value) if value > 0 => Ok(()),
+        _ => Err(TransportError::InvalidFrame(format!(
+            "{:?} requires chunk_size greater than zero",
+            header.frame_type
+        ))),
+    }
+}
+
+fn require_chunk_size_present(header: &FrameHeader) -> TransportResult<()> {
+    if header.chunk_size.is_some() {
+        Ok(())
+    } else {
+        Err(TransportError::InvalidFrame(format!(
+            "{:?} requires chunk_size",
+            header.frame_type
+        )))
+    }
+}
+
+fn require_chunk_offset(header: &FrameHeader) -> TransportResult<()> {
+    if header.chunk_offset.is_some() {
+        Ok(())
+    } else {
+        Err(TransportError::InvalidFrame(format!(
+            "{:?} requires chunk_offset",
+            header.frame_type
+        )))
     }
 }
 
@@ -326,5 +505,19 @@ fn require_present(header: &FrameHeader) -> TransportResult<()> {
             "{:?} requires present",
             header.frame_type
         )))
+    }
+}
+
+fn require_non_empty(
+    value: Option<&str>,
+    field_name: &str,
+    frame_type: FrameType,
+) -> TransportResult<()> {
+    match value {
+        Some(value) if !value.is_empty() => Ok(()),
+        _ => Err(TransportError::InvalidFrame(format!(
+            "{:?} requires {field_name}",
+            frame_type
+        ))),
     }
 }

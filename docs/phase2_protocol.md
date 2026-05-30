@@ -28,18 +28,23 @@ The JSON header must be canonical enough for parsing and validation, but the
 transport header is not part of Phase 1 KV object identity. Frame headers must
 not include mutable spool state inside KV descriptors.
 
+The current Rust implementation serializes the request identifier as
+`transfer_id`, chunk count as `total_chunks`, body length as `payload_len`, and
+chunk hash as `payload_hash`. The decoder also accepts older draft aliases:
+`request_id`, `chunk_count`, `body_len`, and `chunk_hash`.
+
 The header must include:
 
 ```text
 type: string
 version: "bifrost.transport.v1alpha1"
-request_id: string
-body_len: integer
+transfer_id: string
+payload_len: integer
 ```
 
 The raw payload bytes immediately follow the JSON header. The number of raw
-payload bytes is declared by `body_len`. Frames without raw payload bytes must
-set `body_len` to `0`.
+payload bytes is declared by `payload_len`. Frames without raw payload bytes
+must set `payload_len` to `0`.
 
 Receivers must reject:
 
@@ -62,8 +67,8 @@ Required fields:
 ```text
 type: "hello"
 version: "bifrost.transport.v1alpha1"
-request_id: string
-body_len: 0
+transfer_id: string
+payload_len: 0
 peer_role: "client" | "daemon"
 supported_versions: array of strings
 ```
@@ -77,18 +82,18 @@ Required fields:
 ```text
 type: "put_begin"
 version: "bifrost.transport.v1alpha1"
-request_id: string
-body_len: integer
+transfer_id: string
+payload_len: integer
 object_id: string
 descriptor_len: integer
-payload_len: integer
+object_payload_len: integer
 chunk_size: integer
-chunk_count: integer
+total_chunks: integer
 target_profile_id: string
 ```
 
 The raw payload bytes for this frame contain the Phase 1 descriptor JSON bytes.
-`body_len` must equal `descriptor_len`.
+`payload_len` must equal `descriptor_len`.
 
 ### chunk
 
@@ -99,19 +104,19 @@ Required fields:
 ```text
 type: "chunk"
 version: "bifrost.transport.v1alpha1"
-request_id: string
-body_len: integer
+transfer_id: string
+payload_len: integer
 object_id: string
 chunk_index: integer
 chunk_offset: integer
-payload_len: integer
-chunk_hash: string
+object_payload_len: integer
+payload_hash: string
 ```
 
-The raw payload bytes contain exactly one payload chunk. `chunk_hash` is a
+The raw payload bytes contain exactly one payload chunk. `payload_hash` is a
 transport-level hash of the chunk bytes and is used to reject corrupted chunks
 early. Whole-object Phase 1 validation is still required before commit.
-`body_len` must equal `payload_len`.
+Frame `payload_len` must equal `object_payload_len`.
 
 ### chunk_ack
 
@@ -122,8 +127,8 @@ Required fields:
 ```text
 type: "chunk_ack"
 version: "bifrost.transport.v1alpha1"
-request_id: string
-body_len: 0
+transfer_id: string
+payload_len: 0
 object_id: string
 chunk_index: integer
 status: "accepted" | "duplicate" | "rejected"
@@ -141,11 +146,11 @@ Required fields:
 ```text
 type: "put_commit"
 version: "bifrost.transport.v1alpha1"
-request_id: string
-body_len: 0
+transfer_id: string
+payload_len: 0
 object_id: string
-chunk_count: integer
-payload_len: integer
+total_chunks: integer
+object_payload_len: integer
 ```
 
 ### put_result
@@ -157,8 +162,8 @@ Required fields:
 ```text
 type: "put_result"
 version: "bifrost.transport.v1alpha1"
-request_id: string
-body_len: 0
+transfer_id: string
+payload_len: 0
 object_id: string
 status: "committed" | "rejected"
 reason: string
@@ -175,8 +180,8 @@ Required fields:
 ```text
 type: "get_begin"
 version: "bifrost.transport.v1alpha1"
-request_id: string
-body_len: 0
+transfer_id: string
+payload_len: 0
 object_id: string
 ```
 
@@ -189,20 +194,20 @@ Required fields:
 ```text
 type: "get_result"
 version: "bifrost.transport.v1alpha1"
-request_id: string
-body_len: integer
+transfer_id: string
+payload_len: integer
 object_id: string
 status: "found" | "miss" | "rejected"
 reason: string
 descriptor_len: integer
-payload_len: integer
+object_payload_len: integer
 chunk_size: integer
-chunk_count: integer
+total_chunks: integer
 ```
 
 For `status: "found"`, the raw payload bytes contain the committed descriptor
-JSON bytes and `body_len` must equal `descriptor_len`. Payload bytes are then
-sent with `chunk` frames. For any other status, `body_len` must be `0`.
+JSON bytes and `payload_len` must equal `descriptor_len`. Payload bytes are
+then sent with `chunk` frames. For any other status, `payload_len` must be `0`.
 
 ### has_request
 
@@ -213,8 +218,8 @@ Required fields:
 ```text
 type: "has_request"
 version: "bifrost.transport.v1alpha1"
-request_id: string
-body_len: 0
+transfer_id: string
+payload_len: 0
 object_id: string
 ```
 
@@ -227,8 +232,8 @@ Required fields:
 ```text
 type: "has_result"
 version: "bifrost.transport.v1alpha1"
-request_id: string
-body_len: 0
+transfer_id: string
+payload_len: 0
 object_id: string
 present: boolean
 reason: string
@@ -246,8 +251,8 @@ Required fields:
 ```text
 type: "ping"
 version: "bifrost.transport.v1alpha1"
-request_id: string
-body_len: 0
+transfer_id: string
+payload_len: 0
 ```
 
 ### pong
@@ -259,8 +264,8 @@ Required fields:
 ```text
 type: "pong"
 version: "bifrost.transport.v1alpha1"
-request_id: string
-body_len: 0
+transfer_id: string
+payload_len: 0
 ```
 
 ### error
@@ -272,15 +277,14 @@ Required fields:
 ```text
 type: "error"
 version: "bifrost.transport.v1alpha1"
-request_id: string
-body_len: 0
-code: string
-message: string
-fatal: boolean
+transfer_id: string
+payload_len: 0
+status: "rejected"
+reason: string
 ```
 
-`message` is for diagnostics. Tests should assert stable `code` values rather
-than full messages.
+`reason` is diagnostic text for Phase 2. Tests should assert stable transfer or
+validation reason codes on result frames rather than full protocol error text.
 
 ## PUT lifecycle
 

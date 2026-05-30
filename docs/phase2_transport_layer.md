@@ -1,6 +1,6 @@
 # Phase 2 Transport Layer
 
-Last verified: 2026-05-27
+Last verified: 2026-05-29
 
 ## Objective
 
@@ -81,6 +81,23 @@ Before an object is committed to the spool, the daemon must re-run Phase 1 Rust
 validation against the received descriptor, reassembled payload, and configured
 target profile. A successful transfer with failed validation is rejected. A
 partial or uncertain transfer is a miss, not a servable object.
+
+## Current hardening behavior
+
+The v1alpha1 frame decoder rejects unsupported protocol versions, unknown frame
+types, missing required fields, payload length mismatches, oversized headers,
+and oversized payload declarations before allocating the payload buffer. Error
+frames carry a structured `status` and non-empty `reason`.
+
+Committed spool reads are conservative. `HAS`, `GET`, and direct committed reads
+require both descriptor and payload files to exist and re-run Phase 1 object
+validation before serving bytes. Corrupt or incomplete committed records are
+reported as misses or validation rejections rather than cache hits.
+
+The daemon handles each accepted TCP connection in a Tokio task. The local spool
+serializes staging and commit mutations with an in-process lock, so concurrent
+Phase 2 transfers cannot promote incomplete staging state. This remains a
+single-process local transport, not a distributed object store.
 
 ## Out of scope
 

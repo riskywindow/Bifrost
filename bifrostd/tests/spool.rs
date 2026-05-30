@@ -108,6 +108,52 @@ fn committed_object_can_be_read_back_exactly() {
 }
 
 #[test]
+fn corrupted_committed_payload_is_not_servable() {
+    let root = temp_spool_root("corrupted-committed-payload-is-not-servable");
+    let spool = Spool::new(&root);
+    let fixture = native_fixture();
+    let object_id = fixture.metadata["object_id"].as_str().unwrap();
+
+    stage_fixture(&spool, "transfer-001", &fixture);
+    spool
+        .commit_transfer("transfer-001", Some(&fixture.target))
+        .unwrap();
+    let paths = spool.get_object_paths(object_id).unwrap();
+    let mut corrupted = fs::read(&paths.payload).unwrap();
+    corrupted[0] ^= 0xff;
+    fs::write(&paths.payload, corrupted).unwrap();
+
+    assert!(!spool.has_object(object_id));
+    assert!(matches!(
+        spool.read_payload(object_id),
+        Err(SpoolError::ValidationRejected(reason)) if reason == "payload_hash_mismatch"
+    ));
+    cleanup(&root);
+}
+
+#[test]
+fn incomplete_committed_record_is_not_servable() {
+    let root = temp_spool_root("incomplete-committed-record-is-not-servable");
+    let spool = Spool::new(&root);
+    let fixture = native_fixture();
+    let object_id = fixture.metadata["object_id"].as_str().unwrap();
+
+    stage_fixture(&spool, "transfer-001", &fixture);
+    spool
+        .commit_transfer("transfer-001", Some(&fixture.target))
+        .unwrap();
+    let paths = spool.get_object_paths(object_id).unwrap();
+    fs::remove_file(&paths.metadata).unwrap();
+
+    assert!(!spool.has_object(object_id));
+    assert!(matches!(
+        spool.read_payload(object_id),
+        Err(SpoolError::NotFound(_))
+    ));
+    cleanup(&root);
+}
+
+#[test]
 fn partial_transfer_does_not_commit() {
     let root = temp_spool_root("partial-transfer-does-not-commit");
     let spool = Spool::new(&root);

@@ -269,6 +269,7 @@ async fn send_begin_then_close(endpoint: &str, metadata_bytes: &[u8], manifest: 
     let transfer_id = "partial-transfer-001";
     let mut hello = FrameHeader::new(FrameType::Hello, transfer_id, 0);
     hello.peer_role = Some("client".to_string());
+    hello.supported_versions = Some(vec!["bifrost.transport.v1alpha1".to_string()]);
     write_frame(&mut stream, &hello, &[]).await.unwrap();
     let response = read_frame(&mut stream).await.unwrap();
     assert_eq!(response.header.frame_type, FrameType::Hello);
@@ -284,6 +285,7 @@ async fn send_begin_then_close(endpoint: &str, metadata_bytes: &[u8], manifest: 
     begin.object_payload_len = Some(manifest.payload_len);
     begin.chunk_size = Some(manifest.chunk_size as u64);
     begin.payload_hash = Some(manifest.payload_hash.clone());
+    begin.target_profile_id = Some("none".to_string());
     begin.flags = Some(BTreeMap::from([(
         "chunk_manifest".to_string(),
         serde_json::to_value(manifest).unwrap(),

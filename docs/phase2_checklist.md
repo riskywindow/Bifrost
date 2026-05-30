@@ -1,6 +1,6 @@
 # Phase 2 Checklist
 
-Last verified: 2026-05-28
+Last verified: 2026-05-29
 
 ## Protocol
 
@@ -11,8 +11,9 @@ Last verified: 2026-05-28
 - [x] Reject unsupported versions.
 - [x] Reject unknown frame types.
 - [x] Reject malformed headers and payload length mismatches.
+- [x] Reject oversized headers and payloads before allocation.
 - [x] Add deterministic protocol error codes.
-- [ ] Cover `hello`, `ping`, `pong`, and `error` with unit tests.
+- [x] Cover `hello`, `ping`, `pong`, and `error` with unit tests.
 
 ## Chunker
 
@@ -44,7 +45,7 @@ Last verified: 2026-05-28
 
 - [x] Return miss for absent objects.
 - [x] Return miss for staged objects.
-- [ ] Return miss or rejection for corrupt committed records.
+- [x] Return miss or rejection for corrupt committed records.
 - [x] Return descriptor bytes in `get_result` for committed objects.
 - [x] Return payload bytes as chunk frames.
 - [x] Verify chunks on the client side.
@@ -64,7 +65,8 @@ Last verified: 2026-05-28
 - [x] Reject conflicting object paths.
 - [ ] Clean up or quarantine stale staging records on startup.
 - [x] Never serve partial, corrupt, unknown, or staged objects.
-- [ ] Test crash-style restart cleanup with temporary directories.
+- [x] Test crash-style interrupted committed records with temporary
+      directories.
 
 ## Metrics
 
@@ -89,7 +91,7 @@ Last verified: 2026-05-28
 - [x] Handle duplicate chunks from different paths.
 - [x] Commit only after all chunks and Phase 1 validation pass.
 - [ ] Report per-path bytes, chunks, errors, and latency in public snapshots.
-- [ ] Keep QUIC, RDMA, compression, and parity chunks out of scope.
+- [x] Keep QUIC, RDMA, compression, and parity chunks out of scope.
 
 ## Retry and timeout
 
@@ -119,16 +121,63 @@ Last verified: 2026-05-28
 
 ## CI
 
-- [ ] Keep all default tests CPU-only and local.
-- [ ] Run Phase 1 Python tests.
-- [ ] Run Phase 1 Rust tests.
-- [ ] Run cross-language identity vector tests.
-- [ ] Run Phase 2 protocol unit tests.
+- [x] Keep all default tests CPU-only and local.
+- [x] Run Phase 1 Python tests.
+- [x] Run Phase 1 Rust tests.
+- [x] Run cross-language identity vector tests.
+- [x] Run Phase 2 protocol unit tests.
 - [x] Run Phase 2 chunker and reassembly tests.
 - [x] Run Phase 2 spool tests.
 - [x] Run local TCP PUT and GET smoke tests.
-- [ ] Run ContextStorm `tiny` smoke test.
+- [x] Run ContextStorm `small_ci` smoke test.
 - [x] Skip root-required network fault tests by default.
+
+### CI and local test commands
+
+The Phase 2 GitHub Actions workflow lives at `.github/workflows/phase2.yml`.
+It installs both Python packages, runs Phase 1 Python tests, runs ContextStorm
+unit tests, runs `bifrostd` Rust tests, builds the Phase 2 binaries, and runs
+the local `small_ci` ContextStorm scenario. The smoke scenario uses a 1 MiB
+object and loopback TCP only; it does not require root, network emulation, GPU,
+Docker, LMCache, vLLM, or internet access during the scenario.
+
+Run the full default local checks from the repository root:
+
+```text
+python -m pip install -e "bifrost_py[dev]" -e "contextstorm[dev]"
+pytest bifrost_py/tests tests
+cargo test --manifest-path bifrostd/Cargo.toml
+cargo build --manifest-path bifrostd/Cargo.toml --bins
+cd contextstorm
+pytest tests
+cd ..
+contextstorm run contextstorm/scenarios/small_ci.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase2-local-small
+```
+
+Run only the small CI scenario after building binaries:
+
+```text
+cargo build --manifest-path bifrostd/Cargo.toml --bins
+contextstorm run contextstorm/scenarios/small_ci.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase2-local-small
+```
+
+Run optional local fault scenarios explicitly. These are not part of default CI,
+and failures or skips from root-required fault setup must not fail CI:
+
+```text
+contextstorm run contextstorm/scenarios/dead_path.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase2-local-dead-path
+
+sudo contextstorm run contextstorm/scenarios/lossy_two_path.yaml \
+  --allow-root-faults \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase2-local-lossy-two-path
+```
 
 ## Phase 2 done criteria
 
@@ -141,5 +190,5 @@ Last verified: 2026-05-28
 - [x] Metrics exist for successful and failed transfer paths.
 - [x] ContextStorm can run a CPU-only local benchmark.
 - [x] Multipath synthetic PUT transfer is implemented.
-- [ ] No LMCache, vLLM, real KV extraction, GPU inference, dashboard, QUIC,
+- [x] No LMCache, vLLM, real KV extraction, GPU inference, dashboard, QUIC,
       compression, RDMA, production auth, or cache eviction work is included.

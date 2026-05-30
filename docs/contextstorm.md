@@ -1,6 +1,6 @@
 # ContextStorm Synthetic Benchmark
 
-Last verified: 2026-05-28
+Last verified: 2026-05-29
 
 ContextStorm is the Phase 2 synthetic KV benchmark harness. It exercises local
 BIFROST transport with deterministic Phase 1-style KV objects and records the
@@ -16,23 +16,33 @@ fault opt-in flag.
 From `contextstorm/`:
 
 ```text
+cd ../bifrostd
+cargo build --bins
+cd ../contextstorm
 contextstorm generate-synthetic --out /tmp/bifrost-object --size 1048576
-contextstorm run scenarios/small_ci.yaml
-contextstorm report ../runs/RUN_ID
+contextstorm run scenarios/small_ci.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase2-local-small
+contextstorm report /tmp/contextstorm-runs/phase2-local-small
 ```
 
 When running directly from the source tree without installing the package:
 
 ```text
-PYTHONPATH=. python -m contextstorm.cli run scenarios/small_ci.yaml
-PYTHONPATH=. python -m contextstorm.cli report ../runs/RUN_ID
+PYTHONPATH=. python -m contextstorm.cli run scenarios/small_ci.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase2-local-small
+PYTHONPATH=. python -m contextstorm.cli report /tmp/contextstorm-runs/phase2-local-small
 ```
 
 Root-required local network profiles are disabled by default. To run a `tc`
 profile on a local machine where you intentionally allow qdisc changes:
 
 ```text
-sudo PYTHONPATH=. python -m contextstorm.cli run scenarios/lossy_two_path.yaml --allow-root-faults
+sudo PYTHONPATH=. python -m contextstorm.cli run scenarios/lossy_two_path.yaml \
+  --allow-root-faults \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase2-local-lossy-two-path
 ```
 
 The process-level runner requires built Rust binaries:
@@ -151,7 +161,9 @@ summary.md
 ```
 
 `run.json` records stdout, stderr, exit code, parsed CLI JSON, trace paths,
-environment notes, and per-operation metrics.
+environment notes, and per-operation metrics. `contextstorm run` writes
+`summary.json` and `summary.md` automatically after `run.json`; `contextstorm
+report RUN_DIR` regenerates those summaries.
 
 Fault-enabled runs also write:
 
@@ -181,7 +193,10 @@ Safe-by-default profiles:
 
 1. `clean.yaml`: no fault.
 2. `path_death.yaml`: process kill of one ContextStorm-managed daemon. This is
-   local, CPU-only, and does not require root.
+   local, CPU-only, and does not require root. It is useful as an opt-in local
+   fault scenario and is covered by tests when Rust binaries and loopback TCP
+   are available, but it is intentionally kept out of the default small CI
+   smoke path.
 
 Root-required profiles:
 

@@ -1,17 +1,19 @@
-# BIFROST Phase 1
+# BIFROST Phase 2
 
-BIFROST is currently in Phase 1: a correctness-first KV object layer for
-deterministic schema validation, canonical JSON hashing, fixture validation, and
-Python/Rust parity tests.
+BIFROST is currently in Phase 2: a correctness-first synthetic KV transport
+layer and local benchmark harness. Phase 1 object validation, canonical JSON
+hashing, fixture validation, and Python/Rust parity remain the acceptance gate
+for every transferred object.
 
-BIFROST may miss a cache hit, but it must never serve wrong KV state. Phase 1
-therefore rejects uncertain compatibility or integrity instead of guessing.
-Wrong model, tokenizer, RoPE config, dtype, KV layout, prefix identity, token
-range, payload bytes, descriptor hash, or object ID must fail closed.
+BIFROST may miss a cache hit, but it must never serve wrong or partial KV state.
+Phase 2 transfers a valid Phase 1 object over local TCP, chunks and reassembles
+the payload, revalidates descriptor hash, payload hash, object ID, and target
+compatibility with the Rust validator, then commits only validated objects into
+a minimal local spool.
 
-Phase 1 does not implement networking, object storage, LMCache or vLLM
-integration, dashboards, model inference, real KV extraction, or real KV
-injection.
+Phase 2 does not implement LMCache integration, vLLM integration, dashboards,
+GPU inference, real KV extraction, real KV injection, QUIC, RDMA, compression,
+production authentication, or cache eviction policy.
 
 ## Install Python Package
 
@@ -26,10 +28,96 @@ This installs the `bifrost-kv` console script and the Python test dependencies.
 ```sh
 pytest bifrost_py/tests tests
 cargo test --manifest-path bifrostd/Cargo.toml
+cd contextstorm
+PYTHONPATH=. pytest
 ```
 
 The test suite is local-only. It does not require a GPU, internet access, vLLM,
 LMCache, cloud credentials, or object storage services.
+
+## Phase 2 Local Transport
+
+Build the daemon and transfer client:
+
+```sh
+cargo build --manifest-path bifrostd/Cargo.toml --bins
+```
+
+Start a local daemon with an empty spool:
+
+```sh
+bifrostd/target/debug/bifrost-daemon \
+  --listen 127.0.0.1:7420 \
+  --spool /tmp/bifrost-spool \
+  --trace-jsonl /tmp/bifrost-daemon.jsonl
+```
+
+PUT a committed fixture:
+
+```sh
+bifrostd/target/debug/bifrost-xfer put \
+  --endpoint 127.0.0.1:7420 \
+  --meta fixtures/native_valid/tiny_gpt_layer0_block0.meta.json \
+  --payload fixtures/native_valid/tiny_gpt_layer0_block0.payload.bin \
+  --target fixtures/native_valid/target_profile.json \
+  --trace-jsonl /tmp/bifrost-put.jsonl
+```
+
+Check whether the object is committed and servable:
+
+```sh
+bifrostd/target/debug/bifrost-xfer has \
+  --endpoint 127.0.0.1:7420 \
+  --object-id bifrost://object/blake3/<object-id-hex>
+```
+
+Fetch exact committed bytes:
+
+```sh
+bifrostd/target/debug/bifrost-xfer get \
+  --endpoint 127.0.0.1:7420 \
+  --object-id bifrost://object/blake3/<object-id-hex> \
+  --out /tmp/bifrost-get
+```
+
+`HAS` and `GET` only serve committed objects. Staged, partial, corrupt, or
+invalid records are reported as misses or rejections.
+
+Trace JSONL files include transfer IDs, object IDs, chunk indexes, byte counts,
+reason codes, and multipath path names where applicable. `bifrost-xfer --json`
+also includes a local metrics snapshot with bytes, chunks, retries, timeouts,
+path failures, and transfer success or failure counts.
+
+## ContextStorm
+
+Run the small CPU-only local benchmark:
+
+```sh
+cargo build --manifest-path bifrostd/Cargo.toml --bins
+cd contextstorm
+PYTHONPATH=. python -m contextstorm.cli run scenarios/small_ci.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase2-local-small
+PYTHONPATH=. python -m contextstorm.cli report /tmp/contextstorm-runs/phase2-local-small
+```
+
+The run directory contains `run.json`, command records, trace JSONL files,
+`summary.json`, and `summary.md`. Reports summarize local synthetic transfer
+latency, throughput, bytes, chunks, retries, misses, and payload match checks.
+
+Optional local fault scenarios are explicit. Process-kill scenarios do not
+require root; `tc_netem` profiles require both root and `--allow-root-faults`:
+
+```sh
+PYTHONPATH=. python -m contextstorm.cli run scenarios/dead_path.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase2-local-dead-path
+
+sudo PYTHONPATH=. python -m contextstorm.cli run scenarios/lossy_two_path.yaml \
+  --allow-root-faults \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase2-local-lossy-two-path
+```
 
 ## Generate Fixtures
 

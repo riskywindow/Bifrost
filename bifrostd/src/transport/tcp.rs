@@ -33,7 +33,26 @@ pub async fn read_frame_with_limits(
     }
 
     let mut payload = vec![0_u8; header.payload_len as usize];
-    reader.read_exact(&mut payload).await?;
+    let mut read_len = 0_usize;
+    while read_len < payload.len() {
+        match reader.read(&mut payload[read_len..]).await {
+            Ok(0) => {
+                return Err(TransportError::PayloadLengthMismatch {
+                    expected: header.payload_len,
+                    actual: read_len as u64,
+                });
+            }
+            Ok(n) => read_len += n,
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
+                return Err(TransportError::PayloadLengthMismatch {
+                    expected: header.payload_len,
+                    actual: read_len as u64,
+                });
+            }
+            Err(err) => return Err(TransportError::Io(err)),
+        }
+    }
     header.validate(payload.len() as u64)?;
     Ok(Frame { header, payload })
 }

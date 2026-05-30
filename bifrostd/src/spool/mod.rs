@@ -201,26 +201,44 @@ impl Spool {
     }
 
     pub fn has_object(&self, object_id: &str) -> bool {
-        self.layout
-            .committed_paths(object_id)
-            .map(|paths| paths.metadata.exists() && paths.payload.exists())
-            .unwrap_or(false)
+        self.validate_committed_object(object_id).is_ok()
     }
 
     pub fn read_metadata(&self, object_id: &str) -> SpoolResult<Vec<u8>> {
-        let paths = self.layout.committed_paths(object_id)?;
-        if !paths.metadata.exists() || !paths.payload.exists() {
-            return Err(SpoolError::NotFound(object_id.to_string()));
-        }
-        fs::read(paths.metadata).map_err(Into::into)
+        let (metadata, _) = self.read_validated_committed_object(object_id)?;
+        Ok(metadata)
     }
 
     pub fn read_payload(&self, object_id: &str) -> SpoolResult<Vec<u8>> {
+        let (_, payload) = self.read_validated_committed_object(object_id)?;
+        Ok(payload)
+    }
+
+    pub fn validate_committed_object(&self, object_id: &str) -> SpoolResult<()> {
+        self.read_validated_committed_object(object_id).map(|_| ())
+    }
+
+    fn read_validated_committed_object(
+        &self,
+        object_id: &str,
+    ) -> SpoolResult<(Vec<u8>, Vec<u8>)> {
         let paths = self.layout.committed_paths(object_id)?;
         if !paths.metadata.exists() || !paths.payload.exists() {
             return Err(SpoolError::NotFound(object_id.to_string()));
         }
-        fs::read(paths.payload).map_err(Into::into)
+        let metadata_bytes = fs::read(paths.metadata)?;
+        let metadata: Value = serde_json::from_slice(&metadata_bytes)?;
+        let payload = fs::read(paths.payload)?;
+        let validation = validate_object(&metadata, &payload, None);
+        if validation.status != "accepted" {
+            return Err(SpoolError::ValidationRejected(validation.reason_code));
+        }
+        if validation.object_id.as_deref() != Some(object_id) {
+            return Err(SpoolError::ValidationRejected(
+                "object_id_mismatch".to_string(),
+            ));
+        }
+        Ok((metadata_bytes, payload))
     }
 
     pub fn get_object_paths(&self, object_id: &str) -> SpoolResult<CommittedObjectPaths> {

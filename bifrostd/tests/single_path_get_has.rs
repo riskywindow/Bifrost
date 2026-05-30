@@ -296,6 +296,7 @@ async fn start_corrupt_get_server(fixture: Fixture) -> String {
         let mut daemon_hello =
             FrameHeader::new(FrameType::Hello, hello.header.transfer_id.clone(), 0);
         daemon_hello.peer_role = Some("daemon".to_string());
+        daemon_hello.supported_versions = Some(vec!["bifrost.transport.v1alpha1".to_string()]);
         write_frame(&mut stream, &daemon_hello, &[]).await.unwrap();
 
         let request = read_frame(&mut stream).await.unwrap();

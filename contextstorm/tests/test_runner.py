@@ -35,3 +35,5 @@ def test_small_ci_runs_when_binaries_are_available(tmp_path: Path) -> None:
     )
 
     assert (run_dir / "run.json").exists()
+    assert (run_dir / "summary.json").exists()
+    assert (run_dir / "summary.md").exists()

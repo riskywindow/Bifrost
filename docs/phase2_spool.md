@@ -19,24 +19,23 @@ A spool root contains separate staging and committed areas:
 spool/
   staging/
     {request_id}/
-      descriptor.json
-      payload.part
+      meta.json
       chunks/
         {chunk_index}.chunk
-      transfer.json
+      manifest.json
   objects/
-    {object_id}/
-      descriptor.json
-      payload.bin
-      record.json
+    {first-two-object-id-hex}/{next-two-object-id-hex}/
+      {object_id_hex}.meta.json
+      {object_id_hex}.payload.bin
   quarantine/
     {request_id-or-object_id}/
       reason.txt
 ```
 
-`transfer.json` is mutable local transfer state. `record.json` is mutable local
-spool state for a committed object. Neither file is part of immutable Phase 1
-object identity.
+`manifest.json` is mutable local transfer state and is not part of immutable
+Phase 1 object identity. The current Phase 2 spool does not write a committed
+`record.json`; committed identity is proven by revalidating the descriptor and
+payload before serving.
 
 ## Staging vs committed objects
 
@@ -81,9 +80,9 @@ Incomplete staging records may be removed or quarantined. They must not be
 promoted without reassembly and Phase 1 validation.
 
 Committed records should be treated conservatively. If a committed object is
-missing its descriptor, payload, or record, or if validation cannot prove the
-object identity, the object must not be served. The daemon may quarantine or
-ignore the entry.
+missing its descriptor or payload, or if validation cannot prove the object
+identity, the object must not be served. The daemon may quarantine or ignore
+the entry.
 
 Partial transfers are never cache hits.
 
