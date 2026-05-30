@@ -14,11 +14,13 @@ pub mod trace;
 
 pub use chunker::{chunk_bytes, iter_chunks, Chunk};
 pub use client::{
-    get_object, get_object_observed, has_object, put_object, put_object_multipath_observed,
-    put_object_multipath_observed_with_options, put_object_observed, put_validated_object,
-    put_validated_object_multipath_observed, put_validated_object_multipath_observed_with_options,
-    put_validated_object_observed, receive_get_response, ClientTelemetry, GetOutcome, HasOutcome,
-    MultipathPutOptions, PutOutcome, DEFAULT_CHUNK_TIMEOUT_MS, DEFAULT_MAX_INFLIGHT_PER_PATH,
+    get_object, get_object_observed, has_object, inspect_store_object, list_store_objects,
+    put_object, put_object_multipath_observed, put_object_multipath_observed_with_options,
+    put_object_observed, put_validated_object, put_validated_object_multipath_observed,
+    put_validated_object_multipath_observed_with_options, put_validated_object_observed,
+    query_store_objects, receive_get_response, store_stats, ClientTelemetry, GetOutcome,
+    HasOutcome, MultipathPutOptions, PutOutcome, StoreInspectOutcome, StoreListOutcome,
+    StoreStatsOutcome, DEFAULT_CHUNK_TIMEOUT_MS, DEFAULT_MAX_INFLIGHT_PER_PATH,
     DEFAULT_MAX_RETRIES_PER_CHUNK,
 };
 pub use errors::{TransportError, TransportResult};
@@ -29,6 +31,10 @@ pub use frame::{
 pub use manifest::{ChunkInfo, ChunkManifest, ChunkSpec, DEFAULT_CHUNK_SIZE};
 pub use metrics::{TransportMetrics, TransportMetricsSnapshot};
 pub use path::PathSpec;
+pub use protocol::{
+    StoreInspectResponse, StoreListResponse, StoreObjectFilter, StoreObjectSummary,
+    StoreStatsResponse, PROTOCOL_VERSION,
+};
 pub use reassembler::{ChunkAcceptStatus, Reassembler};
 pub use scheduler::{PathStats, PathStatus, RoundRobinScheduler, ScheduledPath};
 pub use server::{

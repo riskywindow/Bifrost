@@ -36,6 +36,14 @@ pub enum FrameType {
     GetResult,
     HasRequest,
     HasResult,
+    ListRequest,
+    ListResult,
+    InspectRequest,
+    InspectResult,
+    QueryRequest,
+    QueryResult,
+    StatsRequest,
+    StatsResult,
     Ping,
     Pong,
     Error,
@@ -208,6 +216,29 @@ impl FrameHeader {
             FrameType::GetBegin | FrameType::HasRequest => {
                 require_empty_payload(self)?;
                 require_object_id(self)?;
+            }
+            FrameType::ListRequest | FrameType::QueryRequest => {}
+            FrameType::InspectRequest => {
+                require_empty_payload(self)?;
+                require_object_id(self)?;
+            }
+            FrameType::StatsRequest => {
+                require_empty_payload(self)?;
+            }
+            FrameType::ListResult
+            | FrameType::InspectResult
+            | FrameType::QueryResult
+            | FrameType::StatsResult => {
+                require_non_empty(self.status.as_deref(), "status", self.frame_type)?;
+                let status = self.status.as_deref().unwrap_or_default();
+                if status != "ok"
+                    && require_non_empty(self.reason.as_deref(), "reason", self.frame_type).is_err()
+                {
+                    return Err(TransportError::InvalidFrame(format!(
+                        "{:?} requires reason unless status is ok",
+                        self.frame_type
+                    )));
+                }
             }
             FrameType::GetResult => {
                 require_object_id(self)?;

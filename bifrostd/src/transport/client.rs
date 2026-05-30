@@ -1,8 +1,10 @@
 use crate::cache::validate_object;
 use crate::transport::{
     chunk_bytes, iter_chunks, read_frame, write_frame, ChunkInfo, ChunkManifest, Frame,
-    FrameHeader, FrameType, PathSpec, PathStatus, Reassembler, RoundRobinScheduler, TraceEvent,
-    TraceSink, TransportMetrics, TransportResult, TRANSPORT_VERSION,
+    FrameHeader, FrameType, PathSpec, PathStatus, Reassembler, RoundRobinScheduler,
+    StoreInspectResponse, StoreListResponse, StoreObjectFilter, StoreObjectSummary,
+    StoreStatsResponse, TraceEvent, TraceSink, TransportMetrics, TransportResult,
+    TRANSPORT_VERSION,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -58,6 +60,25 @@ pub struct GetOutcome {
     pub reason: String,
     pub metadata_bytes: Vec<u8>,
     pub payload: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreListOutcome {
+    pub objects: Vec<StoreObjectSummary>,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreInspectOutcome {
+    pub found: bool,
+    pub response: StoreInspectResponse,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreStatsOutcome {
+    pub stats: StoreStatsResponse,
+    pub reason: String,
 }
 
 pub async fn put_object(
@@ -793,6 +814,122 @@ pub async fn has_object(endpoint: &str, object_id: &str) -> anyhow::Result<HasOu
     })
 }
 
+pub async fn list_store_objects(
+    endpoint: &str,
+    filter: StoreObjectFilter,
+) -> anyhow::Result<StoreListOutcome> {
+    let payload = serde_json::to_vec(&filter)?;
+    let result = store_json_request(
+        endpoint,
+        FrameType::ListRequest,
+        FrameType::ListResult,
+        None,
+        payload,
+    )
+    .await?;
+    if result.header.status.as_deref() != Some("ok") {
+        return Ok(StoreListOutcome {
+            objects: Vec::new(),
+            reason: result
+                .header
+                .reason
+                .unwrap_or_else(|| "store_list_failed".to_string()),
+        });
+    }
+    let response: StoreListResponse = serde_json::from_slice(&result.payload)?;
+    Ok(StoreListOutcome {
+        objects: response.objects,
+        reason: result.header.reason.unwrap_or_default(),
+    })
+}
+
+pub async fn query_store_objects(
+    endpoint: &str,
+    filter: StoreObjectFilter,
+) -> anyhow::Result<StoreListOutcome> {
+    let payload = serde_json::to_vec(&filter)?;
+    let result = store_json_request(
+        endpoint,
+        FrameType::QueryRequest,
+        FrameType::QueryResult,
+        None,
+        payload,
+    )
+    .await?;
+    if result.header.status.as_deref() != Some("ok") {
+        return Ok(StoreListOutcome {
+            objects: Vec::new(),
+            reason: result
+                .header
+                .reason
+                .unwrap_or_else(|| "store_query_failed".to_string()),
+        });
+    }
+    let response: StoreListResponse = serde_json::from_slice(&result.payload)?;
+    Ok(StoreListOutcome {
+        objects: response.objects,
+        reason: result.header.reason.unwrap_or_default(),
+    })
+}
+
+pub async fn inspect_store_object(
+    endpoint: &str,
+    object_id: &str,
+) -> anyhow::Result<StoreInspectOutcome> {
+    let result = store_json_request(
+        endpoint,
+        FrameType::InspectRequest,
+        FrameType::InspectResult,
+        Some(object_id.to_string()),
+        Vec::new(),
+    )
+    .await?;
+    let status = result.header.status.as_deref().unwrap_or("error");
+    if status == "error" {
+        return Ok(StoreInspectOutcome {
+            found: false,
+            response: StoreInspectResponse::miss(
+                result
+                    .header
+                    .reason
+                    .clone()
+                    .unwrap_or_else(|| "store_inspect_failed".to_string()),
+            ),
+            reason: result.header.reason.unwrap_or_default(),
+        });
+    }
+    let response: StoreInspectResponse = serde_json::from_slice(&result.payload)?;
+    Ok(StoreInspectOutcome {
+        found: status == "ok" && response.found,
+        reason: result.header.reason.unwrap_or_default(),
+        response,
+    })
+}
+
+pub async fn store_stats(endpoint: &str) -> anyhow::Result<StoreStatsOutcome> {
+    let result = store_json_request(
+        endpoint,
+        FrameType::StatsRequest,
+        FrameType::StatsResult,
+        None,
+        Vec::new(),
+    )
+    .await?;
+    if result.header.status.as_deref() != Some("ok") {
+        return Ok(StoreStatsOutcome {
+            stats: StoreStatsResponse::default(),
+            reason: result
+                .header
+                .reason
+                .unwrap_or_else(|| "store_stats_failed".to_string()),
+        });
+    }
+    Ok(StoreStatsOutcome {
+        stats: serde_json::from_slice(&result.payload)?,
+        reason: result.header.reason.unwrap_or_default(),
+    })
+}
+
 pub async fn get_object(
     endpoint: &str,
     object_id: &str,
@@ -893,6 +1030,32 @@ pub async fn receive_get_response(
             payload: Vec::new(),
         }),
     }
+}
+
+async fn store_json_request(
+    endpoint: &str,
+    request_type: FrameType,
+    response_type: FrameType,
+    object_id: Option<String>,
+    payload: Vec<u8>,
+) -> anyhow::Result<Frame> {
+    let transfer_id = new_transfer_id("store");
+    let mut stream = TcpStream::connect(endpoint).await?;
+    handshake(&mut stream, &transfer_id).await?;
+
+    let mut request = FrameHeader::new(request_type, transfer_id, payload.len() as u64);
+    request.object_id = object_id;
+    write_frame(&mut stream, &request, &payload).await?;
+
+    let result = read_frame(&mut stream).await?;
+    if result.header.frame_type != response_type {
+        anyhow::bail!(
+            "expected {:?}, got {:?}",
+            response_type,
+            result.header.frame_type
+        );
+    }
+    Ok(result)
 }
 
 async fn receive_found_get(stream: &mut TcpStream, result: Frame) -> anyhow::Result<GetOutcome> {

@@ -24,3 +24,7 @@ path = "src/bin/bifrost_daemon.rs"
 [[bin]]
 name = "bifrost-xfer"
 path = "src/bin/bifrost_xfer.rs"
+
+[[bin]]
+name = "bifrost-store"
+path = "src/bin/bifrost_store.rs"

@@ -1,7 +1,8 @@
 use crate::store::{Store, StoreError};
 use crate::transport::{
     chunk_bytes, iter_chunks, read_frame, write_frame, ChunkManifest, Frame, FrameHeader,
-    FrameType, TraceEvent, TraceSink, TransportError, TransportMetrics, TransportResult,
+    FrameType, StoreInspectResponse, StoreListResponse, StoreObjectFilter, StoreObjectSummary,
+    StoreStatsResponse, TraceEvent, TraceSink, TransportError, TransportMetrics, TransportResult,
     TRANSPORT_VERSION,
 };
 use std::collections::BTreeMap;
@@ -210,6 +211,22 @@ pub async fn handle_connection_observed(
                 send_get_response(&mut stream, &store, &frame, &metrics, &trace).await?;
                 return Ok(());
             }
+            FrameType::ListRequest => {
+                send_list_result(&mut stream, &store, &frame).await?;
+                return Ok(());
+            }
+            FrameType::InspectRequest => {
+                send_inspect_result(&mut stream, &store, &frame).await?;
+                return Ok(());
+            }
+            FrameType::QueryRequest => {
+                send_query_result(&mut stream, &store, &frame).await?;
+                return Ok(());
+            }
+            FrameType::StatsRequest => {
+                send_stats_result(&mut stream, &store, &frame).await?;
+                return Ok(());
+            }
             _ => {
                 metrics.record_transfer_failed();
                 send_error(
@@ -224,6 +241,171 @@ pub async fn handle_connection_observed(
             }
         }
     }
+}
+
+async fn send_list_result(
+    stream: &mut TcpStream,
+    store: &Store,
+    request: &Frame,
+) -> TransportResult<()> {
+    let filter = parse_filter_payload(request)
+        .map_err(|error| TransportError::Protocol(error.to_string()))?;
+    match store_object_summaries(store, &filter) {
+        Ok(objects) => {
+            let payload = serde_json::to_vec(&StoreListResponse { objects })?;
+            let mut result = FrameHeader::new(
+                FrameType::ListResult,
+                request.header.transfer_id.clone(),
+                payload.len() as u64,
+            );
+            result.status = Some("ok".to_string());
+            result.reason = Some(String::new());
+            write_frame(stream, &result, &payload).await
+        }
+        Err(error) => {
+            send_store_result_error(
+                stream,
+                FrameType::ListResult,
+                &request.header.transfer_id,
+                &error.to_string(),
+            )
+            .await
+        }
+    }
+}
+
+async fn send_query_result(
+    stream: &mut TcpStream,
+    store: &Store,
+    request: &Frame,
+) -> TransportResult<()> {
+    let filter = parse_filter_payload(request)
+        .map_err(|error| TransportError::Protocol(error.to_string()))?;
+    match store_object_summaries(store, &filter) {
+        Ok(objects) => {
+            let payload = serde_json::to_vec(&StoreListResponse { objects })?;
+            let mut result = FrameHeader::new(
+                FrameType::QueryResult,
+                request.header.transfer_id.clone(),
+                payload.len() as u64,
+            );
+            result.status = Some("ok".to_string());
+            result.reason = Some(String::new());
+            write_frame(stream, &result, &payload).await
+        }
+        Err(error) => {
+            send_store_result_error(
+                stream,
+                FrameType::QueryResult,
+                &request.header.transfer_id,
+                &error.to_string(),
+            )
+            .await
+        }
+    }
+}
+
+async fn send_inspect_result(
+    stream: &mut TcpStream,
+    store: &Store,
+    request: &Frame,
+) -> TransportResult<()> {
+    let object_id = request.header.object_id.clone().unwrap_or_default();
+    let response = match store.inspect_object(&object_id) {
+        Ok(inspection) if inspection.servable => StoreInspectResponse::found(&inspection),
+        Ok(_) => StoreInspectResponse::miss("not_found"),
+        Err(StoreError::NotFound(_)) => StoreInspectResponse::miss("not_found"),
+        Err(error) => {
+            return send_store_result_error(
+                stream,
+                FrameType::InspectResult,
+                &request.header.transfer_id,
+                &error.to_string(),
+            )
+            .await;
+        }
+    };
+    let status = if response.found { "ok" } else { "miss" };
+    let reason = response.reason.clone().unwrap_or_default();
+    let payload = serde_json::to_vec(&response)?;
+    let mut result = FrameHeader::new(
+        FrameType::InspectResult,
+        request.header.transfer_id.clone(),
+        payload.len() as u64,
+    );
+    result.object_id = Some(object_id);
+    result.status = Some(status.to_string());
+    result.reason = Some(reason);
+    write_frame(stream, &result, &payload).await
+}
+
+async fn send_stats_result(
+    stream: &mut TcpStream,
+    store: &Store,
+    request: &Frame,
+) -> TransportResult<()> {
+    match store.stats() {
+        Ok(stats) => {
+            let payload = serde_json::to_vec(&StoreStatsResponse::from(stats))?;
+            let mut result = FrameHeader::new(
+                FrameType::StatsResult,
+                request.header.transfer_id.clone(),
+                payload.len() as u64,
+            );
+            result.status = Some("ok".to_string());
+            result.reason = Some(String::new());
+            write_frame(stream, &result, &payload).await
+        }
+        Err(error) => {
+            send_store_result_error(
+                stream,
+                FrameType::StatsResult,
+                &request.header.transfer_id,
+                &error.to_string(),
+            )
+            .await
+        }
+    }
+}
+
+fn parse_filter_payload(frame: &Frame) -> anyhow::Result<StoreObjectFilter> {
+    if frame.payload.is_empty() {
+        Ok(StoreObjectFilter::default())
+    } else {
+        Ok(serde_json::from_slice(&frame.payload)?)
+    }
+}
+
+fn store_object_summaries(
+    store: &Store,
+    filter: &StoreObjectFilter,
+) -> anyhow::Result<Vec<StoreObjectSummary>> {
+    let records = store.list_objects(&filter.to_list_filter()?)?;
+    let mut objects = Vec::new();
+    for record in records {
+        let Ok(inspection) = store.inspect_object(&record.object_id) else {
+            continue;
+        };
+        if inspection.servable {
+            objects.push(StoreObjectSummary::from_parts(
+                &inspection.record,
+                &inspection.compatibility,
+            ));
+        }
+    }
+    Ok(objects)
+}
+
+async fn send_store_result_error(
+    stream: &mut TcpStream,
+    frame_type: FrameType,
+    transfer_id: &str,
+    reason: &str,
+) -> TransportResult<()> {
+    let mut result = FrameHeader::new(frame_type, transfer_id, 0);
+    result.status = Some("error".to_string());
+    result.reason = Some(reason.to_string());
+    write_frame(stream, &result, &[]).await
 }
 
 fn is_multipath_begin(frame: &Frame) -> bool {

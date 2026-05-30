@@ -45,8 +45,8 @@ Last verified: 2026-05-30
 
 - [x] Keep Phase 2 PUT, HAS, and GET behavior green.
 - [x] Index successful PUT commits in the Phase 3 catalog.
-- [ ] Add local store lookup endpoint or command surface.
-- [ ] Add store stats endpoint or command surface.
+- [x] Add local store lookup endpoint or command surface.
+- [x] Add store stats endpoint or command surface.
 - [ ] Add pin and unpin endpoint or command surface.
 - [ ] Add eviction dry-run and apply endpoint or command surface.
 - [ ] Add fsck dry-run and repair endpoint or command surface.
@@ -55,8 +55,8 @@ Last verified: 2026-05-30
 ## CLI
 
 - [ ] Add `store init` or equivalent if explicit initialization is needed.
-- [ ] Add object lookup.
-- [ ] Add object stats.
+- [x] Add object lookup.
+- [x] Add object stats.
 - [ ] Add object pin.
 - [ ] Add object unpin.
 - [ ] Add eviction dry-run.
@@ -65,7 +65,7 @@ Last verified: 2026-05-30
 - [ ] Add manifest missing.
 - [ ] Add fsck dry-run.
 - [ ] Add fsck repair.
-- [ ] Keep outputs deterministic enough for tests.
+- [x] Keep outputs deterministic enough for tests.
 
 ## Pinning
 
