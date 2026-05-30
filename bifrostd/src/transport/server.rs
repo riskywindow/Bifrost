@@ -1,4 +1,4 @@
-use crate::spool::{CommitOutcome, Spool, SpoolError};
+use crate::store::{Store, StoreError};
 use crate::transport::{
     chunk_bytes, iter_chunks, read_frame, write_frame, ChunkManifest, Frame, FrameHeader,
     FrameType, TraceEvent, TraceSink, TransportError, TransportMetrics, TransportResult,
@@ -21,33 +21,40 @@ pub async fn serve(config: ServerConfig) -> anyhow::Result<()> {
     let trace = config.trace_jsonl.map(TraceSink::create).transpose()?;
     serve_listener_observed(
         listener,
-        Spool::new(config.spool_root),
+        Store::open(config.spool_root)?,
         TransportMetrics::default(),
         trace,
     )
     .await
 }
 
-pub async fn serve_listener(listener: TcpListener, spool: Spool) -> anyhow::Result<()> {
-    serve_listener_observed(listener, spool, TransportMetrics::default(), None).await
+pub async fn serve_listener<S>(listener: TcpListener, store: S) -> anyhow::Result<()>
+where
+    S: Into<Store>,
+{
+    serve_listener_observed(listener, store, TransportMetrics::default(), None).await
 }
 
-pub async fn serve_listener_observed(
+pub async fn serve_listener_observed<S>(
     listener: TcpListener,
-    spool: Spool,
+    store: S,
     metrics: TransportMetrics,
     trace: Option<TraceSink>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+where
+    S: Into<Store>,
+{
+    let store = store.into();
     let _ = listener.local_addr()?;
     emit_trace(&trace, TraceEvent::new("daemon_start"));
     loop {
         let (stream, peer) = listener.accept().await?;
-        let spool = spool.clone();
+        let store = store.clone();
         let metrics = metrics.clone();
         let trace = trace.clone();
         tokio::spawn(async move {
             if let Err(error) =
-                handle_connection_observed(stream, spool, peer, metrics, trace).await
+                handle_connection_observed(stream, store, peer, metrics, trace).await
             {
                 eprintln!("bifrost-daemon: connection {peer} ended with error: {error}");
             }
@@ -57,15 +64,15 @@ pub async fn serve_listener_observed(
 
 pub async fn handle_connection(
     stream: TcpStream,
-    spool: Spool,
+    store: Store,
     peer: SocketAddr,
 ) -> anyhow::Result<()> {
-    handle_connection_observed(stream, spool, peer, TransportMetrics::default(), None).await
+    handle_connection_observed(stream, store, peer, TransportMetrics::default(), None).await
 }
 
 pub async fn handle_connection_observed(
     mut stream: TcpStream,
-    spool: Spool,
+    store: Store,
     _peer: SocketAddr,
     metrics: TransportMetrics,
     trace: Option<TraceSink>,
@@ -100,7 +107,7 @@ pub async fn handle_connection_observed(
                     || err.kind() == std::io::ErrorKind::ConnectionReset =>
             {
                 if let Some(transfer_id) = active_transfer.take() {
-                    let _ = spool.abort_staging_transfer(&transfer_id);
+                    let _ = store.abort_put(&transfer_id);
                 }
                 return Ok(());
             }
@@ -119,7 +126,7 @@ pub async fn handle_connection_observed(
                         .maybe_object_id(frame.header.object_id.as_deref())
                         .bytes(frame.payload.len() as u64),
                 );
-                let result = begin_put(&spool, &frame);
+                let result = begin_put(&store, &frame);
                 match result {
                     Ok(()) => {
                         if !is_multipath_begin(&frame) {
@@ -148,7 +155,7 @@ pub async fn handle_connection_observed(
                 }
             }
             FrameType::Chunk => {
-                let status = match write_chunk(&spool, &frame) {
+                let status = match write_chunk(&store, &frame) {
                     Ok(()) => ("accepted", ""),
                     Err(error) => {
                         metrics.record_transfer_failed();
@@ -168,7 +175,7 @@ pub async fn handle_connection_observed(
                             &trace,
                         )
                         .await?;
-                        let _ = spool.abort_staging_transfer(&frame.header.transfer_id);
+                        let _ = store.abort_put(&frame.header.transfer_id);
                         return Ok(());
                     }
                 };
@@ -185,11 +192,11 @@ pub async fn handle_connection_observed(
                 send_chunk_ack(&mut stream, &frame, status.0, status.1, &trace).await?;
             }
             FrameType::PutCommit => {
-                send_put_result(&mut stream, &spool, &frame, &metrics, &trace).await?;
+                send_put_result(&mut stream, &store, &frame, &metrics, &trace).await?;
                 return Ok(());
             }
             FrameType::HasRequest => {
-                send_has_result(&mut stream, &spool, &frame).await?;
+                send_has_result(&mut stream, &store, &frame).await?;
                 return Ok(());
             }
             FrameType::GetBegin => {
@@ -200,7 +207,7 @@ pub async fn handle_connection_observed(
                         .transfer_id(frame.header.transfer_id.clone())
                         .maybe_object_id(frame.header.object_id.as_deref()),
                 );
-                send_get_response(&mut stream, &spool, &frame, &metrics, &trace).await?;
+                send_get_response(&mut stream, &store, &frame, &metrics, &trace).await?;
                 return Ok(());
             }
             _ => {
@@ -240,7 +247,7 @@ fn path_name_from_frame(frame: &Frame) -> String {
         .to_string()
 }
 
-fn begin_put(spool: &Spool, frame: &Frame) -> anyhow::Result<()> {
+fn begin_put(store: &Store, frame: &Frame) -> anyhow::Result<()> {
     let manifest = manifest_from_begin(frame)?;
     let object_id = frame
         .header
@@ -259,7 +266,7 @@ fn begin_put(spool: &Spool, frame: &Frame) -> anyhow::Result<()> {
     if frame.header.object_payload_len != Some(manifest.payload_len) {
         anyhow::bail!("put_begin payload_len mismatch");
     }
-    spool.create_staging_transfer(&frame.header.transfer_id, &frame.payload, &manifest)?;
+    store.begin_put(&frame.header.transfer_id, &frame.payload, &manifest)?;
     Ok(())
 }
 
@@ -273,12 +280,12 @@ fn manifest_from_begin(frame: &Frame) -> anyhow::Result<ChunkManifest> {
     Ok(serde_json::from_value(value.clone())?)
 }
 
-fn write_chunk(spool: &Spool, frame: &Frame) -> anyhow::Result<()> {
+fn write_chunk(store: &Store, frame: &Frame) -> anyhow::Result<()> {
     let chunk_index = frame
         .header
         .chunk_index
         .ok_or_else(|| anyhow::anyhow!("chunk missing chunk_index"))?;
-    spool.write_chunk(&frame.header.transfer_id, chunk_index, &frame.payload)?;
+    store.write_chunk(&frame.header.transfer_id, chunk_index, &frame.payload)?;
     Ok(())
 }
 
@@ -321,7 +328,7 @@ async fn send_chunk_ack(
 
 async fn send_put_result(
     stream: &mut TcpStream,
-    spool: &Spool,
+    store: &Store,
     request: &Frame,
     metrics: &TransportMetrics,
     trace: &Option<TraceSink>,
@@ -333,11 +340,9 @@ async fn send_put_result(
             .transfer_id(request.header.transfer_id.clone())
             .object_id(object_id.clone()),
     );
-    let (status, reason) = match spool.commit_transfer(&request.header.transfer_id, None) {
-        Ok(CommitOutcome::Committed { .. }) | Ok(CommitOutcome::AlreadyCommitted { .. }) => {
-            ("committed", String::new())
-        }
-        Err(SpoolError::ValidationRejected(reason)) => {
+    let (status, reason) = match store.commit_put(&request.header.transfer_id, None) {
+        Ok(_) => ("committed", String::new()),
+        Err(StoreError::Integrity(reason)) => {
             metrics.record_validation_failure();
             ("rejected", reason)
         }
@@ -374,11 +379,11 @@ async fn send_put_result(
 
 async fn send_has_result(
     stream: &mut TcpStream,
-    spool: &Spool,
+    store: &Store,
     request: &Frame,
 ) -> TransportResult<()> {
     let object_id = request.header.object_id.clone().unwrap_or_default();
-    let present = spool.has_object(&object_id);
+    let present = store.has_object(&object_id).unwrap_or(false);
     let mut result = FrameHeader::new(FrameType::HasResult, request.header.transfer_id.clone(), 0);
     result.object_id = Some(object_id);
     result.present = Some(present);
@@ -392,15 +397,15 @@ async fn send_has_result(
 
 async fn send_get_response(
     stream: &mut TcpStream,
-    spool: &Spool,
+    store: &Store,
     request: &Frame,
     metrics: &TransportMetrics,
     trace: &Option<TraceSink>,
 ) -> TransportResult<()> {
     let object_id = request.header.object_id.clone().unwrap_or_default();
-    let metadata = match spool.read_metadata(&object_id) {
-        Ok(metadata) => metadata,
-        Err(SpoolError::NotFound(_)) => {
+    let stored = match store.get_object(&object_id) {
+        Ok(stored) => stored,
+        Err(StoreError::NotFound(_)) => {
             send_get_result_miss(stream, request, &object_id, "not_found").await?;
             metrics.record_transfer_failed();
             emit_trace(
@@ -425,33 +430,8 @@ async fn send_get_response(
             return Ok(());
         }
     };
-    let payload = match spool.read_payload(&object_id) {
-        Ok(payload) => payload,
-        Err(SpoolError::NotFound(_)) => {
-            send_get_result_miss(stream, request, &object_id, "not_found").await?;
-            metrics.record_transfer_failed();
-            emit_trace(
-                trace,
-                TraceEvent::new("transfer_error")
-                    .transfer_id(request.header.transfer_id.clone())
-                    .object_id(object_id)
-                    .reason_code("not_found"),
-            );
-            return Ok(());
-        }
-        Err(error) => {
-            send_get_result_miss(stream, request, &object_id, &error.to_string()).await?;
-            metrics.record_transfer_failed();
-            emit_trace(
-                trace,
-                TraceEvent::new("transfer_error")
-                    .transfer_id(request.header.transfer_id.clone())
-                    .object_id(object_id)
-                    .reason_code(error.to_string()),
-            );
-            return Ok(());
-        }
-    };
+    let metadata = stored.metadata;
+    let payload = stored.payload;
 
     let chunk_size = request
         .header

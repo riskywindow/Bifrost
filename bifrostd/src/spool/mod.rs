@@ -63,6 +63,10 @@ impl Spool {
         self.layout.root()
     }
 
+    pub(crate) fn staging_lock(&self) -> Arc<Mutex<()>> {
+        self.staging_lock.clone()
+    }
+
     pub fn create_staging_transfer(
         &self,
         transfer_id: &str,
@@ -218,10 +222,7 @@ impl Spool {
         self.read_validated_committed_object(object_id).map(|_| ())
     }
 
-    fn read_validated_committed_object(
-        &self,
-        object_id: &str,
-    ) -> SpoolResult<(Vec<u8>, Vec<u8>)> {
+    fn read_validated_committed_object(&self, object_id: &str) -> SpoolResult<(Vec<u8>, Vec<u8>)> {
         let paths = self.layout.committed_paths(object_id)?;
         if !paths.metadata.exists() || !paths.payload.exists() {
             return Err(SpoolError::NotFound(object_id.to_string()));

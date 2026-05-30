@@ -1,0 +1,670 @@
+use crate::store::errors::{StoreError, StoreResult};
+use crate::store::lifecycle::{can_evict, ensure_valid_state_transition};
+use crate::store::migrations;
+use crate::store::object_record::{
+    ObjectAccess, ObjectCompatibility, ObjectListFilter, ObjectLocation, ObjectRecord, ObjectState,
+    StoreEvent,
+};
+use crate::store::stats::StoreStats;
+use rusqlite::types::Value;
+use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row};
+use serde_json::json;
+use std::fs;
+use std::path::Path;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+#[derive(Debug)]
+pub struct Catalog {
+    conn: Connection,
+}
+
+pub fn open_catalog(path: &Path) -> StoreResult<Catalog> {
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)?;
+    }
+    let mut conn = Connection::open(path)?;
+    configure_connection(&conn)?;
+    migrations::init_schema(&mut conn)?;
+    migrations::apply_migrations(&mut conn)?;
+    Ok(Catalog { conn })
+}
+
+impl Catalog {
+    pub fn init_schema(&mut self) -> StoreResult<()> {
+        migrations::init_schema(&mut self.conn)
+    }
+
+    pub fn apply_migrations(&mut self) -> StoreResult<()> {
+        migrations::apply_migrations(&mut self.conn)
+    }
+
+    pub fn current_schema_version(&self) -> StoreResult<i64> {
+        migrations::current_schema_version(&self.conn)
+    }
+
+    pub fn connection(&self) -> &Connection {
+        &self.conn
+    }
+
+    pub fn insert_committed_object(
+        &mut self,
+        record: &ObjectRecord,
+        location: &ObjectLocation,
+        compatibility: &ObjectCompatibility,
+    ) -> StoreResult<()> {
+        if record.object_id != location.object_id || record.object_id != compatibility.object_id {
+            return Err(StoreError::Catalog(rusqlite::Error::InvalidParameterName(
+                "object_id mismatch".to_string(),
+            )));
+        }
+        if record.state != ObjectState::Committed {
+            return Err(StoreError::InvalidState(format!(
+                "insert_committed_object requires committed, got {}",
+                record.state
+            )));
+        }
+
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "INSERT INTO objects(
+                object_id, object_type, schema_version, descriptor_hash, payload_hash,
+                byte_length, state, created_at_unix_ms, committed_at_unix_ms,
+                verified_at_unix_ms, last_accessed_unix_ms, access_count, pin_count,
+                ttl_expires_at_unix_ms, quarantine_reason
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                record.object_id,
+                record.object_type,
+                record.schema_version,
+                record.descriptor_hash,
+                record.payload_hash,
+                record.byte_length,
+                record.state,
+                record.created_at_unix_ms,
+                record.committed_at_unix_ms,
+                record.verified_at_unix_ms,
+                record.last_accessed_unix_ms,
+                record.access_count,
+                record.pin_count,
+                record.ttl_expires_at_unix_ms,
+                record.quarantine_reason,
+            ],
+        )?;
+        tx.execute(
+            "INSERT INTO object_locations(object_id, tier, meta_path, payload_path, bytes_on_disk)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                location.object_id,
+                location.tier,
+                location.meta_path,
+                location.payload_path,
+                location.bytes_on_disk
+            ],
+        )?;
+        tx.execute(
+            "INSERT INTO object_compatibility(
+                object_id, model_hash, tokenizer_hash, config_hash, rope_config_hash,
+                dtype, engine_name, engine_version, integration_name, kv_cache_format,
+                prefix_hash, token_range_start, token_range_end, layer_id, kv_block_id,
+                opaque_engine_key_hash
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            params![
+                compatibility.object_id,
+                compatibility.model_hash,
+                compatibility.tokenizer_hash,
+                compatibility.config_hash,
+                compatibility.rope_config_hash,
+                compatibility.dtype,
+                compatibility.engine_name,
+                compatibility.engine_version,
+                compatibility.integration_name,
+                compatibility.kv_cache_format,
+                compatibility.prefix_hash,
+                compatibility.token_range_start,
+                compatibility.token_range_end,
+                compatibility.layer_id,
+                compatibility.kv_block_id,
+                compatibility.opaque_engine_key_hash,
+            ],
+        )?;
+        tx.execute(
+            "INSERT INTO object_access(object_id) VALUES (?1)",
+            params![record.object_id],
+        )?;
+        log_event(
+            &tx,
+            "object_committed",
+            Some(&record.object_id),
+            None,
+            Some(json!({"state": record.state.as_str()})),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn get_object_record(&self, object_id: &str) -> StoreResult<Option<ObjectRecord>> {
+        self.conn
+            .query_row(
+                "SELECT * FROM objects WHERE object_id = ?1",
+                params![object_id],
+                object_record_from_row,
+            )
+            .optional()
+            .map_err(StoreError::from)
+    }
+
+    pub fn get_object_location(
+        &self,
+        object_id: &str,
+        tier: &str,
+    ) -> StoreResult<Option<ObjectLocation>> {
+        self.conn
+            .query_row(
+                "SELECT object_id, tier, meta_path, payload_path, bytes_on_disk
+                 FROM object_locations WHERE object_id = ?1 AND tier = ?2",
+                params![object_id, tier],
+                object_location_from_row,
+            )
+            .optional()
+            .map_err(StoreError::from)
+    }
+
+    pub fn get_object_compatibility(
+        &self,
+        object_id: &str,
+    ) -> StoreResult<Option<ObjectCompatibility>> {
+        self.conn
+            .query_row(
+                "SELECT * FROM object_compatibility WHERE object_id = ?1",
+                params![object_id],
+                object_compatibility_from_row,
+            )
+            .optional()
+            .map_err(StoreError::from)
+    }
+
+    pub fn get_object_access(&self, object_id: &str) -> StoreResult<Option<ObjectAccess>> {
+        self.conn
+            .query_row(
+                "SELECT object_id, last_get_unix_ms, last_put_unix_ms, get_count,
+                        put_count, bytes_read_total, bytes_written_total
+                 FROM object_access WHERE object_id = ?1",
+                params![object_id],
+                object_access_from_row,
+            )
+            .optional()
+            .map_err(StoreError::from)
+    }
+
+    pub fn update_access_on_get(&mut self, object_id: &str, bytes_read: i64) -> StoreResult<()> {
+        let now = now_unix_ms();
+        let tx = self.conn.transaction()?;
+        let changed = tx.execute(
+            "UPDATE object_access
+             SET last_get_unix_ms = ?2,
+                 get_count = get_count + 1,
+                 bytes_read_total = bytes_read_total + ?3
+             WHERE object_id = ?1",
+            params![object_id, now, bytes_read],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::NotFound(object_id.to_string()));
+        }
+        tx.execute(
+            "UPDATE objects
+             SET last_accessed_unix_ms = ?2, access_count = access_count + 1
+             WHERE object_id = ?1",
+            params![object_id, now],
+        )?;
+        log_event(
+            &tx,
+            "object_accessed",
+            Some(object_id),
+            None,
+            Some(json!({"operation": "get", "bytes_read": bytes_read})),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn update_access_on_put(&mut self, object_id: &str, bytes_written: i64) -> StoreResult<()> {
+        let now = now_unix_ms();
+        let tx = self.conn.transaction()?;
+        let changed = tx.execute(
+            "UPDATE object_access
+             SET last_put_unix_ms = ?2,
+                 put_count = put_count + 1,
+                 bytes_written_total = bytes_written_total + ?3
+             WHERE object_id = ?1",
+            params![object_id, now, bytes_written],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::NotFound(object_id.to_string()));
+        }
+        tx.execute(
+            "UPDATE objects
+             SET last_accessed_unix_ms = ?2, access_count = access_count + 1
+             WHERE object_id = ?1",
+            params![object_id, now],
+        )?;
+        log_event(
+            &tx,
+            "object_accessed",
+            Some(object_id),
+            None,
+            Some(json!({"operation": "put", "bytes_written": bytes_written})),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn increment_pin(&mut self, object_id: &str) -> StoreResult<()> {
+        let record = self
+            .get_object_record(object_id)?
+            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
+        if record.pin_count == 0 {
+            ensure_valid_state_transition(record.state, ObjectState::Pinned)?;
+        }
+
+        let tx = self.conn.transaction()?;
+        let new_state = if record.pin_count == 0 {
+            ObjectState::Pinned
+        } else {
+            record.state
+        };
+        tx.execute(
+            "UPDATE objects SET pin_count = pin_count + 1, state = ?2 WHERE object_id = ?1",
+            params![object_id, new_state],
+        )?;
+        log_event(
+            &tx,
+            "object_pinned",
+            Some(object_id),
+            None,
+            Some(json!({"pin_count": record.pin_count + 1})),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn decrement_pin(&mut self, object_id: &str) -> StoreResult<()> {
+        let record = self
+            .get_object_record(object_id)?
+            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
+        if record.pin_count == 0 {
+            return Ok(());
+        }
+
+        let next_pin_count = record.pin_count - 1;
+        let next_state = if next_pin_count == 0 && record.state == ObjectState::Pinned {
+            ensure_valid_state_transition(record.state, ObjectState::Verified)?;
+            ObjectState::Verified
+        } else {
+            record.state
+        };
+
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "UPDATE objects SET pin_count = ?2, state = ?3 WHERE object_id = ?1",
+            params![object_id, next_pin_count, next_state],
+        )?;
+        log_event(
+            &tx,
+            "object_unpinned",
+            Some(object_id),
+            None,
+            Some(json!({"pin_count": next_pin_count})),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn transition_object_state(
+        &mut self,
+        object_id: &str,
+        new_state: ObjectState,
+        reason: Option<&str>,
+    ) -> StoreResult<()> {
+        let record = self
+            .get_object_record(object_id)?
+            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
+        ensure_valid_state_transition(record.state, new_state)?;
+
+        let now = now_unix_ms();
+        let verified_at = if new_state == ObjectState::Verified {
+            Some(now)
+        } else {
+            record.verified_at_unix_ms
+        };
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "UPDATE objects
+             SET state = ?2, verified_at_unix_ms = ?3, quarantine_reason = ?4
+             WHERE object_id = ?1",
+            params![
+                object_id,
+                new_state,
+                verified_at,
+                if new_state == ObjectState::Quarantined {
+                    reason
+                } else {
+                    None
+                }
+            ],
+        )?;
+        log_event(
+            &tx,
+            event_type_for_transition(new_state),
+            Some(object_id),
+            None,
+            Some(
+                json!({"from": record.state.as_str(), "to": new_state.as_str(), "reason": reason}),
+            ),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn mark_quarantined(&mut self, object_id: &str, reason: &str) -> StoreResult<()> {
+        self.transition_object_state(object_id, ObjectState::Quarantined, Some(reason))
+    }
+
+    pub fn mark_evicted(&mut self, object_id: &str) -> StoreResult<()> {
+        let record = self
+            .get_object_record(object_id)?
+            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
+        if record.state != ObjectState::Evicting && !can_evict(record.state, record.pin_count) {
+            return Err(StoreError::Eviction(format!(
+                "object {object_id} in state {} with pin_count {} cannot be evicted",
+                record.state, record.pin_count
+            )));
+        }
+        if record.state == ObjectState::Evicting {
+            ensure_valid_state_transition(record.state, ObjectState::Evicted)?;
+        }
+
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "UPDATE objects SET state = ?2 WHERE object_id = ?1",
+            params![object_id, ObjectState::Evicted],
+        )?;
+        log_event(
+            &tx,
+            "object_evicted",
+            Some(object_id),
+            None,
+            Some(json!({"from": record.state.as_str()})),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn list_objects(&self, filter: &ObjectListFilter) -> StoreResult<Vec<ObjectRecord>> {
+        let mut sql = String::from(
+            "SELECT o.* FROM objects o
+             LEFT JOIN object_compatibility c ON c.object_id = o.object_id",
+        );
+        let mut clauses = Vec::new();
+        let mut values = Vec::new();
+
+        push_text_filter(
+            &mut clauses,
+            &mut values,
+            "o.state",
+            filter.state.map(|s| s.as_str()),
+        );
+        push_text_filter(
+            &mut clauses,
+            &mut values,
+            "c.model_hash",
+            filter.model_hash.as_deref(),
+        );
+        push_text_filter(
+            &mut clauses,
+            &mut values,
+            "c.prefix_hash",
+            filter.prefix_hash.as_deref(),
+        );
+        push_text_filter(
+            &mut clauses,
+            &mut values,
+            "c.engine_name",
+            filter.engine_name.as_deref(),
+        );
+        push_text_filter(
+            &mut clauses,
+            &mut values,
+            "c.opaque_engine_key_hash",
+            filter.opaque_engine_key_hash.as_deref(),
+        );
+        push_i64_filter(&mut clauses, &mut values, "c.layer_id", filter.layer_id);
+        push_i64_filter(
+            &mut clauses,
+            &mut values,
+            "c.kv_block_id",
+            filter.kv_block_id,
+        );
+
+        if !clauses.is_empty() {
+            sql.push_str(" WHERE ");
+            sql.push_str(&clauses.join(" AND "));
+        }
+        sql.push_str(" ORDER BY o.object_id ASC");
+        match (filter.limit, filter.offset) {
+            (Some(limit), _) => {
+                sql.push_str(" LIMIT ?");
+                values.push(Value::Integer(limit));
+            }
+            (None, Some(_)) => {
+                sql.push_str(" LIMIT -1");
+            }
+            (None, None) => {}
+        }
+        if let Some(offset) = filter.offset {
+            sql.push_str(" OFFSET ?");
+            values.push(Value::Integer(offset));
+        }
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_from_iter(values.iter()), object_record_from_row)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    }
+
+    pub fn store_stats(&self) -> StoreResult<StoreStats> {
+        let mut stats = StoreStats::default();
+        let mut stmt = self.conn.prepare(
+            "SELECT state, COUNT(*), COALESCE(SUM(byte_length), 0),
+                    COALESCE(SUM(pin_count), 0), COALESCE(SUM(access_count), 0)
+             FROM objects GROUP BY state",
+        )?;
+        let mut rows = stmt.query([])?;
+        while let Some(row) = rows.next()? {
+            let state: ObjectState = row.get(0)?;
+            let count: i64 = row.get(1)?;
+            stats.object_count += count;
+            stats.total_logical_bytes += row.get::<_, i64>(2)?;
+            stats.total_pin_count += row.get::<_, i64>(3)?;
+            stats.total_access_count += row.get::<_, i64>(4)?;
+            match state {
+                ObjectState::Staging => stats.staging_count = count,
+                ObjectState::Committed => stats.committed_count = count,
+                ObjectState::Verified => stats.verified_count = count,
+                ObjectState::Pinned => stats.pinned_count = count,
+                ObjectState::Evictable => stats.evictable_count = count,
+                ObjectState::Evicting => stats.evicting_count = count,
+                ObjectState::Evicted => stats.evicted_count = count,
+                ObjectState::Quarantined => stats.quarantined_count = count,
+                ObjectState::Missing => stats.missing_count = count,
+                ObjectState::Corrupt => stats.corrupt_count = count,
+            }
+        }
+        stats.total_bytes_on_disk = self.conn.query_row(
+            "SELECT COALESCE(SUM(bytes_on_disk), 0) FROM object_locations",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(stats)
+    }
+
+    pub fn store_events(&self) -> StoreResult<Vec<StoreEvent>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT event_id, timestamp_unix_ms, event_type, object_id, manifest_id, details_json
+             FROM store_events ORDER BY event_id ASC",
+        )?;
+        let rows = stmt.query_map([], store_event_from_row)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    }
+}
+
+fn configure_connection(conn: &Connection) -> StoreResult<()> {
+    conn.pragma_update(None, "foreign_keys", "ON")?;
+    conn.busy_timeout(Duration::from_secs(5))?;
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "synchronous", "FULL")?;
+    Ok(())
+}
+
+fn log_event(
+    tx: &rusqlite::Transaction<'_>,
+    event_type: &str,
+    object_id: Option<&str>,
+    manifest_id: Option<&str>,
+    details: Option<serde_json::Value>,
+) -> StoreResult<()> {
+    let details_json = details.map(|value| value.to_string());
+    tx.execute(
+        "INSERT INTO store_events(timestamp_unix_ms, event_type, object_id, manifest_id, details_json)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![now_unix_ms(), event_type, object_id, manifest_id, details_json],
+    )?;
+    Ok(())
+}
+
+fn event_type_for_transition(state: ObjectState) -> &'static str {
+    match state {
+        ObjectState::Quarantined => "object_quarantined",
+        ObjectState::Evicted => "object_evicted",
+        _ => "object_state_transition",
+    }
+}
+
+fn push_text_filter(
+    clauses: &mut Vec<&'static str>,
+    values: &mut Vec<Value>,
+    column: &'static str,
+    value: Option<&str>,
+) {
+    if let Some(value) = value {
+        clauses.push(match column {
+            "o.state" => "o.state = ?",
+            "c.model_hash" => "c.model_hash = ?",
+            "c.prefix_hash" => "c.prefix_hash = ?",
+            "c.engine_name" => "c.engine_name = ?",
+            "c.opaque_engine_key_hash" => "c.opaque_engine_key_hash = ?",
+            _ => unreachable!("unsupported text filter"),
+        });
+        values.push(Value::Text(value.to_string()));
+    }
+}
+
+fn push_i64_filter(
+    clauses: &mut Vec<&'static str>,
+    values: &mut Vec<Value>,
+    column: &'static str,
+    value: Option<i64>,
+) {
+    if let Some(value) = value {
+        clauses.push(match column {
+            "c.layer_id" => "c.layer_id = ?",
+            "c.kv_block_id" => "c.kv_block_id = ?",
+            _ => unreachable!("unsupported integer filter"),
+        });
+        values.push(Value::Integer(value));
+    }
+}
+
+fn object_record_from_row(row: &Row<'_>) -> rusqlite::Result<ObjectRecord> {
+    Ok(ObjectRecord {
+        object_id: row.get("object_id")?,
+        object_type: row.get("object_type")?,
+        schema_version: row.get("schema_version")?,
+        descriptor_hash: row.get("descriptor_hash")?,
+        payload_hash: row.get("payload_hash")?,
+        byte_length: row.get("byte_length")?,
+        state: row.get("state")?,
+        created_at_unix_ms: row.get("created_at_unix_ms")?,
+        committed_at_unix_ms: row.get("committed_at_unix_ms")?,
+        verified_at_unix_ms: row.get("verified_at_unix_ms")?,
+        last_accessed_unix_ms: row.get("last_accessed_unix_ms")?,
+        access_count: row.get("access_count")?,
+        pin_count: row.get("pin_count")?,
+        ttl_expires_at_unix_ms: row.get("ttl_expires_at_unix_ms")?,
+        quarantine_reason: row.get("quarantine_reason")?,
+    })
+}
+
+fn object_location_from_row(row: &Row<'_>) -> rusqlite::Result<ObjectLocation> {
+    Ok(ObjectLocation {
+        object_id: row.get("object_id")?,
+        tier: row.get("tier")?,
+        meta_path: row.get("meta_path")?,
+        payload_path: row.get("payload_path")?,
+        bytes_on_disk: row.get("bytes_on_disk")?,
+    })
+}
+
+fn object_compatibility_from_row(row: &Row<'_>) -> rusqlite::Result<ObjectCompatibility> {
+    Ok(ObjectCompatibility {
+        object_id: row.get("object_id")?,
+        model_hash: row.get("model_hash")?,
+        tokenizer_hash: row.get("tokenizer_hash")?,
+        config_hash: row.get("config_hash")?,
+        rope_config_hash: row.get("rope_config_hash")?,
+        dtype: row.get("dtype")?,
+        engine_name: row.get("engine_name")?,
+        engine_version: row.get("engine_version")?,
+        integration_name: row.get("integration_name")?,
+        kv_cache_format: row.get("kv_cache_format")?,
+        prefix_hash: row.get("prefix_hash")?,
+        token_range_start: row.get("token_range_start")?,
+        token_range_end: row.get("token_range_end")?,
+        layer_id: row.get("layer_id")?,
+        kv_block_id: row.get("kv_block_id")?,
+        opaque_engine_key_hash: row.get("opaque_engine_key_hash")?,
+    })
+}
+
+fn object_access_from_row(row: &Row<'_>) -> rusqlite::Result<ObjectAccess> {
+    Ok(ObjectAccess {
+        object_id: row.get("object_id")?,
+        last_get_unix_ms: row.get("last_get_unix_ms")?,
+        last_put_unix_ms: row.get("last_put_unix_ms")?,
+        get_count: row.get("get_count")?,
+        put_count: row.get("put_count")?,
+        bytes_read_total: row.get("bytes_read_total")?,
+        bytes_written_total: row.get("bytes_written_total")?,
+    })
+}
+
+fn store_event_from_row(row: &Row<'_>) -> rusqlite::Result<StoreEvent> {
+    Ok(StoreEvent {
+        event_id: row.get("event_id")?,
+        timestamp_unix_ms: row.get("timestamp_unix_ms")?,
+        event_type: row.get("event_type")?,
+        object_id: row.get("object_id")?,
+        manifest_id: row.get("manifest_id")?,
+        details_json: row.get("details_json")?,
+    })
+}
+
+fn now_unix_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock is before unix epoch")
+        .as_millis() as i64
+}

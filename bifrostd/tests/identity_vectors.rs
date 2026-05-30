@@ -38,9 +38,7 @@ fn reverse_keys_recursively(value: &Value) -> Value {
             }
             Value::Object(reordered)
         }
-        Value::Array(items) => {
-            Value::Array(items.iter().map(reverse_keys_recursively).collect())
-        }
+        Value::Array(items) => Value::Array(items.iter().map(reverse_keys_recursively).collect()),
         _ => value.clone(),
     }
 }
