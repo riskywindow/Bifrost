@@ -48,6 +48,9 @@ pub struct EvictionRequest {
     pub now_unix_ms: i64,
 }
 
+// Manifest pins are represented by incrementing required member object
+// pin_count values, so the existing candidate filter protects them
+// deterministically under every policy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EvictionCandidate {
     pub object_id: String,

@@ -9,6 +9,11 @@ use crate::store::errors::{StoreError, StoreResult};
 use crate::store::eviction::{EvictedObject, EvictionFailure, EvictionReport, EvictionRequest};
 use crate::store::lifecycle::can_serve;
 use crate::store::locations::StoreLayout;
+use crate::store::manifest::{
+    CompletenessState, ManifestCompletenessReport, ManifestExpectedCoverage,
+    ManifestExpectedMember, ManifestInspection, ManifestListFilter, ManifestMember, ManifestRecord,
+    ManifestType, MissingManifestMember, MANIFEST_ID_PREFIX,
+};
 use crate::store::object_record::{
     ObjectCompatibility, ObjectListFilter, ObjectLocation, ObjectRecord, ObjectState,
 };
@@ -394,6 +399,223 @@ impl Store {
         catalog.clear_ttl(object_id)
     }
 
+    pub fn create_prefix_manifest(
+        &self,
+        model_hash: Option<String>,
+        tokenizer_hash: Option<String>,
+        rope_config_hash: Option<String>,
+        prefix_hash: String,
+        token_range_start: i64,
+        token_range_end: i64,
+    ) -> StoreResult<ManifestRecord> {
+        if prefix_hash.is_empty() {
+            return Err(StoreError::Manifest("prefix_hash is required".to_string()));
+        }
+        if token_range_start < 0 || token_range_end < token_range_start {
+            return Err(StoreError::Manifest(
+                "invalid manifest token range".to_string(),
+            ));
+        }
+        let now = now_unix_ms();
+        let manifest_id = compute_manifest_id(
+            ManifestType::PrefixManifest,
+            model_hash.as_deref(),
+            tokenizer_hash.as_deref(),
+            rope_config_hash.as_deref(),
+            &prefix_hash,
+            token_range_start,
+            token_range_end,
+        );
+        let manifest = ManifestRecord {
+            manifest_id,
+            manifest_type: ManifestType::PrefixManifest,
+            model_hash,
+            tokenizer_hash,
+            rope_config_hash,
+            prefix_hash,
+            token_range_start,
+            token_range_end,
+            completeness_state: CompletenessState::Unknown,
+            created_at_unix_ms: now,
+            updated_at_unix_ms: now,
+            pin_count: 0,
+        };
+        let mut catalog = self.open_catalog()?;
+        catalog.create_manifest(&manifest)?;
+        Ok(manifest)
+    }
+
+    pub fn add_manifest_member(
+        &self,
+        manifest_id: &str,
+        object_id: &str,
+        required: bool,
+    ) -> StoreResult<ManifestMember> {
+        let catalog = self.open_catalog()?;
+        let manifest = catalog
+            .get_manifest(manifest_id)?
+            .ok_or_else(|| StoreError::NotFound(manifest_id.to_string()))?;
+        let compatibility = catalog
+            .get_object_compatibility(object_id)?
+            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
+        let record = catalog
+            .get_object_record(object_id)?
+            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
+        validate_member_identity(&manifest, &compatibility)?;
+        drop(catalog);
+
+        let member = ManifestMember {
+            manifest_id: manifest_id.to_string(),
+            object_id: object_id.to_string(),
+            layer_id: compatibility.layer_id,
+            kv_block_id: compatibility.kv_block_id,
+            token_range_start: compatibility.token_range_start,
+            token_range_end: compatibility.token_range_end,
+            required,
+        };
+        let mut catalog = self.open_catalog()?;
+        catalog.add_manifest_member(&member)?;
+        if required && manifest.pin_count > 0 {
+            for _ in 0..manifest.pin_count {
+                catalog.increment_pin(&record.object_id)?;
+            }
+        }
+        Ok(member)
+    }
+
+    pub fn remove_manifest_member(&self, manifest_id: &str, object_id: &str) -> StoreResult<()> {
+        let mut catalog = self.open_catalog()?;
+        let manifest = catalog
+            .get_manifest(manifest_id)?
+            .ok_or_else(|| StoreError::NotFound(manifest_id.to_string()))?;
+        let member = catalog.remove_manifest_member(manifest_id, object_id)?;
+        if member.as_ref().is_some_and(|member| member.required) {
+            for _ in 0..manifest.pin_count {
+                catalog.decrement_pin(object_id)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn get_manifest(&self, manifest_id: &str) -> StoreResult<ManifestInspection> {
+        let catalog = self.open_catalog()?;
+        let manifest = catalog
+            .get_manifest(manifest_id)?
+            .ok_or_else(|| StoreError::NotFound(manifest_id.to_string()))?;
+        let members = catalog.list_manifest_members(manifest_id)?;
+        Ok(ManifestInspection { manifest, members })
+    }
+
+    pub fn list_manifests(&self, filter: &ManifestListFilter) -> StoreResult<Vec<ManifestRecord>> {
+        self.open_catalog()?.list_manifests(filter)
+    }
+
+    pub fn check_manifest_completeness(
+        &self,
+        manifest_id: &str,
+    ) -> StoreResult<ManifestCompletenessReport> {
+        let report = self.missing_manifest_members(manifest_id, None)?;
+        let state = if report.missing.iter().any(|missing| {
+            matches!(
+                missing.reason.as_str(),
+                "object_corrupt" | "compatibility_mismatch" | "catalog_inconsistent"
+            )
+        }) {
+            CompletenessState::Corrupt
+        } else if report.missing.is_empty() {
+            CompletenessState::Complete
+        } else {
+            CompletenessState::Incomplete
+        };
+        let report = ManifestCompletenessReport {
+            completeness_state: state,
+            ..report
+        };
+        let mut catalog = self.open_catalog()?;
+        catalog.set_manifest_completeness(manifest_id, state)?;
+        Ok(report)
+    }
+
+    pub fn missing_manifest_members(
+        &self,
+        manifest_id: &str,
+        expected: Option<ManifestExpectedCoverage>,
+    ) -> StoreResult<ManifestCompletenessReport> {
+        let catalog = self.open_catalog()?;
+        let manifest = catalog
+            .get_manifest(manifest_id)?
+            .ok_or_else(|| StoreError::NotFound(manifest_id.to_string()))?;
+        let members = catalog.list_manifest_members(manifest_id)?;
+        drop(catalog);
+
+        let mut missing = Vec::new();
+        let mut required_count = 0_i64;
+        let mut serveable_required_count = 0_i64;
+        for member in &members {
+            if !member.required {
+                continue;
+            }
+            required_count += 1;
+            match self.inspect_object(&member.object_id) {
+                Ok(inspection) => {
+                    if !inspection.servable {
+                        missing.push(missing_member(member, "object_missing"));
+                    } else if validate_member_identity(&manifest, &inspection.compatibility)
+                        .is_err()
+                    {
+                        missing.push(missing_member(member, "compatibility_mismatch"));
+                    } else {
+                        serveable_required_count += 1;
+                    }
+                }
+                Err(StoreError::NotFound(_)) => {
+                    missing.push(missing_member(member, "object_absent"));
+                }
+                Err(StoreError::Integrity(_)) => {
+                    missing.push(missing_member(member, "object_corrupt"));
+                }
+                Err(_) => {
+                    missing.push(missing_member(member, "catalog_inconsistent"));
+                }
+            }
+        }
+
+        if let Some(expected) = expected {
+            add_expected_missing(manifest_id, &members, &expected, &mut missing);
+        }
+
+        let state = if missing.is_empty() {
+            CompletenessState::Complete
+        } else {
+            CompletenessState::Incomplete
+        };
+        Ok(ManifestCompletenessReport {
+            manifest_id: manifest_id.to_string(),
+            completeness_state: state,
+            required_count,
+            serveable_required_count,
+            missing,
+        })
+    }
+
+    pub fn pin_manifest(&self, manifest_id: &str) -> StoreResult<()> {
+        let mut catalog = self.open_catalog()?;
+        let required_object_ids = catalog.increment_manifest_pin(manifest_id)?;
+        for object_id in required_object_ids {
+            catalog.increment_pin(&object_id)?;
+        }
+        Ok(())
+    }
+
+    pub fn unpin_manifest(&self, manifest_id: &str) -> StoreResult<()> {
+        let mut catalog = self.open_catalog()?;
+        let required_object_ids = catalog.decrement_manifest_pin(manifest_id)?;
+        for object_id in required_object_ids {
+            catalog.decrement_pin(&object_id)?;
+        }
+        Ok(())
+    }
+
     pub fn mark_quarantined(&self, object_id: &str, reason: &str) -> StoreResult<()> {
         let mut catalog = self.open_catalog()?;
         catalog.mark_quarantined(object_id, reason)
@@ -600,6 +822,152 @@ fn select_eviction_candidates(
         selected.push(candidate);
     }
     selected
+}
+
+fn compute_manifest_id(
+    manifest_type: ManifestType,
+    model_hash: Option<&str>,
+    tokenizer_hash: Option<&str>,
+    rope_config_hash: Option<&str>,
+    prefix_hash: &str,
+    token_range_start: i64,
+    token_range_end: i64,
+) -> String {
+    let material = format!(
+        "{}\n{}\n{}\n{}\n{}\n{}\n{}",
+        manifest_type.as_str(),
+        model_hash.unwrap_or(""),
+        tokenizer_hash.unwrap_or(""),
+        rope_config_hash.unwrap_or(""),
+        prefix_hash,
+        token_range_start,
+        token_range_end
+    );
+    format!(
+        "{}{}",
+        MANIFEST_ID_PREFIX,
+        blake3::hash(material.as_bytes()).to_hex()
+    )
+}
+
+fn validate_member_identity(
+    manifest: &ManifestRecord,
+    compatibility: &ObjectCompatibility,
+) -> StoreResult<()> {
+    if manifest.model_hash.as_deref() != compatibility.model_hash.as_deref() {
+        return Err(StoreError::Manifest(
+            "member model_hash mismatch".to_string(),
+        ));
+    }
+    if manifest.tokenizer_hash.is_some()
+        && manifest.tokenizer_hash.as_deref() != compatibility.tokenizer_hash.as_deref()
+    {
+        return Err(StoreError::Manifest(
+            "member tokenizer_hash mismatch".to_string(),
+        ));
+    }
+    if manifest.rope_config_hash.is_some()
+        && manifest.rope_config_hash.as_deref() != compatibility.rope_config_hash.as_deref()
+    {
+        return Err(StoreError::Manifest(
+            "member rope_config_hash mismatch".to_string(),
+        ));
+    }
+    if compatibility.prefix_hash.as_deref() != Some(manifest.prefix_hash.as_str()) {
+        return Err(StoreError::Manifest(
+            "member prefix_hash mismatch".to_string(),
+        ));
+    }
+    let start = compatibility
+        .token_range_start
+        .ok_or_else(|| StoreError::Manifest("member token_range_start missing".to_string()))?;
+    let end = compatibility
+        .token_range_end
+        .ok_or_else(|| StoreError::Manifest("member token_range_end missing".to_string()))?;
+    if start < manifest.token_range_start || end > manifest.token_range_end || end < start {
+        return Err(StoreError::Manifest(
+            "member token range mismatch".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn missing_member(member: &ManifestMember, reason: &str) -> MissingManifestMember {
+    MissingManifestMember {
+        manifest_id: member.manifest_id.clone(),
+        object_id: Some(member.object_id.clone()),
+        layer_id: member.layer_id,
+        kv_block_id: member.kv_block_id,
+        required: member.required,
+        reason: reason.to_string(),
+    }
+}
+
+fn add_expected_missing(
+    manifest_id: &str,
+    members: &[ManifestMember],
+    expected: &ManifestExpectedCoverage,
+    missing: &mut Vec<MissingManifestMember>,
+) {
+    if let Some(expected_members) = expected.expected_members.as_ref() {
+        for expected in expected_members {
+            if !members.iter().any(|member| {
+                member.required
+                    && member.layer_id == Some(expected.layer_id)
+                    && member.kv_block_id == Some(expected.kv_block_id)
+                    && expected
+                        .token_range_start
+                        .map(|start| member.token_range_start == Some(start))
+                        .unwrap_or(true)
+                    && expected
+                        .token_range_end
+                        .map(|end| member.token_range_end == Some(end))
+                        .unwrap_or(true)
+            }) {
+                missing.push(expected_missing_member(manifest_id, expected));
+            }
+        }
+        return;
+    }
+
+    let Some(layer_count) = expected.expected_layer_count else {
+        return;
+    };
+    let Some(block_count) = expected.expected_block_count else {
+        return;
+    };
+    for layer_id in 0..layer_count {
+        for kv_block_id in 0..block_count {
+            if !members.iter().any(|member| {
+                member.required
+                    && member.layer_id == Some(layer_id)
+                    && member.kv_block_id == Some(kv_block_id)
+            }) {
+                missing.push(MissingManifestMember {
+                    manifest_id: manifest_id.to_string(),
+                    object_id: None,
+                    layer_id: Some(layer_id),
+                    kv_block_id: Some(kv_block_id),
+                    required: true,
+                    reason: "expected_member_missing".to_string(),
+                });
+            }
+        }
+    }
+}
+
+fn expected_missing_member(
+    manifest_id: &str,
+    expected: &ManifestExpectedMember,
+) -> MissingManifestMember {
+    MissingManifestMember {
+        manifest_id: manifest_id.to_string(),
+        object_id: None,
+        layer_id: Some(expected.layer_id),
+        kv_block_id: Some(expected.kv_block_id),
+        required: true,
+        reason: "expected_member_missing".to_string(),
+    }
 }
 
 fn store_error_from_spool(error: SpoolError) -> StoreError {

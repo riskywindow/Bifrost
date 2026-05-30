@@ -3,8 +3,9 @@ use crate::transport::{
     chunk_bytes, iter_chunks, read_frame, write_frame, ChunkInfo, ChunkManifest, Frame,
     FrameHeader, FrameType, PathSpec, PathStatus, Reassembler, RoundRobinScheduler,
     StoreEvictRequest, StoreEvictResponse, StoreInspectResponse, StoreListResponse,
-    StoreObjectFilter, StoreObjectSummary, StoreOperationResponse, StoreStatsResponse,
-    StoreTtlRequest, TraceEvent, TraceSink, TransportMetrics, TransportResult, TRANSPORT_VERSION,
+    StoreManifestRequest, StoreManifestResponse, StoreObjectFilter, StoreObjectSummary,
+    StoreOperationResponse, StoreStatsResponse, StoreTtlRequest, TraceEvent, TraceSink,
+    TransportMetrics, TransportResult, TRANSPORT_VERSION,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -84,6 +85,12 @@ pub struct StoreStatsOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreEvictOutcome {
     pub report: crate::store::EvictionReport,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreManifestOutcome {
+    pub response: StoreManifestResponse,
     pub reason: String,
 }
 
@@ -1052,6 +1059,105 @@ pub async fn quarantine_object(
     .await
 }
 
+pub async fn create_prefix_manifest(
+    endpoint: &str,
+    model_hash: Option<String>,
+    tokenizer_hash: Option<String>,
+    rope_config_hash: Option<String>,
+    prefix_hash: String,
+    token_range_start: i64,
+    token_range_end: i64,
+) -> anyhow::Result<StoreManifestOutcome> {
+    manifest_request(
+        endpoint,
+        StoreManifestRequest::CreatePrefix {
+            model_hash,
+            tokenizer_hash,
+            rope_config_hash,
+            prefix_hash,
+            token_range_start,
+            token_range_end,
+        },
+    )
+    .await
+}
+
+pub async fn manifest_add_member(
+    endpoint: &str,
+    manifest_id: &str,
+    object_id: &str,
+    required: bool,
+) -> anyhow::Result<StoreManifestOutcome> {
+    manifest_request(
+        endpoint,
+        StoreManifestRequest::AddMember {
+            manifest_id: manifest_id.to_string(),
+            object_id: object_id.to_string(),
+            required,
+        },
+    )
+    .await
+}
+
+pub async fn inspect_manifest(
+    endpoint: &str,
+    manifest_id: &str,
+) -> anyhow::Result<StoreManifestOutcome> {
+    manifest_request(
+        endpoint,
+        StoreManifestRequest::Inspect {
+            manifest_id: manifest_id.to_string(),
+        },
+    )
+    .await
+}
+
+pub async fn list_manifests(
+    endpoint: &str,
+    filter: crate::store::ManifestListFilter,
+) -> anyhow::Result<StoreManifestOutcome> {
+    manifest_request(endpoint, StoreManifestRequest::List { filter }).await
+}
+
+pub async fn check_manifest(
+    endpoint: &str,
+    manifest_id: &str,
+) -> anyhow::Result<StoreManifestOutcome> {
+    manifest_request(
+        endpoint,
+        StoreManifestRequest::Check {
+            manifest_id: manifest_id.to_string(),
+        },
+    )
+    .await
+}
+
+pub async fn manifest_pin(
+    endpoint: &str,
+    manifest_id: &str,
+) -> anyhow::Result<StoreManifestOutcome> {
+    manifest_request(
+        endpoint,
+        StoreManifestRequest::Pin {
+            manifest_id: manifest_id.to_string(),
+        },
+    )
+    .await
+}
+
+pub async fn manifest_unpin(
+    endpoint: &str,
+    manifest_id: &str,
+) -> anyhow::Result<StoreManifestOutcome> {
+    manifest_request(
+        endpoint,
+        StoreManifestRequest::Unpin {
+            manifest_id: manifest_id.to_string(),
+        },
+    )
+    .await
+}
+
 pub async fn get_object(
     endpoint: &str,
     object_id: &str,
@@ -1178,6 +1284,38 @@ async fn store_json_request(
         );
     }
     Ok(result)
+}
+
+async fn manifest_request(
+    endpoint: &str,
+    request: StoreManifestRequest,
+) -> anyhow::Result<StoreManifestOutcome> {
+    let payload = serde_json::to_vec(&request)?;
+    let result = store_json_request(
+        endpoint,
+        FrameType::ManifestRequest,
+        FrameType::ManifestResult,
+        None,
+        payload,
+    )
+    .await?;
+    if result.header.status.as_deref() != Some("ok") {
+        return Ok(StoreManifestOutcome {
+            response: StoreManifestResponse {
+                status: "error".to_string(),
+                reason: result.header.reason.clone().unwrap_or_default(),
+                manifest: None,
+                manifests: Vec::new(),
+                completeness: None,
+            },
+            reason: result.header.reason.unwrap_or_default(),
+        });
+    }
+    let response: StoreManifestResponse = serde_json::from_slice(&result.payload)?;
+    Ok(StoreManifestOutcome {
+        reason: response.reason.clone(),
+        response,
+    })
 }
 
 async fn store_operation_request(

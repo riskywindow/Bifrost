@@ -61,8 +61,8 @@ Last verified: 2026-05-30
 - [x] Add object unpin.
 - [x] Add eviction dry-run.
 - [x] Add eviction apply.
-- [ ] Add manifest inspect.
-- [ ] Add manifest missing.
+- [x] Add manifest inspect.
+- [x] Add manifest missing.
 - [ ] Add fsck dry-run.
 - [ ] Add fsck repair.
 - [x] Keep outputs deterministic enough for tests.
@@ -94,16 +94,16 @@ Last verified: 2026-05-30
 
 ## Manifests
 
-- [ ] Add prefix manifest creation.
-- [ ] Add prefix manifest lookup.
-- [ ] Add ordered manifest members.
-- [ ] Add completeness checks.
-- [ ] Add missing-block queries.
-- [ ] Add optional session manifest model if needed.
-- [ ] Ensure manifests reference object IDs, not mutable file paths.
-- [ ] Ensure required evicted, missing, corrupt, quarantined, or staging
+- [x] Add prefix manifest creation.
+- [x] Add prefix manifest lookup.
+- [x] Add ordered manifest members.
+- [x] Add completeness checks.
+- [x] Add missing-block queries.
+- [x] Add optional session manifest model if needed.
+- [x] Ensure manifests reference object IDs, not mutable file paths.
+- [x] Ensure required evicted, missing, corrupt, quarantined, or staging
       members make the manifest incomplete.
-- [ ] Test deterministic member ordering.
+- [x] Test deterministic member ordering.
 
 ## fsck
 
@@ -117,7 +117,7 @@ Last verified: 2026-05-30
 - [ ] Detect missing descriptor files.
 - [ ] Detect missing payload files.
 - [ ] Detect orphan descriptor and payload files.
-- [ ] Detect manifest members that are unavailable.
+- [x] Detect manifest members that are unavailable.
 - [ ] Add dry-run report mode.
 - [ ] Add conservative repair mode.
 - [ ] Quarantine suspect objects.
@@ -157,7 +157,7 @@ Last verified: 2026-05-30
 - [x] Add Phase 3 catalog unit tests.
 - [x] Add Phase 3 store API tests.
 - [x] Add Phase 3 eviction tests.
-- [ ] Add Phase 3 manifest tests.
+- [x] Add Phase 3 manifest tests.
 - [ ] Add Phase 3 fsck tests.
 - [ ] Add ContextStorm store smoke scenario.
 - [ ] Keep all default CI tests CPU-only and local.
@@ -172,7 +172,7 @@ Last verified: 2026-05-30
 - [x] File-level integrity and catalog consistency are checked before serving.
 - [x] Pinning is durable and prevents eviction.
 - [x] Eviction is deterministic, testable, and never evicts pinned objects.
-- [ ] Prefix manifests support completeness and missing-block queries.
+- [x] Prefix manifests support completeness and missing-block queries.
 - [ ] fsck detects catalog/filesystem drift and quarantines suspect objects.
 - [ ] ContextStorm includes CPU-only deterministic store benchmarks.
 - [ ] No LMCache, language-model integration, vLLM, real KV extraction, GPU

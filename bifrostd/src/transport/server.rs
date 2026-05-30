@@ -2,9 +2,9 @@ use crate::store::{EvictionPolicy, EvictionRequest, Store, StoreError};
 use crate::transport::{
     chunk_bytes, iter_chunks, read_frame, write_frame, ChunkManifest, Frame, FrameHeader,
     FrameType, StoreEvictRequest, StoreEvictResponse, StoreInspectResponse, StoreLifecycleRequest,
-    StoreListResponse, StoreObjectFilter, StoreObjectSummary, StoreOperationResponse,
-    StoreStatsResponse, StoreTtlRequest, TraceEvent, TraceSink, TransportError, TransportMetrics,
-    TransportResult, TRANSPORT_VERSION,
+    StoreListResponse, StoreManifestRequest, StoreManifestResponse, StoreObjectFilter,
+    StoreObjectSummary, StoreOperationResponse, StoreStatsResponse, StoreTtlRequest, TraceEvent,
+    TraceSink, TransportError, TransportMetrics, TransportResult, TRANSPORT_VERSION,
 };
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
@@ -249,6 +249,10 @@ pub async fn handle_connection_observed(
                 send_evict_result(&mut stream, &store, &frame).await?;
                 return Ok(());
             }
+            FrameType::ManifestRequest => {
+                send_manifest_result(&mut stream, &store, &frame).await?;
+                return Ok(());
+            }
             _ => {
                 metrics.record_transfer_failed();
                 send_error(
@@ -261,6 +265,148 @@ pub async fn handle_connection_observed(
                 .await?;
                 return Ok(());
             }
+        }
+    }
+}
+
+async fn send_manifest_result(
+    stream: &mut TcpStream,
+    store: &Store,
+    request: &Frame,
+) -> TransportResult<()> {
+    let operation: StoreManifestRequest = serde_json::from_slice(&request.payload)?;
+    let response = match operation {
+        StoreManifestRequest::CreatePrefix {
+            model_hash,
+            tokenizer_hash,
+            rope_config_hash,
+            prefix_hash,
+            token_range_start,
+            token_range_end,
+        } => store
+            .create_prefix_manifest(
+                model_hash,
+                tokenizer_hash,
+                rope_config_hash,
+                prefix_hash,
+                token_range_start,
+                token_range_end,
+            )
+            .map(|manifest| StoreManifestResponse {
+                status: "ok".to_string(),
+                reason: String::new(),
+                manifest: Some(crate::store::ManifestInspection {
+                    manifest,
+                    members: Vec::new(),
+                }),
+                manifests: Vec::new(),
+                completeness: None,
+            }),
+        StoreManifestRequest::AddMember {
+            manifest_id,
+            object_id,
+            required,
+        } => store
+            .add_manifest_member(&manifest_id, &object_id, required)
+            .and_then(|_| store.get_manifest(&manifest_id))
+            .map(|manifest| StoreManifestResponse {
+                status: "ok".to_string(),
+                reason: String::new(),
+                manifest: Some(manifest),
+                manifests: Vec::new(),
+                completeness: None,
+            }),
+        StoreManifestRequest::RemoveMember {
+            manifest_id,
+            object_id,
+        } => store
+            .remove_manifest_member(&manifest_id, &object_id)
+            .and_then(|_| store.get_manifest(&manifest_id))
+            .map(|manifest| StoreManifestResponse {
+                status: "ok".to_string(),
+                reason: String::new(),
+                manifest: Some(manifest),
+                manifests: Vec::new(),
+                completeness: None,
+            }),
+        StoreManifestRequest::Inspect { manifest_id } => {
+            store
+                .get_manifest(&manifest_id)
+                .map(|manifest| StoreManifestResponse {
+                    status: "ok".to_string(),
+                    reason: String::new(),
+                    manifest: Some(manifest),
+                    manifests: Vec::new(),
+                    completeness: None,
+                })
+        }
+        StoreManifestRequest::List { filter } => {
+            store
+                .list_manifests(&filter)
+                .map(|manifests| StoreManifestResponse {
+                    status: "ok".to_string(),
+                    reason: String::new(),
+                    manifest: None,
+                    manifests,
+                    completeness: None,
+                })
+        }
+        StoreManifestRequest::Check { manifest_id } => store
+            .check_manifest_completeness(&manifest_id)
+            .and_then(|completeness| {
+                store
+                    .get_manifest(&manifest_id)
+                    .map(|manifest| (manifest, completeness))
+            })
+            .map(|(manifest, completeness)| StoreManifestResponse {
+                status: "ok".to_string(),
+                reason: String::new(),
+                manifest: Some(manifest),
+                manifests: Vec::new(),
+                completeness: Some(completeness),
+            }),
+        StoreManifestRequest::Pin { manifest_id } => store
+            .pin_manifest(&manifest_id)
+            .and_then(|_| store.get_manifest(&manifest_id))
+            .map(|manifest| StoreManifestResponse {
+                status: "ok".to_string(),
+                reason: String::new(),
+                manifest: Some(manifest),
+                manifests: Vec::new(),
+                completeness: None,
+            }),
+        StoreManifestRequest::Unpin { manifest_id } => store
+            .unpin_manifest(&manifest_id)
+            .and_then(|_| store.get_manifest(&manifest_id))
+            .map(|manifest| StoreManifestResponse {
+                status: "ok".to_string(),
+                reason: String::new(),
+                manifest: Some(manifest),
+                manifests: Vec::new(),
+                completeness: None,
+            }),
+    };
+
+    match response {
+        Ok(response) => {
+            let payload = serde_json::to_vec(&response)?;
+            let mut result = FrameHeader::new(
+                FrameType::ManifestResult,
+                request.header.transfer_id.clone(),
+                payload.len() as u64,
+            );
+            result.status = Some("ok".to_string());
+            result.reason = Some(String::new());
+            write_frame(stream, &result, &payload).await
+        }
+        Err(error) => {
+            send_store_result_error(
+                stream,
+                FrameType::ManifestResult,
+                &request.header.transfer_id,
+                &error.to_string(),
+            )
+            .await
         }
     }
 }

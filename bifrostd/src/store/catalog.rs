@@ -1,6 +1,9 @@
 use crate::store::errors::{StoreError, StoreResult};
 use crate::store::eviction::{EvictionCandidate, EvictionPolicy};
 use crate::store::lifecycle::{can_evict, ensure_valid_state_transition};
+use crate::store::manifest::{
+    CompletenessState, ManifestListFilter, ManifestMember, ManifestRecord,
+};
 use crate::store::migrations;
 use crate::store::object_record::{
     ObjectAccess, ObjectCompatibility, ObjectListFilter, ObjectLocation, ObjectRecord, ObjectState,
@@ -445,6 +448,285 @@ impl Catalog {
         Ok(())
     }
 
+    pub fn create_manifest(&mut self, manifest: &ManifestRecord) -> StoreResult<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "INSERT INTO prefix_manifests(
+                manifest_id, manifest_type, model_hash, tokenizer_hash, rope_config_hash,
+                prefix_hash, token_range_start, token_range_end, completeness_state,
+                created_at_unix_ms, updated_at_unix_ms, pin_count
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![
+                manifest.manifest_id,
+                manifest.manifest_type,
+                manifest.model_hash,
+                manifest.tokenizer_hash,
+                manifest.rope_config_hash,
+                manifest.prefix_hash,
+                manifest.token_range_start,
+                manifest.token_range_end,
+                manifest.completeness_state,
+                manifest.created_at_unix_ms,
+                manifest.updated_at_unix_ms,
+                manifest.pin_count,
+            ],
+        )?;
+        log_event(
+            &tx,
+            "manifest_created",
+            None,
+            Some(&manifest.manifest_id),
+            Some(json!({
+                "manifest_type": manifest.manifest_type.as_str(),
+                "prefix_hash": manifest.prefix_hash,
+            })),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn get_manifest(&self, manifest_id: &str) -> StoreResult<Option<ManifestRecord>> {
+        self.conn
+            .query_row(
+                "SELECT manifest_id, manifest_type, model_hash, tokenizer_hash,
+                        rope_config_hash, prefix_hash, token_range_start, token_range_end,
+                        completeness_state, created_at_unix_ms, updated_at_unix_ms, pin_count
+                 FROM prefix_manifests WHERE manifest_id = ?1",
+                params![manifest_id],
+                manifest_record_from_row,
+            )
+            .optional()
+            .map_err(StoreError::from)
+    }
+
+    pub fn list_manifests(&self, filter: &ManifestListFilter) -> StoreResult<Vec<ManifestRecord>> {
+        let mut sql = String::from(
+            "SELECT manifest_id, manifest_type, model_hash, tokenizer_hash,
+                    rope_config_hash, prefix_hash, token_range_start, token_range_end,
+                    completeness_state, created_at_unix_ms, updated_at_unix_ms, pin_count
+             FROM prefix_manifests",
+        );
+        let mut clauses = Vec::new();
+        let mut values = Vec::new();
+        if let Some(manifest_type) = filter.manifest_type {
+            clauses.push("manifest_type = ?");
+            values.push(Value::Text(manifest_type.as_str().to_string()));
+        }
+        if let Some(model_hash) = filter.model_hash.as_ref() {
+            clauses.push("model_hash = ?");
+            values.push(Value::Text(model_hash.clone()));
+        }
+        if let Some(prefix_hash) = filter.prefix_hash.as_ref() {
+            clauses.push("prefix_hash = ?");
+            values.push(Value::Text(prefix_hash.clone()));
+        }
+        if !clauses.is_empty() {
+            sql.push_str(" WHERE ");
+            sql.push_str(&clauses.join(" AND "));
+        }
+        sql.push_str(" ORDER BY manifest_id ASC");
+        if let Some(limit) = filter.limit {
+            sql.push_str(" LIMIT ?");
+            values.push(Value::Integer(limit));
+        }
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_from_iter(values.iter()), manifest_record_from_row)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    }
+
+    pub fn add_manifest_member(&mut self, member: &ManifestMember) -> StoreResult<()> {
+        self.get_manifest(&member.manifest_id)?
+            .ok_or_else(|| StoreError::NotFound(member.manifest_id.clone()))?;
+        self.get_object_record(&member.object_id)?
+            .ok_or_else(|| StoreError::NotFound(member.object_id.clone()))?;
+
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "INSERT OR REPLACE INTO manifest_members(
+                manifest_id, object_id, layer_id, kv_block_id, token_range_start,
+                token_range_end, required
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                member.manifest_id,
+                member.object_id,
+                member.layer_id,
+                member.kv_block_id,
+                member.token_range_start,
+                member.token_range_end,
+                if member.required { 1 } else { 0 },
+            ],
+        )?;
+        tx.execute(
+            "UPDATE prefix_manifests
+             SET completeness_state = ?2, updated_at_unix_ms = ?3
+             WHERE manifest_id = ?1",
+            params![
+                member.manifest_id,
+                CompletenessState::Unknown,
+                now_unix_ms()
+            ],
+        )?;
+        log_event(
+            &tx,
+            "manifest_member_added",
+            Some(&member.object_id),
+            Some(&member.manifest_id),
+            Some(json!({
+                "required": member.required,
+                "layer_id": member.layer_id,
+                "kv_block_id": member.kv_block_id,
+            })),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn remove_manifest_member(
+        &mut self,
+        manifest_id: &str,
+        object_id: &str,
+    ) -> StoreResult<Option<ManifestMember>> {
+        let member = self.get_manifest_member(manifest_id, object_id)?;
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "DELETE FROM manifest_members WHERE manifest_id = ?1 AND object_id = ?2",
+            params![manifest_id, object_id],
+        )?;
+        tx.execute(
+            "UPDATE prefix_manifests
+             SET completeness_state = ?2, updated_at_unix_ms = ?3
+             WHERE manifest_id = ?1",
+            params![manifest_id, CompletenessState::Unknown, now_unix_ms()],
+        )?;
+        log_event(
+            &tx,
+            "manifest_member_removed",
+            Some(object_id),
+            Some(manifest_id),
+            Some(json!({})),
+        )?;
+        tx.commit()?;
+        Ok(member)
+    }
+
+    pub fn get_manifest_member(
+        &self,
+        manifest_id: &str,
+        object_id: &str,
+    ) -> StoreResult<Option<ManifestMember>> {
+        self.conn
+            .query_row(
+                "SELECT manifest_id, object_id, layer_id, kv_block_id, token_range_start,
+                        token_range_end, required
+                 FROM manifest_members WHERE manifest_id = ?1 AND object_id = ?2",
+                params![manifest_id, object_id],
+                manifest_member_from_row,
+            )
+            .optional()
+            .map_err(StoreError::from)
+    }
+
+    pub fn list_manifest_members(&self, manifest_id: &str) -> StoreResult<Vec<ManifestMember>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT manifest_id, object_id, layer_id, kv_block_id, token_range_start,
+                    token_range_end, required
+             FROM manifest_members WHERE manifest_id = ?1
+             ORDER BY layer_id IS NULL ASC, layer_id ASC,
+                      kv_block_id IS NULL ASC, kv_block_id ASC,
+                      object_id ASC",
+        )?;
+        let rows = stmt.query_map(params![manifest_id], manifest_member_from_row)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    }
+
+    pub fn set_manifest_completeness(
+        &mut self,
+        manifest_id: &str,
+        state: CompletenessState,
+    ) -> StoreResult<()> {
+        let tx = self.conn.transaction()?;
+        let changed = tx.execute(
+            "UPDATE prefix_manifests
+             SET completeness_state = ?2, updated_at_unix_ms = ?3
+             WHERE manifest_id = ?1",
+            params![manifest_id, state, now_unix_ms()],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::NotFound(manifest_id.to_string()));
+        }
+        log_event(
+            &tx,
+            "manifest_completeness_checked",
+            None,
+            Some(manifest_id),
+            Some(json!({"completeness_state": state.as_str()})),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn increment_manifest_pin(&mut self, manifest_id: &str) -> StoreResult<Vec<String>> {
+        self.get_manifest(manifest_id)?
+            .ok_or_else(|| StoreError::NotFound(manifest_id.to_string()))?;
+        let members = self.list_manifest_members(manifest_id)?;
+        let required_object_ids = members
+            .into_iter()
+            .filter(|member| member.required)
+            .map(|member| member.object_id)
+            .collect::<Vec<_>>();
+
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "UPDATE prefix_manifests
+             SET pin_count = pin_count + 1, updated_at_unix_ms = ?2
+             WHERE manifest_id = ?1",
+            params![manifest_id, now_unix_ms()],
+        )?;
+        log_event(
+            &tx,
+            "manifest_pinned",
+            None,
+            Some(manifest_id),
+            Some(json!({"required_member_count": required_object_ids.len()})),
+        )?;
+        tx.commit()?;
+        Ok(required_object_ids)
+    }
+
+    pub fn decrement_manifest_pin(&mut self, manifest_id: &str) -> StoreResult<Vec<String>> {
+        let manifest = self
+            .get_manifest(manifest_id)?
+            .ok_or_else(|| StoreError::NotFound(manifest_id.to_string()))?;
+        if manifest.pin_count == 0 {
+            return Ok(Vec::new());
+        }
+        let members = self.list_manifest_members(manifest_id)?;
+        let required_object_ids = members
+            .into_iter()
+            .filter(|member| member.required)
+            .map(|member| member.object_id)
+            .collect::<Vec<_>>();
+
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "UPDATE prefix_manifests
+             SET pin_count = pin_count - 1, updated_at_unix_ms = ?2
+             WHERE manifest_id = ?1 AND pin_count > 0",
+            params![manifest_id, now_unix_ms()],
+        )?;
+        log_event(
+            &tx,
+            "manifest_unpinned",
+            None,
+            Some(manifest_id),
+            Some(json!({"required_member_count": required_object_ids.len()})),
+        )?;
+        tx.commit()?;
+        Ok(required_object_ids)
+    }
+
     pub fn eviction_candidates(
         &self,
         policy: EvictionPolicy,
@@ -863,6 +1145,36 @@ fn store_event_from_row(row: &Row<'_>) -> rusqlite::Result<StoreEvent> {
         object_id: row.get("object_id")?,
         manifest_id: row.get("manifest_id")?,
         details_json: row.get("details_json")?,
+    })
+}
+
+fn manifest_record_from_row(row: &Row<'_>) -> rusqlite::Result<ManifestRecord> {
+    Ok(ManifestRecord {
+        manifest_id: row.get("manifest_id")?,
+        manifest_type: row.get("manifest_type")?,
+        model_hash: row.get("model_hash")?,
+        tokenizer_hash: row.get("tokenizer_hash")?,
+        rope_config_hash: row.get("rope_config_hash")?,
+        prefix_hash: row.get("prefix_hash")?,
+        token_range_start: row.get("token_range_start")?,
+        token_range_end: row.get("token_range_end")?,
+        completeness_state: row.get("completeness_state")?,
+        created_at_unix_ms: row.get("created_at_unix_ms")?,
+        updated_at_unix_ms: row.get("updated_at_unix_ms")?,
+        pin_count: row.get("pin_count")?,
+    })
+}
+
+fn manifest_member_from_row(row: &Row<'_>) -> rusqlite::Result<ManifestMember> {
+    let required: i64 = row.get("required")?;
+    Ok(ManifestMember {
+        manifest_id: row.get("manifest_id")?,
+        object_id: row.get("object_id")?,
+        layer_id: row.get("layer_id")?,
+        kv_block_id: row.get("kv_block_id")?,
+        token_range_start: row.get("token_range_start")?,
+        token_range_end: row.get("token_range_end")?,
+        required: required != 0,
     })
 }
 

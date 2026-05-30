@@ -4,6 +4,7 @@ pub mod errors;
 pub mod eviction;
 pub mod lifecycle;
 pub mod locations;
+pub mod manifest;
 pub mod migrations;
 pub mod object_record;
 pub mod schema;
@@ -19,6 +20,11 @@ pub use eviction::{
 };
 pub use lifecycle::{can_evict, can_serve, valid_state_transition};
 pub use locations::{StoreLayout, StorePaths};
+pub use manifest::{
+    CompletenessState, ManifestCompletenessReport, ManifestExpectedCoverage,
+    ManifestExpectedMember, ManifestInspection, ManifestListFilter, ManifestMember, ManifestRecord,
+    ManifestType, MissingManifestMember, MANIFEST_ID_PREFIX,
+};
 pub use object_record::{
     ObjectAccess, ObjectCompatibility, ObjectListFilter, ObjectLocation, ObjectRecord, ObjectState,
     StoreEvent,

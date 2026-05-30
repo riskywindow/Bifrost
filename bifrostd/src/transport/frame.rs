@@ -54,6 +54,8 @@ pub enum FrameType {
     LifecycleResult,
     EvictRequest,
     EvictResult,
+    ManifestRequest,
+    ManifestResult,
     Ping,
     Pong,
     Error,
@@ -242,7 +244,7 @@ impl FrameHeader {
             FrameType::TtlRequest | FrameType::LifecycleRequest => {
                 require_object_id(self)?;
             }
-            FrameType::EvictRequest => {}
+            FrameType::EvictRequest | FrameType::ManifestRequest => {}
             FrameType::ListResult
             | FrameType::InspectResult
             | FrameType::QueryResult
@@ -251,7 +253,8 @@ impl FrameHeader {
             | FrameType::UnpinResult
             | FrameType::TtlResult
             | FrameType::LifecycleResult
-            | FrameType::EvictResult => {
+            | FrameType::EvictResult
+            | FrameType::ManifestResult => {
                 require_non_empty(self.status.as_deref(), "status", self.frame_type)?;
                 let status = self.status.as_deref().unwrap_or_default();
                 if status != "ok"

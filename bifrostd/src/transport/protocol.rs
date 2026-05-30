@@ -1,5 +1,6 @@
 use crate::store::{
-    EvictionReport, ObjectCompatibility, ObjectInspection, ObjectListFilter, ObjectRecord,
+    EvictionReport, ManifestCompletenessReport, ManifestInspection, ManifestListFilter,
+    ManifestRecord, ObjectCompatibility, ObjectInspection, ObjectListFilter, ObjectRecord,
     ObjectState, StoreStats,
 };
 use crate::transport::frame::TRANSPORT_VERSION;
@@ -259,4 +260,74 @@ pub struct StoreEvictRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoreEvictResponse {
     pub report: EvictionReport,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "operation", rename_all = "snake_case")]
+pub enum StoreManifestRequest {
+    CreatePrefix {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model_hash: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tokenizer_hash: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rope_config_hash: Option<String>,
+        prefix_hash: String,
+        token_range_start: i64,
+        token_range_end: i64,
+    },
+    AddMember {
+        manifest_id: String,
+        object_id: String,
+        #[serde(default = "default_required")]
+        required: bool,
+    },
+    RemoveMember {
+        manifest_id: String,
+        object_id: String,
+    },
+    Inspect {
+        manifest_id: String,
+    },
+    List {
+        #[serde(default)]
+        filter: ManifestListFilter,
+    },
+    Check {
+        manifest_id: String,
+    },
+    Pin {
+        manifest_id: String,
+    },
+    Unpin {
+        manifest_id: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoreManifestResponse {
+    pub status: String,
+    pub reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manifest: Option<ManifestInspection>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub manifests: Vec<ManifestRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completeness: Option<ManifestCompletenessReport>,
+}
+
+impl StoreManifestResponse {
+    pub fn ok() -> Self {
+        Self {
+            status: "ok".to_string(),
+            reason: String::new(),
+            manifest: None,
+            manifests: Vec::new(),
+            completeness: None,
+        }
+    }
+}
+
+fn default_required() -> bool {
+    true
 }

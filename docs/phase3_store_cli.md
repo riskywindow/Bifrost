@@ -29,6 +29,8 @@ The store API uses these frame types:
 - `lifecycle_result`
 - `evict_request`
 - `evict_result`
+- `manifest_request`
+- `manifest_result`
 
 List and query requests carry a JSON `StoreObjectFilter` payload. Inspect and
 stats requests have empty payloads. Result payloads are JSON and are stable for
@@ -57,6 +59,18 @@ Evict requests carry a JSON payload and no object ID:
 
 Valid policies are `lru`, `size-aware-lru`, and `ttl-expired`.
 
+Manifest requests carry a JSON payload tagged by operation:
+
+```json
+{ "operation": "create_prefix", "model_hash": "blake3:...", "prefix_hash": "blake3:...", "token_range_start": 0, "token_range_end": 128 }
+{ "operation": "add_member", "manifest_id": "bifrost://manifest/blake3/...", "object_id": "bifrost://object/blake3/...", "required": true }
+{ "operation": "inspect", "manifest_id": "bifrost://manifest/blake3/..." }
+{ "operation": "list", "filter": { "prefix_hash": "blake3:..." } }
+{ "operation": "check", "manifest_id": "bifrost://manifest/blake3/..." }
+{ "operation": "pin", "manifest_id": "bifrost://manifest/blake3/..." }
+{ "operation": "unpin", "manifest_id": "bifrost://manifest/blake3/..." }
+```
+
 List, query, and inspect results only report servable objects. Staging,
 missing, corrupt, quarantined, evicting, and catalog/filesystem-inconsistent
 objects do not satisfy these availability APIs.
@@ -74,6 +88,13 @@ bifrost-store ttl set --endpoint HOST:PORT --object-id OBJECT_ID --expires-at-un
 bifrost-store ttl clear --endpoint HOST:PORT --object-id OBJECT_ID
 bifrost-store quarantine --endpoint HOST:PORT --object-id OBJECT_ID --reason TEXT
 bifrost-store evict --endpoint HOST:PORT --policy lru|size-aware-lru|ttl-expired [--target-bytes N] [--max-objects N] [--dry-run] [--json]
+bifrost-store manifest create-prefix --endpoint HOST:PORT --prefix-hash HASH --model-hash HASH --token-range-start N --token-range-end N [--tokenizer-hash HASH] [--rope-config-hash HASH] [--json]
+bifrost-store manifest add-member --endpoint HOST:PORT --manifest-id ID --object-id OBJECT_ID [--required true|false]
+bifrost-store manifest inspect --endpoint HOST:PORT --manifest-id ID [--json]
+bifrost-store manifest list --endpoint HOST:PORT [--prefix-hash HASH] [--json]
+bifrost-store manifest check --endpoint HOST:PORT --manifest-id ID [--json]
+bifrost-store manifest pin --endpoint HOST:PORT --manifest-id ID
+bifrost-store manifest unpin --endpoint HOST:PORT --manifest-id ID
 ```
 
 Human-readable object output includes:
@@ -193,6 +214,47 @@ pinned count, skipped unsafe count, and final reason:
 }
 ```
 
+JSON manifest output uses a common envelope:
+
+```json
+{
+  "status": "ok",
+  "reason": "",
+  "manifest": {
+    "manifest": {
+      "manifest_id": "bifrost://manifest/blake3/...",
+      "manifest_type": "prefix_manifest",
+      "model_hash": "blake3:...",
+      "prefix_hash": "blake3:...",
+      "token_range_start": 0,
+      "token_range_end": 128,
+      "completeness_state": "complete",
+      "created_at_unix_ms": 1779900000000,
+      "updated_at_unix_ms": 1779900000000,
+      "pin_count": 0
+    },
+    "members": [
+      {
+        "manifest_id": "bifrost://manifest/blake3/...",
+        "object_id": "bifrost://object/blake3/...",
+        "layer_id": 0,
+        "kv_block_id": 0,
+        "token_range_start": 0,
+        "token_range_end": 128,
+        "required": true
+      }
+    ]
+  },
+  "completeness": {
+    "manifest_id": "bifrost://manifest/blake3/...",
+    "completeness_state": "complete",
+    "required_count": 1,
+    "serveable_required_count": 1,
+    "missing": []
+  }
+}
+```
+
 ## Exit codes
 
 - `0`: command succeeded.
@@ -206,4 +268,8 @@ every eviction policy. Quarantined objects are not servable through HAS, GET,
 list, query, or inspect availability APIs and are not normal eviction
 candidates.
 
-Manifests and fsck are intentionally not exposed by this CLI yet.
+Manifest pinning increments the manifest `pin_count` and increments `pin_count`
+on required member objects, so existing deterministic eviction candidate
+selection automatically skips those members. Unpinning reverses that protection.
+
+fsck is intentionally not exposed by this CLI yet.
