@@ -2,9 +2,9 @@ use crate::cache::validate_object;
 use crate::transport::{
     chunk_bytes, iter_chunks, read_frame, write_frame, ChunkInfo, ChunkManifest, Frame,
     FrameHeader, FrameType, PathSpec, PathStatus, Reassembler, RoundRobinScheduler,
-    StoreInspectResponse, StoreListResponse, StoreObjectFilter, StoreObjectSummary,
-    StoreOperationResponse, StoreStatsResponse, StoreTtlRequest, TraceEvent, TraceSink,
-    TransportMetrics, TransportResult, TRANSPORT_VERSION,
+    StoreEvictRequest, StoreEvictResponse, StoreInspectResponse, StoreListResponse,
+    StoreObjectFilter, StoreObjectSummary, StoreOperationResponse, StoreStatsResponse,
+    StoreTtlRequest, TraceEvent, TraceSink, TransportMetrics, TransportResult, TRANSPORT_VERSION,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -78,6 +78,12 @@ pub struct StoreInspectOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreStatsOutcome {
     pub stats: StoreStatsResponse,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreEvictOutcome {
+    pub report: crate::store::EvictionReport,
     pub reason: String,
 }
 
@@ -933,6 +939,47 @@ pub async fn store_stats(endpoint: &str) -> anyhow::Result<StoreStatsOutcome> {
     }
     Ok(StoreStatsOutcome {
         stats: serde_json::from_slice(&result.payload)?,
+        reason: result.header.reason.unwrap_or_default(),
+    })
+}
+
+pub async fn evict_store(
+    endpoint: &str,
+    request: StoreEvictRequest,
+) -> anyhow::Result<StoreEvictOutcome> {
+    let payload = serde_json::to_vec(&request)?;
+    let result = store_json_request(
+        endpoint,
+        FrameType::EvictRequest,
+        FrameType::EvictResult,
+        None,
+        payload,
+    )
+    .await?;
+    if result.header.status.as_deref() != Some("ok") {
+        return Ok(StoreEvictOutcome {
+            report: crate::store::EvictionReport::empty(
+                &crate::store::EvictionRequest {
+                    policy: request
+                        .policy
+                        .parse()
+                        .unwrap_or(crate::store::EvictionPolicy::Lru),
+                    target_bytes: request.target_bytes,
+                    max_objects: request.max_objects,
+                    dry_run: request.dry_run,
+                    now_unix_ms: request.now_unix_ms.unwrap_or_default(),
+                },
+                0,
+            ),
+            reason: result
+                .header
+                .reason
+                .unwrap_or_else(|| "store_evict_failed".to_string()),
+        });
+    }
+    let response: StoreEvictResponse = serde_json::from_slice(&result.payload)?;
+    Ok(StoreEvictOutcome {
+        report: response.report,
         reason: result.header.reason.unwrap_or_default(),
     })
 }

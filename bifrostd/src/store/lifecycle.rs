@@ -12,11 +12,13 @@ pub fn valid_state_transition(from: ObjectState, to: ObjectState) -> bool {
             | (ObjectState::Staging, ObjectState::Quarantined)
             | (ObjectState::Committed, ObjectState::Verified)
             | (ObjectState::Committed, ObjectState::Pinned)
+            | (ObjectState::Committed, ObjectState::Evicting)
             | (ObjectState::Committed, ObjectState::Missing)
             | (ObjectState::Committed, ObjectState::Corrupt)
             | (ObjectState::Committed, ObjectState::Quarantined)
             | (ObjectState::Verified, ObjectState::Pinned)
             | (ObjectState::Verified, ObjectState::Evictable)
+            | (ObjectState::Verified, ObjectState::Evicting)
             | (ObjectState::Verified, ObjectState::Missing)
             | (ObjectState::Verified, ObjectState::Corrupt)
             | (ObjectState::Verified, ObjectState::Quarantined)
@@ -28,6 +30,7 @@ pub fn valid_state_transition(from: ObjectState, to: ObjectState) -> bool {
             | (ObjectState::Evictable, ObjectState::Corrupt)
             | (ObjectState::Evictable, ObjectState::Quarantined)
             | (ObjectState::Evicting, ObjectState::Evicted)
+            | (ObjectState::Evicting, ObjectState::Missing)
             | (ObjectState::Evicting, ObjectState::Quarantined)
             | (ObjectState::Missing, ObjectState::Quarantined)
             | (ObjectState::Missing, ObjectState::Verified)
@@ -60,5 +63,9 @@ pub fn can_serve(state: ObjectState, pin_count: i64) -> bool {
 }
 
 pub fn can_evict(state: ObjectState, pin_count: i64) -> bool {
-    pin_count == 0 && matches!(state, ObjectState::Verified | ObjectState::Evictable)
+    pin_count == 0
+        && matches!(
+            state,
+            ObjectState::Committed | ObjectState::Verified | ObjectState::Evictable
+        )
 }

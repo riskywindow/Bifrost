@@ -1,5 +1,6 @@
 use crate::store::{
-    ObjectCompatibility, ObjectInspection, ObjectListFilter, ObjectRecord, ObjectState, StoreStats,
+    EvictionReport, ObjectCompatibility, ObjectInspection, ObjectListFilter, ObjectRecord,
+    ObjectState, StoreStats,
 };
 use crate::transport::frame::TRANSPORT_VERSION;
 use serde::{Deserialize, Serialize};
@@ -240,4 +241,22 @@ pub enum StoreTtlRequest {
 pub enum StoreLifecycleRequest {
     Quarantine { reason: String },
     MarkVerified,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoreEvictRequest {
+    pub policy: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_bytes: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_objects: Option<usize>,
+    #[serde(default)]
+    pub dry_run: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub now_unix_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoreEvictResponse {
+    pub report: EvictionReport,
 }

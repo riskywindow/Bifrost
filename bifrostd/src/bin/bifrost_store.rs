@@ -1,7 +1,7 @@
 use bifrostd::transport::{
-    clear_ttl, inspect_store_object, list_store_objects, pin_object, quarantine_object,
-    query_store_objects, set_ttl, store_stats, unpin_object, StoreObjectFilter, StoreObjectSummary,
-    StoreOperationOutcome,
+    clear_ttl, evict_store, inspect_store_object, list_store_objects, pin_object,
+    quarantine_object, query_store_objects, set_ttl, store_stats, unpin_object, StoreEvictRequest,
+    StoreObjectFilter, StoreObjectSummary, StoreOperationOutcome,
 };
 use clap::{Parser, Subcommand};
 use serde_json::json;
@@ -59,6 +59,20 @@ enum Command {
     Stats {
         #[arg(long, default_value = "127.0.0.1:7420")]
         endpoint: String,
+        #[arg(long)]
+        json: bool,
+    },
+    Evict {
+        #[arg(long, default_value = "127.0.0.1:7420")]
+        endpoint: String,
+        #[arg(long)]
+        policy: String,
+        #[arg(long)]
+        target_bytes: Option<i64>,
+        #[arg(long)]
+        max_objects: Option<usize>,
+        #[arg(long)]
+        dry_run: bool,
         #[arg(long)]
         json: bool,
     },
@@ -162,6 +176,27 @@ async fn main() {
             .await
         }
         Command::Stats { endpoint, json } => run_stats(&endpoint, json).await,
+        Command::Evict {
+            endpoint,
+            policy,
+            target_bytes,
+            max_objects,
+            dry_run,
+            json,
+        } => {
+            run_evict(
+                &endpoint,
+                StoreEvictRequest {
+                    policy,
+                    target_bytes,
+                    max_objects,
+                    dry_run,
+                    now_unix_ms: None,
+                },
+                json,
+            )
+            .await
+        }
         Command::Pin {
             endpoint,
             object_id,
@@ -278,6 +313,53 @@ async fn run_stats(endpoint: &str, as_json: bool) -> anyhow::Result<i32> {
         );
     }
     Ok(0)
+}
+
+async fn run_evict(
+    endpoint: &str,
+    request: StoreEvictRequest,
+    as_json: bool,
+) -> anyhow::Result<i32> {
+    let outcome = evict_store(endpoint, request).await?;
+    if !outcome.reason.is_empty() {
+        anyhow::bail!(outcome.reason);
+    }
+    if as_json {
+        println!("{}", serde_json::to_string(&outcome.report)?);
+    } else {
+        println!(
+            "policy={} dry_run={} candidates={} planned_bytes={} evicted={} freed_bytes={} final_bytes_on_disk={} reason={}",
+            outcome.report.policy,
+            outcome.report.dry_run,
+            outcome.report.candidates.len(),
+            outcome.report.planned_bytes,
+            outcome.report.evicted.len(),
+            outcome.report.freed_bytes,
+            outcome.report.final_bytes_on_disk,
+            outcome.report.reason
+        );
+        for candidate in &outcome.report.candidates {
+            println!(
+                "candidate object_id={} bytes_on_disk={} last_accessed_unix_ms={} ttl_expires_at_unix_ms={} eviction_score={}",
+                candidate.object_id,
+                candidate.bytes_on_disk,
+                candidate
+                    .last_accessed_unix_ms
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "-".to_string()),
+                candidate
+                    .ttl_expires_at_unix_ms
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "-".to_string()),
+                candidate.eviction_score
+            );
+        }
+    }
+    Ok(if outcome.report.failures.is_empty() {
+        0
+    } else {
+        1
+    })
 }
 
 fn run_operation(outcome: StoreOperationOutcome) -> anyhow::Result<i32> {

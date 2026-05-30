@@ -27,6 +27,8 @@ The store API uses these frame types:
 - `ttl_result`
 - `lifecycle_request`
 - `lifecycle_result`
+- `evict_request`
+- `evict_result`
 
 List and query requests carry a JSON `StoreObjectFilter` payload. Inspect and
 stats requests have empty payloads. Result payloads are JSON and are stable for
@@ -41,6 +43,19 @@ JSON payload:
 { "operation": "clear" }
 { "operation": "quarantine", "reason": "operator_requested" }
 ```
+
+Evict requests carry a JSON payload and no object ID:
+
+```json
+{
+  "policy": "lru",
+  "target_bytes": 1000000000,
+  "max_objects": 100,
+  "dry_run": true
+}
+```
+
+Valid policies are `lru`, `size-aware-lru`, and `ttl-expired`.
 
 List, query, and inspect results only report servable objects. Staging,
 missing, corrupt, quarantined, evicting, and catalog/filesystem-inconsistent
@@ -58,6 +73,7 @@ bifrost-store unpin --endpoint HOST:PORT --object-id OBJECT_ID
 bifrost-store ttl set --endpoint HOST:PORT --object-id OBJECT_ID --expires-at-unix-ms N
 bifrost-store ttl clear --endpoint HOST:PORT --object-id OBJECT_ID
 bifrost-store quarantine --endpoint HOST:PORT --object-id OBJECT_ID --reason TEXT
+bifrost-store evict --endpoint HOST:PORT --policy lru|size-aware-lru|ttl-expired [--target-bytes N] [--max-objects N] [--dry-run] [--json]
 ```
 
 Human-readable object output includes:
@@ -144,6 +160,39 @@ JSON stats output includes catalog counts and byte totals:
 }
 ```
 
+JSON eviction output includes the policy, dry-run flag, target, starting and
+final bytes, deterministic candidates, applied evictions, failures, protected
+pinned count, skipped unsafe count, and final reason:
+
+```json
+{
+  "policy": "lru",
+  "dry_run": true,
+  "target_bytes": 1000000000,
+  "starting_bytes_on_disk": 1500000000,
+  "final_bytes_on_disk": 1500000000,
+  "planned_bytes": 600000000,
+  "freed_bytes": 0,
+  "candidates": [
+    {
+      "object_id": "bifrost://object/blake3/...",
+      "state": "verified",
+      "bytes_on_disk": 600000000,
+      "byte_length": 599000000,
+      "last_accessed_unix_ms": 1779900000000,
+      "ttl_expires_at_unix_ms": null,
+      "eviction_score": 0
+    }
+  ],
+  "evicted": [],
+  "failures": [],
+  "protected_pinned_count": 0,
+  "skipped_unsafe_count": 0,
+  "target_reached": true,
+  "reason": "dry_run"
+}
+```
+
 ## Exit codes
 
 - `0`: command succeeded.
@@ -153,7 +202,8 @@ JSON stats output includes catalog counts and byte totals:
 
 Pinning increments `pin_count`; unpinning decrements it and remains at zero if
 the object is already unpinned. Objects with `pin_count > 0` are protected from
-future eviction policies. Quarantined objects are not servable through HAS, GET,
-list, query, or inspect availability APIs.
+every eviction policy. Quarantined objects are not servable through HAS, GET,
+list, query, or inspect availability APIs and are not normal eviction
+candidates.
 
-Eviction, manifests, and fsck are intentionally not exposed by this CLI yet.
+Manifests and fsck are intentionally not exposed by this CLI yet.

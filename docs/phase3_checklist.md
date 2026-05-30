@@ -48,7 +48,7 @@ Last verified: 2026-05-30
 - [x] Add local store lookup endpoint or command surface.
 - [x] Add store stats endpoint or command surface.
 - [x] Add pin and unpin endpoint or command surface.
-- [ ] Add eviction dry-run and apply endpoint or command surface.
+- [x] Add eviction dry-run and apply endpoint or command surface.
 - [ ] Add fsck dry-run and repair endpoint or command surface.
 - [x] Keep protocol errors separate from store errors.
 
@@ -59,8 +59,8 @@ Last verified: 2026-05-30
 - [x] Add object stats.
 - [x] Add object pin.
 - [x] Add object unpin.
-- [ ] Add eviction dry-run.
-- [ ] Add eviction apply.
+- [x] Add eviction dry-run.
+- [x] Add eviction apply.
 - [ ] Add manifest inspect.
 - [ ] Add manifest missing.
 - [ ] Add fsck dry-run.
@@ -79,18 +79,18 @@ Last verified: 2026-05-30
 
 ## Eviction
 
-- [ ] Implement LRU dry-run.
-- [ ] Implement LRU apply.
-- [ ] Implement size-aware LRU dry-run.
-- [ ] Implement size-aware LRU apply.
-- [ ] Implement TTL expiration dry-run.
-- [ ] Implement TTL expiration apply.
-- [ ] Implement target-byte eviction.
-- [ ] Use fixed clock inputs in tests.
-- [ ] Break ties by object ID.
-- [ ] Skip and report pinned objects.
-- [ ] Record eviction events.
-- [ ] Test partial deletion and catalog update failures.
+- [x] Implement LRU dry-run.
+- [x] Implement LRU apply.
+- [x] Implement size-aware LRU dry-run.
+- [x] Implement size-aware LRU apply.
+- [x] Implement TTL expiration dry-run.
+- [x] Implement TTL expiration apply.
+- [x] Implement target-byte eviction.
+- [x] Use fixed clock inputs in tests.
+- [x] Break ties by object ID.
+- [x] Skip and report pinned objects.
+- [x] Record eviction events.
+- [x] Test partial deletion and catalog update failures.
 
 ## Manifests
 
@@ -156,7 +156,7 @@ Last verified: 2026-05-30
       transport tests green.
 - [x] Add Phase 3 catalog unit tests.
 - [x] Add Phase 3 store API tests.
-- [ ] Add Phase 3 eviction tests.
+- [x] Add Phase 3 eviction tests.
 - [ ] Add Phase 3 manifest tests.
 - [ ] Add Phase 3 fsck tests.
 - [ ] Add ContextStorm store smoke scenario.
@@ -171,7 +171,7 @@ Last verified: 2026-05-30
 - [x] Staging objects are never listed as available cache hits.
 - [x] File-level integrity and catalog consistency are checked before serving.
 - [x] Pinning is durable and prevents eviction.
-- [ ] Eviction is deterministic, testable, and never evicts pinned objects.
+- [x] Eviction is deterministic, testable, and never evicts pinned objects.
 - [ ] Prefix manifests support completeness and missing-block queries.
 - [ ] fsck detects catalog/filesystem drift and quarantines suspect objects.
 - [ ] ContextStorm includes CPU-only deterministic store benchmarks.

@@ -1,13 +1,15 @@
-use crate::store::{Store, StoreError};
+use crate::store::{EvictionPolicy, EvictionRequest, Store, StoreError};
 use crate::transport::{
     chunk_bytes, iter_chunks, read_frame, write_frame, ChunkManifest, Frame, FrameHeader,
-    FrameType, StoreInspectResponse, StoreLifecycleRequest, StoreListResponse, StoreObjectFilter,
-    StoreObjectSummary, StoreOperationResponse, StoreStatsResponse, StoreTtlRequest, TraceEvent,
-    TraceSink, TransportError, TransportMetrics, TransportResult, TRANSPORT_VERSION,
+    FrameType, StoreEvictRequest, StoreEvictResponse, StoreInspectResponse, StoreLifecycleRequest,
+    StoreListResponse, StoreObjectFilter, StoreObjectSummary, StoreOperationResponse,
+    StoreStatsResponse, StoreTtlRequest, TraceEvent, TraceSink, TransportError, TransportMetrics,
+    TransportResult, TRANSPORT_VERSION,
 };
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::net::{TcpListener, TcpStream};
 
 #[derive(Debug, Clone)]
@@ -243,6 +245,10 @@ pub async fn handle_connection_observed(
                 send_lifecycle_result(&mut stream, &store, &frame).await?;
                 return Ok(());
             }
+            FrameType::EvictRequest => {
+                send_evict_result(&mut stream, &store, &frame).await?;
+                return Ok(());
+            }
             _ => {
                 metrics.record_transfer_failed();
                 send_error(
@@ -255,6 +261,55 @@ pub async fn handle_connection_observed(
                 .await?;
                 return Ok(());
             }
+        }
+    }
+}
+
+async fn send_evict_result(
+    stream: &mut TcpStream,
+    store: &Store,
+    request: &Frame,
+) -> TransportResult<()> {
+    let operation: StoreEvictRequest = serde_json::from_slice(&request.payload)?;
+    let policy = match operation.policy.parse::<EvictionPolicy>() {
+        Ok(policy) => policy,
+        Err(error) => {
+            return send_store_result_error(
+                stream,
+                FrameType::EvictResult,
+                &request.header.transfer_id,
+                &error,
+            )
+            .await;
+        }
+    };
+    let eviction_request = EvictionRequest {
+        policy,
+        target_bytes: operation.target_bytes,
+        max_objects: operation.max_objects,
+        dry_run: operation.dry_run,
+        now_unix_ms: operation.now_unix_ms.unwrap_or_else(now_unix_ms),
+    };
+    match store.evict(eviction_request) {
+        Ok(report) => {
+            let payload = serde_json::to_vec(&StoreEvictResponse { report })?;
+            let mut result = FrameHeader::new(
+                FrameType::EvictResult,
+                request.header.transfer_id.clone(),
+                payload.len() as u64,
+            );
+            result.status = Some("ok".to_string());
+            result.reason = Some(String::new());
+            write_frame(stream, &result, &payload).await
+        }
+        Err(error) => {
+            send_store_result_error(
+                stream,
+                FrameType::EvictResult,
+                &request.header.transfer_id,
+                &error.to_string(),
+            )
+            .await
         }
     }
 }
@@ -860,4 +915,11 @@ fn emit_trace(trace: &Option<TraceSink>, event: TraceEvent) {
             eprintln!("bifrost-daemon: trace write failed: {error}");
         }
     }
+}
+
+fn now_unix_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock is before unix epoch")
+        .as_millis() as i64
 }

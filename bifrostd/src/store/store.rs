@@ -6,6 +6,7 @@ use crate::spool::staging;
 use crate::spool::{Spool, SpoolError};
 use crate::store::disk_tier::{DiskTier, StoredObject};
 use crate::store::errors::{StoreError, StoreResult};
+use crate::store::eviction::{EvictedObject, EvictionFailure, EvictionReport, EvictionRequest};
 use crate::store::lifecycle::can_serve;
 use crate::store::locations::StoreLayout;
 use crate::store::object_record::{
@@ -267,6 +268,112 @@ impl Store {
         self.open_catalog()?.store_stats()
     }
 
+    pub fn evict(&self, request: EvictionRequest) -> StoreResult<EvictionReport> {
+        let catalog = self.open_catalog()?;
+        let starting_bytes_on_disk = catalog.store_stats()?.total_bytes_on_disk;
+        let mut report = EvictionReport::empty(&request, starting_bytes_on_disk);
+        let (protected_pinned_count, skipped_unsafe_count) = catalog.eviction_skip_counts()?;
+        report.protected_pinned_count = protected_pinned_count;
+        report.skipped_unsafe_count = skipped_unsafe_count;
+
+        if request
+            .target_bytes
+            .map(|target| starting_bytes_on_disk <= target)
+            .unwrap_or(false)
+        {
+            report.reason = "target_already_reached".to_string();
+            return Ok(report);
+        }
+
+        let all_candidates = catalog.eviction_candidates(request.policy, request.now_unix_ms)?;
+        drop(catalog);
+
+        let selected = select_eviction_candidates(
+            all_candidates,
+            starting_bytes_on_disk,
+            request.target_bytes,
+            request.max_objects,
+        );
+        report.planned_bytes = selected
+            .iter()
+            .map(|candidate| candidate.bytes_on_disk)
+            .sum();
+        report.candidates = selected;
+
+        if request.dry_run {
+            report.final_bytes_on_disk = starting_bytes_on_disk;
+            report.target_reached = request
+                .target_bytes
+                .map(|target| starting_bytes_on_disk - report.planned_bytes <= target)
+                .unwrap_or(false);
+            report.reason = if report.candidates.is_empty() {
+                "no_eligible_candidates".to_string()
+            } else {
+                "dry_run".to_string()
+            };
+            return Ok(report);
+        }
+
+        let disk = DiskTier::new(&self.root);
+        for candidate in report.candidates.clone() {
+            let object_id = candidate.object_id;
+            if !disk.has_files(&object_id)? {
+                let reason = "catalog_location_missing_files";
+                let mut catalog = self.open_catalog()?;
+                catalog.mark_missing_after_eviction_failure(&object_id, reason)?;
+                report.failures.push(EvictionFailure {
+                    object_id,
+                    reason: reason.to_string(),
+                });
+                continue;
+            }
+
+            let mut catalog = self.open_catalog()?;
+            if let Err(error) = catalog.begin_eviction(&object_id) {
+                report.failures.push(EvictionFailure {
+                    object_id,
+                    reason: error.to_string(),
+                });
+                continue;
+            }
+            drop(catalog);
+
+            match disk.remove_files(&object_id) {
+                Ok(()) => {
+                    let mut catalog = self.open_catalog()?;
+                    catalog.finish_eviction(&object_id, candidate.bytes_on_disk)?;
+                    report.freed_bytes += candidate.bytes_on_disk;
+                    report.evicted.push(EvictedObject {
+                        object_id,
+                        bytes_freed: candidate.bytes_on_disk,
+                    });
+                }
+                Err(error) => {
+                    let reason = error.to_string();
+                    let mut catalog = self.open_catalog()?;
+                    catalog.mark_missing_after_eviction_failure(&object_id, &reason)?;
+                    report.failures.push(EvictionFailure { object_id, reason });
+                }
+            }
+        }
+
+        report.final_bytes_on_disk = self.open_catalog()?.store_stats()?.total_bytes_on_disk;
+        report.target_reached = request
+            .target_bytes
+            .map(|target| report.final_bytes_on_disk <= target)
+            .unwrap_or(false);
+        report.reason = if !report.failures.is_empty() {
+            "eviction_failed".to_string()
+        } else if report.candidates.is_empty() {
+            "no_eligible_candidates".to_string()
+        } else if request.target_bytes.is_some() && !report.target_reached {
+            "target_not_reached".to_string()
+        } else {
+            "ok".to_string()
+        };
+        Ok(report)
+    }
+
     pub fn pin_object(&self, object_id: &str) -> StoreResult<()> {
         let mut catalog = self.open_catalog()?;
         catalog.increment_pin(object_id)
@@ -466,6 +573,33 @@ fn compatibility_from_descriptor(
 fn u64_to_i64(value: u64, field: &str) -> StoreResult<i64> {
     i64::try_from(value)
         .map_err(|_| StoreError::Compatibility(format!("{field} does not fit in i64")))
+}
+
+fn select_eviction_candidates(
+    candidates: Vec<crate::store::EvictionCandidate>,
+    starting_bytes_on_disk: i64,
+    target_bytes: Option<i64>,
+    max_objects: Option<usize>,
+) -> Vec<crate::store::EvictionCandidate> {
+    let mut selected = Vec::new();
+    let mut projected_bytes = starting_bytes_on_disk;
+    for candidate in candidates {
+        if max_objects
+            .map(|limit| selected.len() >= limit)
+            .unwrap_or(false)
+        {
+            break;
+        }
+        if target_bytes
+            .map(|target| projected_bytes <= target)
+            .unwrap_or(false)
+        {
+            break;
+        }
+        projected_bytes = projected_bytes.saturating_sub(candidate.bytes_on_disk);
+        selected.push(candidate);
+    }
+    selected
 }
 
 fn store_error_from_spool(error: SpoolError) -> StoreError {

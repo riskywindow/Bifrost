@@ -18,12 +18,18 @@ All eviction policies must follow these rules:
 2. Never select staging objects as normal cache victims.
 3. Never serve an object while its bytes are partially removed.
 4. Use transaction boundaries so catalog state and filesystem state reconcile.
-5. Emit store events for victim selection, deletion, failures, and final state.
+5. Emit store events for eviction start, failures, and final evicted state.
 6. Use injected clock values in tests.
 7. Break ties deterministically by `object_id`.
 
-Objects that fail during eviction should move to a conservative state such as
-`quarantined`, `missing`, or `corrupt`.
+Objects that fail during eviction move to a conservative unavailable state. The
+current implementation marks deletion failures as `missing` and records an
+`object_eviction_failed` event.
+
+Phase 3 deletes local descriptor and payload files and removes the disk
+`object_locations` row after successful deletion. The object row remains as an
+`evicted` tombstone so events and stats can account for the object without
+making it servable.
 
 ## LRU
 
@@ -31,10 +37,14 @@ LRU evicts the least recently accessed eligible objects first.
 
 Eligibility:
 
-1. Object is committed and verified.
+1. Object state is `committed`, `verified`, or `evictable`.
 2. Object is not pinned.
 3. Object is present in the target tier.
 4. Object is not already evicting, quarantined, missing, or corrupt.
+5. Object is not staging or already evicted.
+
+Future manifest work must extend eligibility so objects that are required
+members of pinned manifests are skipped.
 
 Ordering:
 
@@ -47,22 +57,29 @@ to evict never-accessed objects before accessed objects.
 
 ## Size-aware LRU
 
-Size-aware LRU uses the same recency ordering but accounts for bytes freed.
+Size-aware LRU prefers old large objects using a fixed score:
 
-The simplest deterministic form is:
+```text
+score = max(0, policy_now_unix_ms - last_access_unix_ms_or_0) * bytes_on_disk
+```
 
-1. Order eligible victims by LRU order.
-2. Select victims until `target_bytes` would be reached or no more eligible
-   objects exist.
-3. Report selected bytes and remaining bytes.
+Ordering:
 
-An alternate score-based policy may be added later, but it must document the
-score formula, tie-breakers, and fixed clock inputs before implementation.
+```text
+score DESC,
+last_access_unix_ms ASC NULLS FIRST,
+bytes_on_disk DESC,
+object_id ASC
+```
+
+Never-accessed objects use `0` as the last-access timestamp for score
+calculation, making them older than accessed objects for any normal positive
+policy clock.
 
 ## TTL expiration
 
-TTL expiration evicts objects whose `expires_at_unix_ms` is less than or equal
-to the policy clock.
+TTL expiration evicts objects whose `ttl_expires_at_unix_ms` is less than or
+equal to the policy clock.
 
 Ordering:
 
@@ -75,14 +92,15 @@ must not override pinning.
 
 ## Target-byte eviction
 
-Target-byte eviction attempts to free at least a requested number of bytes from
-a target tier.
+Target-byte eviction evicts in the selected policy order until
+`total_bytes_on_disk <= target_bytes`, `max_objects` is reached, or no eligible
+objects remain.
 
 Inputs:
 
 1. Policy name.
 2. Target tier.
-3. Target bytes.
+3. Optional target bytes.
 4. Fixed clock value.
 5. Optional dry-run flag.
 
@@ -96,7 +114,9 @@ Outputs:
 6. Objects skipped because unsafe or unavailable.
 7. Final reason if the target could not be reached.
 
-Dry runs must not mutate files or catalog rows.
+Dry runs must not mutate files or catalog rows. They return the same candidate
+ordering and planned bytes that an apply run would use with the same catalog
+state and clock input.
 
 ## Pinned object protection
 

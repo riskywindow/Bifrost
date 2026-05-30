@@ -1,4 +1,5 @@
 use crate::store::errors::{StoreError, StoreResult};
+use crate::store::eviction::{EvictionCandidate, EvictionPolicy};
 use crate::store::lifecycle::{can_evict, ensure_valid_state_transition};
 use crate::store::migrations;
 use crate::store::object_record::{
@@ -444,6 +445,167 @@ impl Catalog {
         Ok(())
     }
 
+    pub fn eviction_candidates(
+        &self,
+        policy: EvictionPolicy,
+        now_unix_ms: i64,
+    ) -> StoreResult<Vec<EvictionCandidate>> {
+        let mut sql = String::from(
+            "SELECT o.*, l.tier, l.meta_path, l.payload_path, l.bytes_on_disk
+             FROM objects o
+             INNER JOIN object_locations l ON l.object_id = o.object_id AND l.tier = 'disk'
+             WHERE o.pin_count = 0
+               AND o.state IN ('committed', 'verified', 'evictable')",
+        );
+        if policy == EvictionPolicy::TtlExpired {
+            sql.push_str(
+                " AND o.ttl_expires_at_unix_ms IS NOT NULL
+                  AND o.ttl_expires_at_unix_ms <= ?1",
+            );
+        }
+        sql.push_str(match policy {
+            EvictionPolicy::Lru | EvictionPolicy::SizeAwareLru => {
+                " ORDER BY o.last_accessed_unix_ms IS NOT NULL ASC,
+                          o.last_accessed_unix_ms ASC,
+                          o.object_id ASC"
+            }
+            EvictionPolicy::TtlExpired => {
+                " ORDER BY o.ttl_expires_at_unix_ms ASC,
+                          o.last_accessed_unix_ms IS NOT NULL ASC,
+                          o.last_accessed_unix_ms ASC,
+                          o.object_id ASC"
+            }
+        });
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = if policy == EvictionPolicy::TtlExpired {
+            stmt.query_map(params![now_unix_ms], |row| {
+                eviction_candidate_from_row(row, now_unix_ms, policy)
+            })?
+            .collect::<Result<Vec<_>, _>>()?
+        } else {
+            stmt.query_map([], |row| {
+                eviction_candidate_from_row(row, now_unix_ms, policy)
+            })?
+            .collect::<Result<Vec<_>, _>>()?
+        };
+
+        let mut candidates = rows;
+        if policy == EvictionPolicy::SizeAwareLru {
+            candidates.sort_by(|left, right| {
+                right
+                    .eviction_score
+                    .cmp(&left.eviction_score)
+                    .then_with(|| {
+                        access_sort_key(left.last_accessed_unix_ms)
+                            .cmp(&access_sort_key(right.last_accessed_unix_ms))
+                    })
+                    .then_with(|| right.bytes_on_disk.cmp(&left.bytes_on_disk))
+                    .then_with(|| left.object_id.cmp(&right.object_id))
+            });
+        }
+        Ok(candidates)
+    }
+
+    pub fn eviction_skip_counts(&self) -> StoreResult<(i64, i64)> {
+        let protected_pinned_count = self.conn.query_row(
+            "SELECT COUNT(*) FROM objects o
+             INNER JOIN object_locations l ON l.object_id = o.object_id AND l.tier = 'disk'
+             WHERE o.pin_count > 0",
+            [],
+            |row| row.get(0),
+        )?;
+        let skipped_unsafe_count = self.conn.query_row(
+            "SELECT COUNT(*) FROM objects o
+             LEFT JOIN object_locations l ON l.object_id = o.object_id AND l.tier = 'disk'
+             WHERE o.pin_count = 0
+               AND (l.object_id IS NULL
+                    OR o.state NOT IN ('committed', 'verified', 'evictable'))",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok((protected_pinned_count, skipped_unsafe_count))
+    }
+
+    pub fn begin_eviction(&mut self, object_id: &str) -> StoreResult<()> {
+        let record = self
+            .get_object_record(object_id)?
+            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
+        if !can_evict(record.state, record.pin_count) {
+            return Err(StoreError::Eviction(format!(
+                "object {object_id} in state {} with pin_count {} cannot be evicted",
+                record.state, record.pin_count
+            )));
+        }
+        // TODO(manifests): skip objects that are required members of pinned manifests.
+        ensure_valid_state_transition(record.state, ObjectState::Evicting)?;
+
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "UPDATE objects SET state = ?2 WHERE object_id = ?1 AND pin_count = 0",
+            params![object_id, ObjectState::Evicting],
+        )?;
+        log_event(
+            &tx,
+            "object_eviction_started",
+            Some(object_id),
+            None,
+            Some(json!({"from": record.state.as_str()})),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn finish_eviction(&mut self, object_id: &str, bytes_freed: i64) -> StoreResult<()> {
+        let record = self
+            .get_object_record(object_id)?
+            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
+        ensure_valid_state_transition(record.state, ObjectState::Evicted)?;
+
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "DELETE FROM object_locations WHERE object_id = ?1 AND tier = 'disk'",
+            params![object_id],
+        )?;
+        tx.execute(
+            "UPDATE objects SET state = ?2 WHERE object_id = ?1",
+            params![object_id, ObjectState::Evicted],
+        )?;
+        log_event(
+            &tx,
+            "object_evicted",
+            Some(object_id),
+            None,
+            Some(json!({"from": record.state.as_str(), "bytes_freed": bytes_freed})),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn mark_missing_after_eviction_failure(
+        &mut self,
+        object_id: &str,
+        reason: &str,
+    ) -> StoreResult<()> {
+        let record = self
+            .get_object_record(object_id)?
+            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "UPDATE objects SET state = ?2, quarantine_reason = ?3 WHERE object_id = ?1",
+            params![object_id, ObjectState::Missing, reason],
+        )?;
+        log_event(
+            &tx,
+            "object_eviction_failed",
+            Some(object_id),
+            None,
+            Some(json!({"from": record.state.as_str(), "to": "missing", "reason": reason})),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn list_objects(&self, filter: &ObjectListFilter) -> StoreResult<Vec<ObjectRecord>> {
         let mut sql = String::from(
             "SELECT o.* FROM objects o
@@ -702,6 +864,38 @@ fn store_event_from_row(row: &Row<'_>) -> rusqlite::Result<StoreEvent> {
         manifest_id: row.get("manifest_id")?,
         details_json: row.get("details_json")?,
     })
+}
+
+fn eviction_candidate_from_row(
+    row: &Row<'_>,
+    now_unix_ms: i64,
+    policy: EvictionPolicy,
+) -> rusqlite::Result<EvictionCandidate> {
+    let record = object_record_from_row(row)?;
+    let location = ObjectLocation {
+        object_id: record.object_id.clone(),
+        tier: row.get("tier")?,
+        meta_path: row.get("meta_path")?,
+        payload_path: row.get("payload_path")?,
+        bytes_on_disk: row.get("bytes_on_disk")?,
+    };
+    let eviction_score = match policy {
+        EvictionPolicy::SizeAwareLru => {
+            let last_access = record.last_accessed_unix_ms.unwrap_or(0);
+            let age_ms = now_unix_ms.saturating_sub(last_access).max(0) as i128;
+            age_ms * location.bytes_on_disk.max(0) as i128
+        }
+        EvictionPolicy::Lru | EvictionPolicy::TtlExpired => 0,
+    };
+    Ok(EvictionCandidate::from_record_location(
+        &record,
+        &location,
+        eviction_score,
+    ))
+}
+
+fn access_sort_key(value: Option<i64>) -> (bool, i64) {
+    (value.is_some(), value.unwrap_or(i64::MIN))
 }
 
 fn now_unix_ms() -> i64 {
