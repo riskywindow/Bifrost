@@ -15,6 +15,7 @@ use crate::store::manifest::{
     ManifestExpectedMember, ManifestInspection, ManifestListFilter, ManifestMember, ManifestRecord,
     ManifestType, MissingManifestMember, MANIFEST_ID_PREFIX,
 };
+use crate::store::memory_tier::{MemoryTier, MemoryTierConfig};
 use crate::store::object_record::{
     ObjectCompatibility, ObjectListFilter, ObjectLocation, ObjectRecord, ObjectState,
 };
@@ -47,10 +48,18 @@ pub struct ObjectInspection {
 pub struct Store {
     root: PathBuf,
     staging_lock: Arc<Mutex<()>>,
+    memory_tier: Arc<MemoryTier>,
 }
 
 impl Store {
     pub fn open(root: PathBuf) -> StoreResult<Self> {
+        Self::open_with_memory_tier(root, MemoryTierConfig::disabled())
+    }
+
+    pub fn open_with_memory_tier(
+        root: PathBuf,
+        memory_tier_config: MemoryTierConfig,
+    ) -> StoreResult<Self> {
         let layout = StoreLayout::new(&root);
         let paths = layout.paths();
         fs::create_dir_all(&paths.objects_dir)?;
@@ -60,11 +69,16 @@ impl Store {
         Ok(Self {
             root,
             staging_lock: Arc::new(Mutex::new(())),
+            memory_tier: Arc::new(MemoryTier::new(memory_tier_config)),
         })
     }
 
     pub fn root(&self) -> &PathBuf {
         &self.root
+    }
+
+    pub(crate) fn invalidate_memory_tier(&self, object_id: &str) {
+        self.memory_tier.invalidate(object_id);
     }
 
     pub fn begin_put(
@@ -212,28 +226,51 @@ impl Store {
 
     pub fn get_object(&self, object_id: &str) -> StoreResult<StoredObject> {
         self.ensure_servable(object_id)?;
+        if let Some(object) = self.memory_tier.get_object(object_id) {
+            let mut catalog = self.open_catalog()?;
+            catalog.update_access_on_get(
+                object_id,
+                (object.metadata.len() + object.payload.len()) as i64,
+            )?;
+            return Ok(object);
+        }
         let object = DiskTier::new(&self.root).read_validated(object_id)?;
         let mut catalog = self.open_catalog()?;
         catalog.update_access_on_get(
             object_id,
             (object.metadata.len() + object.payload.len()) as i64,
         )?;
+        self.memory_tier
+            .insert(object_id, &object.metadata, Some(&object.payload));
         Ok(object)
     }
 
     pub fn get_metadata(&self, object_id: &str) -> StoreResult<Vec<u8>> {
         self.ensure_servable(object_id)?;
+        if let Some(metadata) = self.memory_tier.get_metadata(object_id) {
+            let mut catalog = self.open_catalog()?;
+            catalog.update_access_on_get(object_id, metadata.len() as i64)?;
+            return Ok(metadata);
+        }
         let object = DiskTier::new(&self.root).read_validated(object_id)?;
         let mut catalog = self.open_catalog()?;
         catalog.update_access_on_get(object_id, object.metadata.len() as i64)?;
+        self.memory_tier.insert(object_id, &object.metadata, None);
         Ok(object.metadata)
     }
 
     pub fn get_payload(&self, object_id: &str) -> StoreResult<Vec<u8>> {
         self.ensure_servable(object_id)?;
+        if let Some(payload) = self.memory_tier.get_payload(object_id) {
+            let mut catalog = self.open_catalog()?;
+            catalog.update_access_on_get(object_id, payload.len() as i64)?;
+            return Ok(payload);
+        }
         let object = DiskTier::new(&self.root).read_validated(object_id)?;
         let mut catalog = self.open_catalog()?;
         catalog.update_access_on_get(object_id, object.payload.len() as i64)?;
+        self.memory_tier
+            .insert(object_id, &object.metadata, Some(&object.payload));
         Ok(object.payload)
     }
 
@@ -271,7 +308,15 @@ impl Store {
     }
 
     pub fn stats(&self) -> StoreResult<StoreStats> {
-        self.open_catalog()?.store_stats()
+        let mut stats = self.open_catalog()?.store_stats()?;
+        let memory_stats = self.memory_tier.stats();
+        stats.memory_tier_enabled = memory_stats.enabled;
+        stats.memory_tier_bytes = memory_stats.bytes;
+        stats.memory_tier_capacity_bytes = memory_stats.capacity_bytes;
+        stats.memory_tier_hits = memory_stats.hits;
+        stats.memory_tier_misses = memory_stats.misses;
+        stats.memory_tier_evictions = memory_stats.evictions;
+        Ok(stats)
     }
 
     pub fn fsck(&self, mode: FsckMode) -> StoreResult<FsckResult> {
@@ -328,6 +373,7 @@ impl Store {
         for candidate in report.candidates.clone() {
             let object_id = candidate.object_id;
             if !disk.has_files(&object_id)? {
+                self.memory_tier.invalidate(&object_id);
                 let reason = "catalog_location_missing_files";
                 let mut catalog = self.open_catalog()?;
                 catalog.mark_missing_after_eviction_failure(&object_id, reason)?;
@@ -346,6 +392,7 @@ impl Store {
                 });
                 continue;
             }
+            self.memory_tier.invalidate(&object_id);
             drop(catalog);
 
             match disk.remove_files(&object_id) {
@@ -359,6 +406,7 @@ impl Store {
                     });
                 }
                 Err(error) => {
+                    self.memory_tier.invalidate(&object_id);
                     let reason = error.to_string();
                     let mut catalog = self.open_catalog()?;
                     catalog.mark_missing_after_eviction_failure(&object_id, &reason)?;
@@ -386,22 +434,38 @@ impl Store {
 
     pub fn pin_object(&self, object_id: &str) -> StoreResult<()> {
         let mut catalog = self.open_catalog()?;
-        catalog.increment_pin(object_id)
+        let result = catalog.increment_pin(object_id);
+        if result.is_ok() {
+            self.memory_tier.invalidate(object_id);
+        }
+        result
     }
 
     pub fn unpin_object(&self, object_id: &str) -> StoreResult<()> {
         let mut catalog = self.open_catalog()?;
-        catalog.decrement_pin(object_id)
+        let result = catalog.decrement_pin(object_id);
+        if result.is_ok() {
+            self.memory_tier.invalidate(object_id);
+        }
+        result
     }
 
     pub fn set_ttl(&self, object_id: &str, expires_at_unix_ms: i64) -> StoreResult<()> {
         let mut catalog = self.open_catalog()?;
-        catalog.set_ttl(object_id, expires_at_unix_ms)
+        let result = catalog.set_ttl(object_id, expires_at_unix_ms);
+        if result.is_ok() {
+            self.memory_tier.invalidate(object_id);
+        }
+        result
     }
 
     pub fn clear_ttl(&self, object_id: &str) -> StoreResult<()> {
         let mut catalog = self.open_catalog()?;
-        catalog.clear_ttl(object_id)
+        let result = catalog.clear_ttl(object_id);
+        if result.is_ok() {
+            self.memory_tier.invalidate(object_id);
+        }
+        result
     }
 
     pub fn create_prefix_manifest(
@@ -623,7 +687,11 @@ impl Store {
 
     pub fn mark_quarantined(&self, object_id: &str, reason: &str) -> StoreResult<()> {
         let mut catalog = self.open_catalog()?;
-        catalog.mark_quarantined(object_id, reason)
+        let result = catalog.mark_quarantined(object_id, reason);
+        if result.is_ok() {
+            self.memory_tier.invalidate(object_id);
+        }
+        result
     }
 
     pub fn mark_verified(&self, object_id: &str) -> StoreResult<()> {
@@ -644,7 +712,11 @@ impl Store {
         }
         drop(catalog);
         let mut catalog = self.open_catalog()?;
-        catalog.mark_verified(object_id)
+        let result = catalog.mark_verified(object_id);
+        if result.is_ok() {
+            self.memory_tier.invalidate(object_id);
+        }
+        result
     }
 
     fn ensure_servable(&self, object_id: &str) -> StoreResult<()> {
@@ -735,6 +807,7 @@ impl From<Spool> for Store {
         Self {
             root: spool.root().to_path_buf(),
             staging_lock: spool.staging_lock(),
+            memory_tier: Arc::new(MemoryTier::disabled()),
         }
     }
 }

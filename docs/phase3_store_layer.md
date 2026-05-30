@@ -93,6 +93,27 @@ Memory-tier rules:
 4. Memory residency must not affect immutable object identity.
 5. Eviction from memory must not imply eviction from disk.
 
+The initial implementation is an in-process CPU memory cache on each daemon or
+store handle. It is disabled by default and uses simple LRU. It caches metadata
+bytes for verified, servable objects and caches payload bytes only when payload
+caching is explicitly enabled and the payload is within the configured maximum
+object size. Every memory hit is preceded by the normal catalog and filesystem
+servability check; stale memory entries cannot make an evicted, quarantined,
+missing, corrupt, staged, or otherwise unavailable object servable.
+
+`bifrost-daemon` exposes:
+
+```text
+--memory-tier-bytes N
+--memory-tier-cache-payloads true|false
+--memory-tier-max-object-bytes N
+```
+
+`--memory-tier-bytes` defaults to `0`, which disables the tier. Payload caching
+defaults to `false` because payload bytes can be memory-heavy. Memory entries
+are invalidated when store operations change object state, including pinning,
+unpinning, TTL changes, eviction, quarantine, and re-verification.
+
 ## Store API
 
 The local store API should be small and deterministic:

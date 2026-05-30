@@ -624,6 +624,7 @@ fn quarantine_object(
     }
     let mut catalog = crate::store::open_catalog(&paths.catalog)?;
     catalog.fsck_mark_object_state(object_id, ObjectState::Quarantined, reason)?;
+    store.invalidate_memory_tier(object_id);
     result.mutations_applied.push(FsckMutation {
         mutation_type: "quarantined_object".to_string(),
         object_id: Some(object_id.to_string()),
@@ -642,6 +643,7 @@ fn mark_state(
 ) -> StoreResult<()> {
     let mut catalog = crate::store::open_catalog(&StoreLayout::new(store.root()).paths().catalog)?;
     catalog.fsck_mark_object_state(object_id, state, reason)?;
+    store.invalidate_memory_tier(object_id);
     result.mutations_applied.push(FsckMutation {
         mutation_type: format!("marked_object_{}", state.as_str()),
         object_id: Some(object_id.to_string()),

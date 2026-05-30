@@ -1,4 +1,4 @@
-use crate::store::{EvictionPolicy, EvictionRequest, Store, StoreError};
+use crate::store::{EvictionPolicy, EvictionRequest, MemoryTierConfig, Store, StoreError};
 use crate::transport::{
     chunk_bytes, iter_chunks, read_frame, write_frame, ChunkManifest, Frame, FrameHeader,
     FrameType, StoreEvictRequest, StoreEvictResponse, StoreInspectResponse, StoreLifecycleRequest,
@@ -17,6 +17,7 @@ pub struct ServerConfig {
     pub listen: String,
     pub spool_root: PathBuf,
     pub trace_jsonl: Option<PathBuf>,
+    pub memory_tier: MemoryTierConfig,
 }
 
 pub async fn serve(config: ServerConfig) -> anyhow::Result<()> {
@@ -24,7 +25,7 @@ pub async fn serve(config: ServerConfig) -> anyhow::Result<()> {
     let trace = config.trace_jsonl.map(TraceSink::create).transpose()?;
     serve_listener_observed(
         listener,
-        Store::open(config.spool_root)?,
+        Store::open_with_memory_tier(config.spool_root, config.memory_tier)?,
         TransportMetrics::default(),
         trace,
     )

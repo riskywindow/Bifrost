@@ -15,4 +15,10 @@ pub struct StoreStats {
     pub corrupt_count: i64,
     pub total_pin_count: i64,
     pub total_access_count: i64,
+    pub memory_tier_enabled: bool,
+    pub memory_tier_bytes: i64,
+    pub memory_tier_capacity_bytes: i64,
+    pub memory_tier_hits: i64,
+    pub memory_tier_misses: i64,
+    pub memory_tier_evictions: i64,
 }

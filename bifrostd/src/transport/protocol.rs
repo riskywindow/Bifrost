@@ -189,6 +189,12 @@ pub struct StoreStatsResponse {
     pub corrupt_count: i64,
     pub total_pin_count: i64,
     pub total_access_count: i64,
+    pub memory_tier_enabled: bool,
+    pub memory_tier_bytes: i64,
+    pub memory_tier_capacity_bytes: i64,
+    pub memory_tier_hits: i64,
+    pub memory_tier_misses: i64,
+    pub memory_tier_evictions: i64,
 }
 
 impl From<StoreStats> for StoreStatsResponse {
@@ -209,6 +215,12 @@ impl From<StoreStats> for StoreStatsResponse {
             corrupt_count: stats.corrupt_count,
             total_pin_count: stats.total_pin_count,
             total_access_count: stats.total_access_count,
+            memory_tier_enabled: stats.memory_tier_enabled,
+            memory_tier_bytes: stats.memory_tier_bytes,
+            memory_tier_capacity_bytes: stats.memory_tier_capacity_bytes,
+            memory_tier_hits: stats.memory_tier_hits,
+            memory_tier_misses: stats.memory_tier_misses,
+            memory_tier_evictions: stats.memory_tier_evictions,
         }
     }
 }

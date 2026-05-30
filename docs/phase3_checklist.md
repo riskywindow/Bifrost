@@ -125,13 +125,13 @@ Last verified: 2026-05-30
 
 ## Memory tier
 
-- [ ] Keep memory tier optional.
-- [ ] Cache only already-verified objects or derived metadata.
-- [ ] Ensure memory entries reference committed object IDs.
-- [ ] Ensure memory misses fall back to disk and catalog validation.
-- [ ] Ensure memory eviction does not imply disk eviction.
-- [ ] Ensure memory state is reconstructable.
-- [ ] Test restart with empty memory tier.
+- [x] Keep memory tier optional.
+- [x] Cache only already-verified objects or derived metadata.
+- [x] Ensure memory entries reference committed object IDs.
+- [x] Ensure memory misses fall back to disk and catalog validation.
+- [x] Ensure memory eviction does not imply disk eviction.
+- [x] Ensure memory state is reconstructable.
+- [x] Test restart with empty memory tier.
 
 ## ContextStorm store benchmarks
 
