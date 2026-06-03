@@ -520,16 +520,19 @@ impl Store {
         object_id: &str,
         required: bool,
     ) -> StoreResult<ManifestMember> {
+        let inspection = self.inspect_object(object_id)?;
+        if !inspection.servable {
+            return Err(StoreError::Manifest(format!(
+                "manifest member is not serveable: {object_id}"
+            )));
+        }
+
         let catalog = self.open_catalog()?;
         let manifest = catalog
             .get_manifest(manifest_id)?
             .ok_or_else(|| StoreError::NotFound(manifest_id.to_string()))?;
-        let compatibility = catalog
-            .get_object_compatibility(object_id)?
-            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
-        let record = catalog
-            .get_object_record(object_id)?
-            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
+        let compatibility = inspection.compatibility.clone();
+        let record = inspection.record.clone();
         validate_member_identity(&manifest, &compatibility)?;
         drop(catalog);
 
@@ -628,7 +631,10 @@ impl Store {
             match self.inspect_object(&member.object_id) {
                 Ok(inspection) => {
                     if !inspection.servable {
-                        missing.push(missing_member(member, "object_missing"));
+                        missing.push(missing_member(
+                            member,
+                            missing_reason_for_unservable_state(inspection.record.state),
+                        ));
                     } else if validate_member_identity(&manifest, &inspection.compatibility)
                         .is_err()
                     {
@@ -978,6 +984,17 @@ fn missing_member(member: &ManifestMember, reason: &str) -> MissingManifestMembe
         kv_block_id: member.kv_block_id,
         required: member.required,
         reason: reason.to_string(),
+    }
+}
+
+fn missing_reason_for_unservable_state(state: ObjectState) -> &'static str {
+    match state {
+        ObjectState::Staging => "object_staging",
+        ObjectState::Evicted => "object_evicted",
+        ObjectState::Quarantined => "object_quarantined",
+        ObjectState::Corrupt => "object_corrupt",
+        ObjectState::Missing => "object_missing",
+        _ => "catalog_inconsistent",
     }
 }
 

@@ -823,10 +823,15 @@ impl Catalog {
         ensure_valid_state_transition(record.state, ObjectState::Evicting)?;
 
         let tx = self.conn.transaction()?;
-        tx.execute(
+        let changed = tx.execute(
             "UPDATE objects SET state = ?2 WHERE object_id = ?1 AND pin_count = 0",
             params![object_id, ObjectState::Evicting],
         )?;
+        if changed == 0 {
+            return Err(StoreError::Eviction(format!(
+                "object {object_id} became pinned before eviction could start"
+            )));
+        }
         log_event(
             &tx,
             "object_eviction_started",
@@ -989,7 +994,7 @@ impl Catalog {
             }
         }
         stats.total_bytes_on_disk = self.conn.query_row(
-            "SELECT COALESCE(SUM(bytes_on_disk), 0) FROM object_locations",
+            "SELECT COALESCE(SUM(bytes_on_disk), 0) FROM object_locations WHERE tier = 'disk'",
             [],
             |row| row.get(0),
         )?;

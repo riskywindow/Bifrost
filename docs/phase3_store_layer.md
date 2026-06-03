@@ -139,6 +139,11 @@ local import. It must not accept unvalidated objects.
 `has`, `get`, `lookup`, and manifest queries must never read from staging or
 return staged objects as available.
 
+Manifest member creation is also gated by the normal serveability check. A
+catalog row alone is not enough to add a member; the object must be verified,
+file-present, catalog-consistent, and not quarantined, corrupt, missing,
+evicting, evicted, or staged.
+
 ## Out of scope
 
 Phase 3 must not implement:

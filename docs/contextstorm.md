@@ -2,9 +2,10 @@
 
 Last verified: 2026-05-29
 
-ContextStorm is the Phase 2 synthetic KV benchmark harness. It exercises local
-BIFROST transport with deterministic Phase 1-style KV objects and records the
-artifacts needed to inspect correctness and basic transfer behavior.
+ContextStorm is the Phase 2 synthetic KV benchmark harness and Phase 3 local
+store benchmark harness. It exercises local BIFROST transport and store
+behavior with deterministic Phase 1-style KV objects and records the artifacts
+needed to inspect correctness and basic behavior.
 
 ContextStorm is not a model benchmark. It does not run inference, allocate GPU
 KV cache, call LMCache, call vLLM, emulate QUIC, compress payloads, or use
@@ -56,6 +57,16 @@ ContextStorm looks for `bifrost-daemon` and `bifrost-xfer` in
 `bifrostd/target/debug/`, `target/debug/`, `$PATH`, or explicit
 `BIFROST_DAEMON` and `BIFROST_XFER` environment variables.
 
+Store scenarios also require `bifrost-store` in the same locations or via the
+`BIFROST_STORE` environment variable:
+
+```text
+PYTHONPATH=. python -m contextstorm.cli run scenarios/store_small_ci.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase3-store-small
+PYTHONPATH=. python -m contextstorm.cli report /tmp/contextstorm-runs/phase3-store-small
+```
+
 ## Scenario Format
 
 Scenario files are small YAML documents using only simple mappings and lists:
@@ -88,6 +99,61 @@ Supported fields:
 9. `fault_profile`, optional profile name or profile path
 10. `timeout_seconds`
 
+Phase 3 store scenarios use `workload: store` and store operation names:
+
+```yaml
+name: store_small_ci
+workload: store
+object_count: 5
+object_size_bytes: 1 MiB
+chunk_size_bytes: 256 KiB
+operations:
+  - put_objects
+  - list_objects
+  - query_objects
+  - get_objects
+  - fsck
+memory_tier_bytes: 0
+repetitions: 1
+timeout_seconds: 30
+```
+
+Store scenario fields:
+
+1. `name`
+2. `workload: store`
+3. `object_count`
+4. `object_size_bytes`, integer bytes or `KiB`/`MiB`/`GiB`
+5. `chunk_size_bytes`, integer bytes or `KiB`/`MiB`/`GiB`
+6. `object_type`: currently `opaque_engine_blob` by default
+7. `operations`
+8. `memory_tier_bytes`
+9. `memory_tier_cache_payloads`
+10. `memory_tier_max_object_bytes`
+11. `target_bytes`, for eviction scenarios
+12. `pin_fraction`, for pin and eviction scenarios
+13. `policy`, such as `lru`
+14. `manifest_complete_before_eviction`
+15. `manifest_complete_after_eviction`
+16. `repetitions`
+17. `timeout_seconds`
+
+Supported store operations:
+
+1. `put_objects`
+2. `get_objects`
+3. `has_objects`
+4. `list_objects`
+5. `query_objects`
+6. `inspect_objects`
+7. `pin_objects`
+8. `unpin_objects`
+9. `evict`
+10. `create_manifest`
+11. `add_manifest_members`
+12. `check_manifest`
+13. `fsck`
+
 The built-in scenarios are:
 
 1. `small_ci.yaml`: 1 MiB, one daemon, PUT/HAS/GET once.
@@ -100,6 +166,12 @@ The built-in scenarios are:
    `--allow-root-faults` and root to apply `tc_netem`.
 6. `dead_path.yaml`: two local daemons with `path_death`; kills the secondary
    daemon and does not require root.
+7. `store_small_ci.yaml`: five 1 MiB objects, store list/query/get/fsck.
+8. `store_eviction.yaml`: pinned-object protection and deterministic LRU
+   target-byte eviction.
+9. `store_manifest.yaml`: prefix manifest creation, membership, completeness,
+   eviction, and completeness recheck.
+10. `store_memory_tier.yaml`: optional memory tier hit/miss counters.
 
 ## Workload Classes
 
@@ -226,6 +298,31 @@ ContextStorm computes:
 10. `committed_object_verified`
 11. `get_payload_matches_put_payload`
 
+Store scenarios compute:
+
+1. `put_duration_ms`
+2. `get_duration_ms`
+3. `has_latency_ms`
+4. `list_latency_ms`
+5. `query_latency_ms`
+6. `inspect_latency_ms`
+7. `fsck_duration_ms`
+8. `eviction_duration_ms`
+9. `objects_inserted`
+10. `objects_evicted`
+11. `objects_pinned`
+12. `bytes_committed`
+13. `bytes_evicted`
+14. `manifest_completeness`
+15. `store_bytes_before`
+16. `store_bytes_after`
+17. `memory_tier_hits`
+18. `memory_tier_misses`
+
+Store reports include correctness checks for `payload_roundtrip_match`,
+`pinned_not_evicted`, `fsck_clean_after_run`, and
+`manifest_completeness_expected`.
+
 Metrics are derived from `bifrost-xfer --json` snapshots when present and from
 trace JSONL files as a fallback. `committed_object_verified` is true only when a
 HAS check confirms the object is present after PUT. `get_payload_matches_put_payload`
@@ -238,15 +335,16 @@ is true only when the fetched payload bytes exactly match the generated payload.
 1. `summary.json`
 2. `summary.md`
 
-The Markdown report includes an overview, a per-run metrics table, environment
-notes, and a reminder that the benchmark is local synthetic transport only.
+The Markdown report includes an overview, a per-run or per-operation metrics
+table, environment notes, and a reminder that the benchmark is local synthetic
+transport or store behavior only.
 
 ## Tests
 
 The default Python tests cover deterministic synthetic generation, scenario
-loading, trace metric parsing, fault profile loading and skip behavior, report
-writing, and a process-level `small_ci` smoke test. Process-level tests skip
-when Rust binaries are not built.
+loading, trace and store metric parsing, fault profile loading and skip
+behavior, report writing, and process-level `small_ci` and `store_small_ci`
+smoke tests. Process-level tests skip when Rust binaries are not built.
 
 ```text
 cd contextstorm

@@ -230,6 +230,25 @@ fn adding_object_with_wrong_prefix_is_rejected() {
 }
 
 #[test]
+fn adding_unservable_object_is_rejected() {
+    let root = temp_root("unservable-member");
+    let store = Store::open(root.clone()).unwrap();
+    let fixture = native_fixture();
+    let object_id = put_fixture_direct(&store, "transfer-001", &fixture);
+    let manifest_id = create_manifest(&store, &fixture);
+    store.mark_quarantined(&object_id, "test").unwrap();
+
+    let error = store
+        .add_manifest_member(&manifest_id, &object_id, true)
+        .unwrap_err();
+
+    assert!(error
+        .to_string()
+        .contains("manifest member is not serveable"));
+    cleanup(&root);
+}
+
+#[test]
 fn completeness_tracks_present_and_evicted_required_members() {
     let root = temp_root("completeness");
     let store = Store::open(root.clone()).unwrap();

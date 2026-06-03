@@ -135,21 +135,38 @@ Last verified: 2026-05-30
 
 ## ContextStorm store benchmarks
 
-- [ ] Add CPU-only local store benchmark scenarios.
-- [ ] Add lookup-heavy workload.
-- [ ] Add GET-hit workload from verified disk objects.
-- [ ] Add manifest missing-block workload.
-- [ ] Add pin and eviction workload.
-- [ ] Add fsck dry-run workload.
-- [ ] Record catalog latency, lookup latency, GET latency, hit rate, miss rate,
+- [x] Add CPU-only local store benchmark scenarios.
+- [x] Add lookup-heavy workload.
+- [x] Add GET-hit workload from verified disk objects.
+- [x] Add manifest missing-block workload.
+- [x] Add pin and eviction workload.
+- [x] Add fsck dry-run workload.
+- [x] Record catalog latency, lookup latency, GET latency, hit rate, miss rate,
       eviction victims, bytes freed, fsck findings, and manifest completeness.
-- [ ] Keep benchmark inputs deterministic.
-- [ ] Keep default scenarios free of GPU, LMCache, vLLM, Docker, Kubernetes,
+- [x] Keep benchmark inputs deterministic.
+- [x] Keep default scenarios free of GPU, LMCache, vLLM, Docker, Kubernetes,
       cloud credentials, and internet access.
+
+## Phase 3 hardening notes
+
+- [x] Manifest member insertion now requires the object to be serveable at
+      insertion time; missing, quarantined, corrupt, evicted, staging, or
+      catalog-inconsistent objects are rejected or reported missing.
+- [x] Eviction start rechecks the guarded catalog update so an object that
+      becomes pinned before eviction is not treated as an eviction victim.
+- [x] Store byte stats count disk locations only.
+- [x] fsck orphan repair imports only valid descriptor/payload pairs located
+      at the deterministic committed object paths.
+- [x] Quarantine chooses a non-overwriting quarantine directory when a previous
+      quarantine for the same object already exists.
+- [x] ContextStorm scenario loading is stable from either the repository root
+      or the `contextstorm` package directory.
+- [x] Committed-only catalog rows cannot be pinned into availability; pinning
+      requires the object to have reached verified state first.
 
 ## CI
 
-- [ ] Keep Phase 1 Python tests green.
+- [x] Keep Phase 1 Python tests green.
 - [x] Keep Phase 1 Rust tests green.
 - [x] Keep cross-language identity vector tests green.
 - [x] Keep Phase 2 protocol, chunker, spool, PUT, HAS, GET, and ContextStorm
@@ -159,8 +176,137 @@ Last verified: 2026-05-30
 - [x] Add Phase 3 eviction tests.
 - [x] Add Phase 3 manifest tests.
 - [x] Add Phase 3 fsck tests.
-- [ ] Add ContextStorm store smoke scenario.
-- [ ] Keep all default CI tests CPU-only and local.
+- [x] Add ContextStorm store smoke scenario.
+- [x] Keep all default CI tests CPU-only and local.
+
+### Phase 3 CI and local test commands
+
+The Phase 3 GitHub Actions workflow lives at `.github/workflows/phase3.yml`.
+It installs editable Python packages for `bifrost_py` and `contextstorm`,
+runs Phase 1 Python tests, builds all `bifrostd` binaries, runs
+`bifrostd` Rust tests, runs ContextStorm unit tests, runs the Phase 2
+`small_ci` transport smoke scenario, and runs the Phase 3 `store_small_ci`
+store scenario.
+
+Default CI must stay CPU-only and local. It must not run root-required network
+fault tests, long store benchmarks, large payload transfers, GPU workloads,
+LMCache or vLLM integration, dashboard tasks, Docker, Kubernetes, cloud
+credentials, or external services. Optional scenarios may be run manually, but
+skips or failures from those optional runs must not fail CI.
+
+Run the full local Rust test suite from the repository root:
+
+```text
+cargo test --manifest-path bifrostd/Cargo.toml
+```
+
+Build the Rust binaries used by ContextStorm scenarios:
+
+```text
+cargo build --manifest-path bifrostd/Cargo.toml --bins
+```
+
+Run Python tests from the repository root:
+
+```text
+python -m pip install -e "bifrost_py[dev]" -e "contextstorm[dev]"
+pytest bifrost_py/tests tests
+cd contextstorm
+pytest tests
+cd ..
+```
+
+Run the required small Phase 3 store scenario after building Rust binaries:
+
+```text
+contextstorm run contextstorm/scenarios/store_small_ci.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase3-store-small
+contextstorm report /tmp/contextstorm-runs/phase3-store-small
+```
+
+Run the small Phase 2 transport smoke scenario that remains in Phase 3 CI:
+
+```text
+contextstorm run contextstorm/scenarios/small_ci.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase3-transport-small
+```
+
+Run optional longer store scenarios manually. These are outside required CI:
+
+```text
+contextstorm run contextstorm/scenarios/store_eviction.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase3-store-eviction
+
+contextstorm run contextstorm/scenarios/store_manifest.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase3-store-manifest
+
+contextstorm run contextstorm/scenarios/store_memory_tier.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase3-store-memory-tier
+```
+
+Run a manual Phase 3 store workflow against a local daemon:
+
+```text
+rm -rf /tmp/bifrost-store-manual
+mkdir -p /tmp/bifrost-store-manual
+cargo build --manifest-path bifrostd/Cargo.toml --bins
+bifrostd/target/debug/bifrost-daemon \
+  --listen 127.0.0.1:7420 \
+  --spool /tmp/bifrost-store-manual \
+  --trace-jsonl /tmp/bifrost-store-manual/daemon.jsonl
+```
+
+In another terminal:
+
+```text
+OBJECT_ID=$(
+  bifrostd/target/debug/bifrost-xfer put \
+    --endpoint 127.0.0.1:7420 \
+    --meta fixtures/native_valid/tiny_gpt_layer0_block0.meta.json \
+    --payload fixtures/native_valid/tiny_gpt_layer0_block0.payload.bin \
+    --target fixtures/native_valid/target_profile.json \
+    --json | python -c 'import json,sys; print(json.load(sys.stdin)["object_id"])'
+)
+
+bifrostd/target/debug/bifrost-xfer get \
+  --endpoint 127.0.0.1:7420 \
+  --object-id "$OBJECT_ID" \
+  --out /tmp/bifrost-store-manual/get \
+  --json
+
+cmp fixtures/native_valid/tiny_gpt_layer0_block0.payload.bin \
+  /tmp/bifrost-store-manual/get/payload.bin
+
+bifrostd/target/debug/bifrost-store list \
+  --endpoint 127.0.0.1:7420 \
+  --json
+
+bifrostd/target/debug/bifrost-store inspect \
+  --endpoint 127.0.0.1:7420 \
+  --object-id "$OBJECT_ID" \
+  --json
+
+bifrostd/target/debug/bifrost-store pin \
+  --endpoint 127.0.0.1:7420 \
+  --object-id "$OBJECT_ID"
+
+bifrostd/target/debug/bifrost-store evict \
+  --endpoint 127.0.0.1:7420 \
+  --policy lru \
+  --target-bytes 0 \
+  --dry-run \
+  --json
+
+bifrostd/target/debug/bifrost-store fsck \
+  --endpoint 127.0.0.1:7420 \
+  --check \
+  --json
+```
 
 ## Phase 3 done criteria
 
@@ -174,7 +320,7 @@ Last verified: 2026-05-30
 - [x] Eviction is deterministic, testable, and never evicts pinned objects.
 - [x] Prefix manifests support completeness and missing-block queries.
 - [x] fsck detects catalog/filesystem drift and quarantines suspect objects.
-- [ ] ContextStorm includes CPU-only deterministic store benchmarks.
-- [ ] No LMCache, language-model integration, vLLM, real KV extraction, GPU
+- [x] ContextStorm includes CPU-only deterministic store benchmarks.
+- [x] No LMCache, language-model integration, vLLM, real KV extraction, GPU
       inference, dashboard, QUIC, compression, RDMA, parity chunk, production
       auth, or Kubernetes work is included.

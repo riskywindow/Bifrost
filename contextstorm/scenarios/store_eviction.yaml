@@ -1,0 +1,16 @@
+name: store_eviction
+workload: store
+object_count: 20
+object_size_bytes: 256 KiB
+chunk_size_bytes: 64 KiB
+object_type: opaque_engine_blob
+operations:
+  - put_objects
+  - pin_objects
+  - evict
+target_bytes: 3 MiB
+pin_fraction: 0.2
+policy: lru
+memory_tier_bytes: 0
+repetitions: 1
+timeout_seconds: 60

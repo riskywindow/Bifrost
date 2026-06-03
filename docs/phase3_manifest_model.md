@@ -110,6 +110,14 @@ Member order is deterministic by `layer_id`, `kv_block_id`, then `object_id`.
 The member table must not copy mutable local file paths as identity. File paths
 belong in object location records.
 
+The implementation rejects member insertion unless the referenced object is
+currently serveable through the same catalog and filesystem checks used by
+GET. This keeps new manifests fail-closed: quarantined, corrupt, missing,
+evicted, staging, or catalog-inconsistent objects cannot become declared
+members. Existing members that later become unavailable remain declared but
+make completeness checks and missing-block queries report deterministic
+missing reasons.
+
 ## Manifest pins
 
 `pin_manifest` increments the manifest `pin_count` and also increments

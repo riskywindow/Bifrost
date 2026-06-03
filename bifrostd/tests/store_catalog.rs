@@ -148,6 +148,9 @@ fn pin_increment_decrement_works_and_never_goes_below_zero() {
     let path = temp_catalog_path("pinning");
     let mut catalog = open_catalog(&path).unwrap();
     insert_object(&mut catalog, "object-a", "model-a", "prefix-a", "opaque-a");
+    catalog
+        .transition_object_state("object-a", ObjectState::Verified, None)
+        .unwrap();
 
     catalog.increment_pin("object-a").unwrap();
     let pinned = catalog.get_object_record("object-a").unwrap().unwrap();
@@ -163,7 +166,28 @@ fn pin_increment_decrement_works_and_never_goes_below_zero() {
 }
 
 #[test]
+fn committed_object_cannot_be_pinned_into_servable_state() {
+    let path = temp_catalog_path("committed-pin-rejected");
+    let mut catalog = open_catalog(&path).unwrap();
+    insert_object(&mut catalog, "object-a", "model-a", "prefix-a", "opaque-a");
+
+    let err = catalog.increment_pin("object-a").unwrap_err();
+    assert!(matches!(
+        err,
+        StoreError::InvalidStateTransition { from, to }
+            if from == "committed" && to == "pinned"
+    ));
+    let record = catalog.get_object_record("object-a").unwrap().unwrap();
+    assert_eq!(record.state, ObjectState::Committed);
+    assert_eq!(record.pin_count, 0);
+    assert!(!can_serve(record.state, record.pin_count));
+    cleanup(&path);
+}
+
+#[test]
 fn lifecycle_serve_and_evict_rules() {
+    assert!(!can_serve(ObjectState::Committed, 0));
+    assert!(can_serve(ObjectState::Verified, 0));
     assert!(can_serve(ObjectState::Pinned, 1));
     assert!(!can_evict(ObjectState::Pinned, 1));
     assert!(!can_serve(ObjectState::Evicted, 0));
@@ -262,6 +286,9 @@ fn event_log_contains_expected_events() {
     let path = temp_catalog_path("events");
     let mut catalog = open_catalog(&path).unwrap();
     insert_object(&mut catalog, "object-a", "model-a", "prefix-a", "opaque-a");
+    catalog
+        .transition_object_state("object-a", ObjectState::Verified, None)
+        .unwrap();
 
     catalog.update_access_on_get("object-a", 64).unwrap();
     catalog.increment_pin("object-a").unwrap();
@@ -278,6 +305,7 @@ fn event_log_contains_expected_events() {
         event_types,
         vec![
             "object_committed",
+            "object_state_transition",
             "object_accessed",
             "object_pinned",
             "object_unpinned",

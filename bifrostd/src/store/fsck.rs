@@ -421,12 +421,30 @@ fn repair_orphan_objects(
     records_by_id: &BTreeMap<String, ObjectRecord>,
     result: &mut FsckResult,
 ) -> StoreResult<()> {
+    let layout = StoreLayout::new(store.root());
     for object_id in files
         .metadata
         .keys()
         .filter(|object_id| files.payloads.contains_key(*object_id))
     {
         if records_by_id.contains_key(object_id) {
+            continue;
+        }
+        let expected_meta = layout.meta_path(object_id)?;
+        let expected_payload = layout.payload_path(object_id)?;
+        if files.metadata[object_id] != expected_meta
+            || files.payloads[object_id] != expected_payload
+        {
+            finding(
+                result,
+                "orphan_file_path_mismatch",
+                FsckSeverity::Error,
+                Some(object_id),
+                None,
+                None,
+                "orphan files are not in the deterministic committed object path",
+                "do not import; inspect or quarantine manually",
+            );
             continue;
         }
         let metadata_bytes = fs::read(files.metadata.get(object_id).unwrap())?;
@@ -466,8 +484,7 @@ fn repair_orphan_objects(
             payload_path: files.payloads[object_id].to_string_lossy().into_owned(),
             bytes_on_disk: (metadata_bytes.len() + payload.len()) as i64,
         };
-        let mut catalog =
-            crate::store::open_catalog(&StoreLayout::new(store.root()).paths().catalog)?;
+        let mut catalog = crate::store::open_catalog(&layout.paths().catalog)?;
         catalog.insert_committed_object(&record, &location, &compatibility)?;
         catalog.transition_object_state(object_id, ObjectState::Verified, None)?;
         result.mutations_applied.push(FsckMutation {
@@ -612,7 +629,7 @@ fn quarantine_object(
 ) -> StoreResult<()> {
     let layout = StoreLayout::new(store.root());
     let paths = layout.paths();
-    let quarantine_dir = paths.quarantine_dir.join(sanitize_object_id(object_id)?);
+    let quarantine_dir = unique_quarantine_dir(&paths.quarantine_dir, object_id)?;
     fs::create_dir_all(&quarantine_dir)?;
     let meta = layout.meta_path(object_id)?;
     let payload = layout.payload_path(object_id)?;
@@ -632,6 +649,24 @@ fn quarantine_object(
         message: format!("moved suspect object files to {}", quarantine_dir.display()),
     });
     Ok(())
+}
+
+fn unique_quarantine_dir(quarantine_root: &Path, object_id: &str) -> StoreResult<PathBuf> {
+    let sanitized = sanitize_object_id(object_id)?;
+    let base = quarantine_root.join(&sanitized);
+    if !base.exists() {
+        return Ok(base);
+    }
+    for index in 1..=1024 {
+        let candidate = quarantine_root.join(format!("{sanitized}.{index}"));
+        if !candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+    Err(crate::store::StoreError::Filesystem(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        format!("no available quarantine directory for {object_id}"),
+    )))
 }
 
 fn mark_state(

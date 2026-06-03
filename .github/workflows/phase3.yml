@@ -1,0 +1,58 @@
+name: Phase 3
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  phase3:
+    name: Python, Rust, ContextStorm, and store checks
+    runs-on: ubuntu-latest
+
+    env:
+      CARGO_TERM_COLOR: always
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python test dependencies
+        run: python -m pip install -e "bifrost_py[dev]" -e "contextstorm[dev]"
+
+      - name: Run Python Phase 1 tests
+        run: pytest bifrost_py/tests tests
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Rust binaries
+        run: cargo build --manifest-path bifrostd/Cargo.toml --bins
+
+      - name: Run bifrostd Rust tests
+        run: cargo test --manifest-path bifrostd/Cargo.toml
+
+      - name: Run ContextStorm unit tests
+        working-directory: contextstorm
+        run: pytest tests
+
+      - name: Run Phase 2 small transport smoke scenario
+        run: |
+          contextstorm run contextstorm/scenarios/small_ci.yaml \
+            --runs-root /tmp/contextstorm-runs \
+            --run-id phase3-ci-transport-small
+
+      - name: Run Phase 3 small store scenario
+        run: |
+          contextstorm run contextstorm/scenarios/store_small_ci.yaml \
+            --runs-root /tmp/contextstorm-runs \
+            --run-id phase3-ci-store-small

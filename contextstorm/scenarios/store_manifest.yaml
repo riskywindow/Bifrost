@@ -1,0 +1,20 @@
+name: store_manifest
+workload: store
+object_count: 1
+object_size_bytes: 256 KiB
+chunk_size_bytes: 64 KiB
+object_type: native_kv_page
+operations:
+  - put_objects
+  - create_manifest
+  - add_manifest_members
+  - check_manifest
+  - evict
+  - check_manifest
+target_bytes: 0
+policy: lru
+manifest_complete_before_eviction: true
+manifest_complete_after_eviction: false
+memory_tier_bytes: 0
+repetitions: 1
+timeout_seconds: 60

@@ -12,6 +12,10 @@ def write_report(run_dir: Path) -> tuple[Path, Path]:
     if not run_path.exists():
         raise FileNotFoundError(f"missing run artifact: {run_path}")
     run = json.loads(run_path.read_text())
+    if run.get("benchmark_kind") == "store":
+        from .store_report import write_store_report
+
+        return write_store_report(run_dir)
     operations = run.get("operations", [])
     metrics = [operation.get("metrics", {}) for operation in operations]
     summary = {

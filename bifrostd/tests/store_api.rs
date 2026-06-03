@@ -243,3 +243,20 @@ fn compatibility_fields_are_indexed_correctly() {
     assert_eq!(rows[0].object_id, object_id);
     cleanup(&root);
 }
+
+#[test]
+fn object_id_paths_reject_traversal_and_non_hex_ids() {
+    let root = temp_store_root("path-sanitize");
+    let layout = bifrostd::store::StoreLayout::new(&root);
+
+    for object_id in [
+        "bifrost://object/blake3/../../escape",
+        "bifrost://object/blake3/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaz",
+        "not-an-object-id",
+    ] {
+        assert!(layout.meta_path(object_id).is_err(), "{object_id}");
+        assert!(layout.payload_path(object_id).is_err(), "{object_id}");
+    }
+
+    cleanup(&root);
+}

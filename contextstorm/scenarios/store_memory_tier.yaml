@@ -1,0 +1,17 @@
+name: store_memory_tier
+workload: store
+object_count: 4
+object_size_bytes: 256 KiB
+chunk_size_bytes: 64 KiB
+object_type: opaque_engine_blob
+operations:
+  - put_objects
+  - inspect_objects
+  - inspect_objects
+  - get_objects
+  - fsck
+memory_tier_bytes: 2 MiB
+memory_tier_cache_payloads: true
+memory_tier_max_object_bytes: 512 KiB
+repetitions: 1
+timeout_seconds: 60

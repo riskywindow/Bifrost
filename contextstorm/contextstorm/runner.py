@@ -93,6 +93,7 @@ def run_scenario(
     run_id: str | None = None,
     allow_root_faults: bool = False,
 ) -> Path:
+    scenario_path = _resolve_contextstorm_path(scenario_path)
     scenario = load_scenario(scenario_path)
     fault_profile = load_fault_profile(scenario.fault_profile)
     daemon_bin = _find_binary("bifrost-daemon")
@@ -537,6 +538,7 @@ def _scenario_to_dict(scenario: Scenario) -> dict[str, Any]:
 
 
 def _load_simple_yaml(path: Path) -> dict[str, Any]:
+    path = _resolve_contextstorm_path(path)
     text = path.read_text()
     if text.lstrip().startswith("{"):
         return json.loads(text)
@@ -563,6 +565,15 @@ def _load_simple_yaml(path: Path) -> dict[str, Any]:
             index += 1
         result[key] = _parse_block(block, path)
     return result
+
+
+def _resolve_contextstorm_path(path: Path) -> Path:
+    if path.exists() or path.is_absolute():
+        return path
+    for candidate in (REPO_ROOT / "contextstorm" / path, REPO_ROOT / path):
+        if candidate.exists():
+            return candidate
+    return path
 
 
 def _parse_block(block: list[str], path: Path) -> Any:

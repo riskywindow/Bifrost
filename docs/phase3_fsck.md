@@ -64,7 +64,11 @@ Examples:
 
 Orphans are not cache hits. Repair may import an orphan only if descriptor and
 payload files form a complete valid Phase 1 object and the derived object ID
-matches the committed path. Otherwise fsck must quarantine or ignore them.
+matches the committed path. The current implementation also requires the files
+to already be located at the deterministic committed descriptor and payload
+paths for the derived object ID; a valid pair found under a wrong committed
+subdirectory is reported as `orphan_file_path_mismatch` and is not imported.
+Otherwise fsck must quarantine or ignore them.
 
 ## Missing object detection
 
@@ -96,6 +100,9 @@ Quarantine actions should:
 
 If a file cannot be moved safely, fsck should mark the object unavailable and
 record the failed quarantine action.
+
+The implementation creates a non-overwriting quarantine directory by using the
+object ID suffix and, if needed, a numeric suffix.
 
 ## Repair behavior
 

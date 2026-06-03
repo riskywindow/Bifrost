@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .report import write_report
 from .runner import ContextStormError, run_scenario
+from .store_runner import is_store_scenario, run_store_scenario
 from .synthetic_kv import generate_synthetic_object, write_synthetic_object
 
 
@@ -41,12 +42,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "run":
-            run_dir = run_scenario(
-                args.scenario,
-                runs_root=args.runs_root,
-                run_id=args.run_id,
-                allow_root_faults=args.allow_root_faults,
-            )
+            if is_store_scenario(args.scenario):
+                run_dir = run_store_scenario(
+                    args.scenario,
+                    runs_root=args.runs_root,
+                    run_id=args.run_id,
+                )
+            else:
+                run_dir = run_scenario(
+                    args.scenario,
+                    runs_root=args.runs_root,
+                    run_id=args.run_id,
+                    allow_root_faults=args.allow_root_faults,
+                )
             print(run_dir)
             return 0
         if args.command == "report":

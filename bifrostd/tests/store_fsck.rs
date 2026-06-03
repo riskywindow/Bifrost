@@ -308,6 +308,39 @@ fn orphan_metadata_and_payload_are_detected_and_repair_imports_valid_pair() {
 }
 
 #[test]
+fn orphan_repair_rejects_valid_pair_in_wrong_committed_path() {
+    let root = temp_root("orphan-wrong-path");
+    let store = Store::open(root.clone()).unwrap();
+    let fixture = native_fixture();
+    let object_id = object_id(&fixture).to_string();
+    let suffix = object_id
+        .strip_prefix("bifrost://object/blake3/")
+        .unwrap()
+        .to_string();
+    let wrong_dir = root.join("objects").join("ff").join("ff");
+    fs::create_dir_all(&wrong_dir).unwrap();
+    fs::write(
+        wrong_dir.join(format!("{suffix}.meta.json")),
+        &fixture.metadata_bytes,
+    )
+    .unwrap();
+    fs::write(
+        wrong_dir.join(format!("{suffix}.payload.bin")),
+        &fixture.payload,
+    )
+    .unwrap();
+
+    let repair = store.fsck(FsckMode::Repair).unwrap();
+
+    assert!(repair
+        .findings
+        .iter()
+        .any(|finding| finding.finding_type == "orphan_file_path_mismatch"));
+    assert!(!store.has_object(&object_id).unwrap());
+    cleanup(&root);
+}
+
+#[test]
 fn abandoned_staging_detected_and_repair_removes_it() {
     let root = temp_root("staging");
     let store = Store::open(root.clone()).unwrap();

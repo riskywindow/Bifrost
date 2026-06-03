@@ -29,6 +29,8 @@ Rules:
 1. Commit requires complete bytes and Phase 1 validation.
 2. Commit does not remove the need for later integrity checks.
 3. A committed object with missing catalog or file evidence is unavailable.
+4. A committed catalog row is not servable and cannot be pinned into
+   availability; it must first complete the verified transition.
 
 ### verified
 

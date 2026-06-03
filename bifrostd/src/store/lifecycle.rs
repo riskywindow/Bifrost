@@ -11,7 +11,6 @@ pub fn valid_state_transition(from: ObjectState, to: ObjectState) -> bool {
         (ObjectState::Staging, ObjectState::Committed)
             | (ObjectState::Staging, ObjectState::Quarantined)
             | (ObjectState::Committed, ObjectState::Verified)
-            | (ObjectState::Committed, ObjectState::Pinned)
             | (ObjectState::Committed, ObjectState::Evicting)
             | (ObjectState::Committed, ObjectState::Missing)
             | (ObjectState::Committed, ObjectState::Corrupt)
@@ -55,10 +54,7 @@ pub fn can_serve(state: ObjectState, pin_count: i64) -> bool {
     pin_count >= 0
         && matches!(
             state,
-            ObjectState::Committed
-                | ObjectState::Verified
-                | ObjectState::Pinned
-                | ObjectState::Evictable
+            ObjectState::Verified | ObjectState::Pinned | ObjectState::Evictable
         )
 }
 
