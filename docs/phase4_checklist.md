@@ -24,7 +24,7 @@ Last verified: 2026-06-13
 - [x] Build prefix hash from tokenizer hash, positional config hash, token hash,
   and absolute position range.
 - [ ] Test token mismatch rejection.
-- [ ] Test prefix mismatch rejection.
+- [x] Test prefix mismatch rejection.
 
 ## KV extraction
 
@@ -41,22 +41,22 @@ Last verified: 2026-06-13
 
 ## KV serialization
 
-- [ ] Serialize every generated page as Phase 1 `native_kv_page`.
-- [ ] Use canonical payload layout `[2, block_tokens, num_kv_heads, head_dim]`.
-- [ ] Store key as payload index 0 and value as payload index 1.
-- [ ] Use deterministic contiguous little-endian tensor bytes.
-- [ ] Record exact tensor shape, dtype, byte length, and layout.
-- [ ] Compute payload hash, descriptor hash, and object ID with Phase 1 rules.
-- [ ] Ensure mutable store and demo state is excluded from object identity.
+- [x] Serialize every generated page as Phase 1 `native_kv_page`.
+- [x] Use canonical payload layout `[2, block_tokens, num_kv_heads, head_dim]`.
+- [x] Store key as payload index 0 and value as payload index 1.
+- [x] Use deterministic contiguous little-endian tensor bytes.
+- [x] Record exact tensor shape, dtype, byte length, and layout.
+- [x] Compute payload hash, descriptor hash, and object ID with Phase 1 rules.
+- [x] Ensure mutable store and demo state is excluded from object identity.
 - [ ] Test dtype, shape, layout, byte-length, and hash mismatch rejection.
 
 ## Validation
 
-- [ ] Validate generated pages with Python reference validation.
+- [x] Validate generated pages with Python reference validation.
 - [ ] Validate generated pages with Rust mirror validation.
 - [x] Generate target profiles deterministically from tiny-model config.
 - [ ] Reject unknown schema versions.
-- [ ] Reject incompatible target profiles.
+- [x] Reject incompatible target profiles.
 - [ ] Keep Phase 1 validation reason codes stable.
 - [ ] Add Phase 4-specific errors for extraction, serialization, rehydration,
   logit mismatch, and continuation mismatch.
@@ -98,15 +98,15 @@ Last verified: 2026-06-13
 
 ## Corruption tests
 
-- [ ] Flip one payload byte and verify payload hash rejection.
+- [x] Flip one payload byte and verify payload hash rejection.
 - [ ] Change descriptor tensor shape and verify descriptor hash or validation
   rejection.
 - [ ] Change object ID and verify identity rejection.
-- [ ] Change model hash and verify compatibility rejection.
-- [ ] Change tokenizer hash and verify compatibility rejection.
+- [x] Change model hash and verify compatibility rejection.
+- [x] Change tokenizer hash and verify compatibility rejection.
 - [ ] Change positional config hash and verify compatibility rejection.
-- [ ] Change prefix hash and verify miss or rejection.
-- [ ] Remove one layer/block page and verify no full rehydration occurs.
+- [x] Change prefix hash and verify miss or rejection.
+- [x] Remove one layer/block page and verify no full rehydration occurs.
 - [ ] Mark one page quarantined or evicted and verify manifest incompleteness.
 - [ ] Force logit mismatch with wrong-but-well-shaped KV and verify test
   failure.
@@ -134,19 +134,20 @@ Last verified: 2026-06-13
 - [ ] Keep Phase 1 parity tests green.
 - [ ] Keep Phase 2 transport tests green.
 - [ ] Keep Phase 3 store tests green.
+- [x] Include at least one end-to-end extract-rehydrate-logit comparison.
 - [ ] Include at least one end-to-end extract-store-rehydrate-logit comparison.
 
 ## Phase 4 done criteria
 
 - [x] Tiny transformer produces deterministic CPU logits and
   `past_key_values`.
-- [ ] Every generated KV page is a validated Phase 1 `native_kv_page`.
+- [x] Every generated KV page is a validated Phase 1 `native_kv_page`.
 - [ ] Native pages roundtrip through the Phase 3 store.
 - [ ] Prefix or session manifest proves layer/block completeness.
-- [ ] Rehydrated logits match uninterrupted baseline within required
+- [x] Rehydrated logits match uninterrupted baseline within required
   `float32` tolerance.
 - [ ] Greedy continuation tokens match baseline.
-- [ ] Corruption and mismatch cases fail closed.
+- [x] Corruption and mismatch cases fail closed.
 - [ ] Cross-process KV teleportation demo passes locally.
 - [ ] ContextStorm model benchmark smoke scenario passes locally and in CI.
 - [ ] No forbidden Phase 4 scope was implemented.
