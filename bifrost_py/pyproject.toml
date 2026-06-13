@@ -7,7 +7,9 @@ dependencies = [
   # Phase 1 object identity requires BLAKE3; SHA-family hashes are not valid primary object identity hashes.
   "blake3>=1.0.0",
   # Phase 1 exposes JSON Schema validation helpers used by validation-result contracts.
-  "jsonschema>=4.0.0"
+  "jsonschema>=4.0.0",
+  # Phase 4 uses a locally defined PyTorch tiny transformer for CPU-only correctness tests.
+  "torch>=2.0.0"
 ]
 
 [project.scripts]
@@ -21,6 +23,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+include = ["bifrost_kv*", "bifrost_model*"]
 
 [build-system]
 requires = ["setuptools>=68"]
