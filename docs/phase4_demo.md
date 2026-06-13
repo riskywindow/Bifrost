@@ -13,7 +13,55 @@ The demo is local, CPU-only, and deterministic by default.
 
 ## Demo script
 
-The expected script shape is:
+The current local correctness smoke is a no-daemon, one-process script:
+
+```text
+PYTHONPATH=bifrost_py python examples/tiny_transformer/local_kv_roundtrip.py \
+  --prompt "1 2 3 4 5" \
+  --decode-tokens 4 \
+  --block-size 2 \
+  --seed 1234
+```
+
+It parses explicit integer token IDs, initializes the deterministic CPU tiny
+transformer, runs an uninterrupted greedy baseline, serializes the prefill
+`past_key_values` into validated Phase 1 `native_kv_page` objects, rehydrates
+those pages in memory, resumes greedy generation, and compares logits and
+continuation tokens.
+
+For stable test output:
+
+```text
+PYTHONPATH=bifrost_py python examples/tiny_transformer/local_kv_roundtrip.py \
+  --prompt "1 2 3 4 5" \
+  --decode-tokens 4 \
+  --block-size 2 \
+  --seed 1234 \
+  --json
+```
+
+The JSON summary includes:
+
+```json
+{
+  "status": "pass",
+  "prompt_tokens": [1, 2, 3, 4, 5],
+  "baseline_continuation": [7, 7, 7, 127],
+  "rehydrated_continuation": [7, 7, 7, 127],
+  "continuation_match": true,
+  "logit_max_abs_error": 0.0,
+  "page_count": 6,
+  "layer_count": 2,
+  "block_size_tokens": 2,
+  "object_ids": ["bifrost://object/blake3/..."]
+}
+```
+
+This script intentionally does not use a daemon, local store, manifests,
+cross-process transfer, ContextStorm, LMCache, vLLM, external model downloads,
+GPU execution, dashboards, compression, QUIC, or RDMA.
+
+The later cross-process demo shape is:
 
 ```text
 python -m bifrost_tiny.demo teleport \

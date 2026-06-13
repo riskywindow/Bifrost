@@ -86,6 +86,8 @@ Last verified: 2026-06-13
 
 ## Cross-process demo
 
+- [x] Add a no-daemon one-process script that serializes validated native KV
+  pages, rehydrates them, and compares logits plus greedy continuation.
 - [ ] Process A runs prefix and extracts native KV pages.
 - [ ] Process A stores pages through BIFROST.
 - [ ] Process A records or prints manifest ID and comparison metadata.
@@ -93,7 +95,8 @@ Last verified: 2026-06-13
 - [ ] Process B rehydrates `past_key_values`.
 - [ ] Process B resumes greedy decoding.
 - [ ] Demo compares logits and greedy token IDs with baseline.
-- [ ] Demo emits stable human-readable and JSON output.
+- [x] Local no-daemon demo emits stable human-readable and JSON output.
+- [ ] Cross-process demo emits stable human-readable and JSON output.
 - [ ] Demo remains CPU-only and deterministic by default.
 
 ## Corruption tests
@@ -135,6 +138,8 @@ Last verified: 2026-06-13
 - [ ] Keep Phase 2 transport tests green.
 - [ ] Keep Phase 3 store tests green.
 - [x] Include at least one end-to-end extract-rehydrate-logit comparison.
+- [x] Include at least one local no-daemon extract-rehydrate-greedy
+  continuation comparison.
 - [ ] Include at least one end-to-end extract-store-rehydrate-logit comparison.
 
 ## Phase 4 done criteria
@@ -146,7 +151,8 @@ Last verified: 2026-06-13
 - [ ] Prefix or session manifest proves layer/block completeness.
 - [x] Rehydrated logits match uninterrupted baseline within required
   `float32` tolerance.
-- [ ] Greedy continuation tokens match baseline.
+- [x] Greedy continuation tokens match baseline in the no-daemon local
+  roundtrip.
 - [x] Corruption and mismatch cases fail closed.
 - [ ] Cross-process KV teleportation demo passes locally.
 - [ ] ContextStorm model benchmark smoke scenario passes locally and in CI.
