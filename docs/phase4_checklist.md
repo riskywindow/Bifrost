@@ -63,12 +63,12 @@ Last verified: 2026-06-13
 
 ## Store roundtrip
 
-- [ ] Commit only verified native KV pages to the Phase 3 store.
+- [x] Commit only verified native KV pages to the Phase 3 store.
 - [ ] Prove staging pages are never returned as hits.
 - [ ] Query pages by model hash, prefix hash, layer ID, and block ID.
-- [ ] Retrieve payloads through GET before rehydration.
-- [ ] Recheck file-level integrity before use.
-- [ ] Test roundtrip through daemon-backed store path.
+- [x] Retrieve payloads through GET before rehydration.
+- [x] Recheck file-level integrity before use.
+- [x] Test roundtrip through daemon-backed store path.
 - [ ] Test local-store convenience path if implemented.
 - [ ] Test missing, evicted, quarantined, corrupt, and catalog-inconsistent
   objects fail closed.
@@ -96,7 +96,8 @@ Last verified: 2026-06-13
 - [ ] Process B resumes greedy decoding.
 - [ ] Demo compares logits and greedy token IDs with baseline.
 - [x] Local no-daemon demo emits stable human-readable and JSON output.
-- [ ] Cross-process demo emits stable human-readable and JSON output.
+- [x] Store-backed daemon demo emits stable human-readable and JSON output.
+- [ ] Cross-process worker A/B demo emits stable human-readable and JSON output.
 - [ ] Demo remains CPU-only and deterministic by default.
 
 ## Corruption tests
@@ -140,20 +141,20 @@ Last verified: 2026-06-13
 - [x] Include at least one end-to-end extract-rehydrate-logit comparison.
 - [x] Include at least one local no-daemon extract-rehydrate-greedy
   continuation comparison.
-- [ ] Include at least one end-to-end extract-store-rehydrate-logit comparison.
+- [x] Include at least one end-to-end extract-store-rehydrate-logit comparison.
 
 ## Phase 4 done criteria
 
 - [x] Tiny transformer produces deterministic CPU logits and
   `past_key_values`.
 - [x] Every generated KV page is a validated Phase 1 `native_kv_page`.
-- [ ] Native pages roundtrip through the Phase 3 store.
+- [x] Native pages roundtrip through the Phase 3 store.
 - [ ] Prefix or session manifest proves layer/block completeness.
 - [x] Rehydrated logits match uninterrupted baseline within required
   `float32` tolerance.
 - [x] Greedy continuation tokens match baseline in the no-daemon local
   roundtrip.
 - [x] Corruption and mismatch cases fail closed.
-- [ ] Cross-process KV teleportation demo passes locally.
+- [ ] Cross-process worker A/B KV teleportation demo passes locally.
 - [ ] ContextStorm model benchmark smoke scenario passes locally and in CI.
 - [ ] No forbidden Phase 4 scope was implemented.

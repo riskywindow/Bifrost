@@ -61,22 +61,53 @@ This script intentionally does not use a daemon, local store, manifests,
 cross-process transfer, ContextStorm, LMCache, vLLM, external model downloads,
 GPU execution, dashboards, compression, QUIC, or RDMA.
 
-The later cross-process demo shape is:
+The daemon-backed store roundtrip smoke exercises the Phase 3 committed store
+path without manifests:
 
 ```text
-python -m bifrost_tiny.demo teleport \
+PYTHONPATH=bifrost_py python examples/tiny_transformer/store_kv_roundtrip.py \
   --endpoint 127.0.0.1:9000 \
-  --store-root /tmp/bifrost-phase4-store \
-  --tokens 1,5,9,2,7,3,4,8,6 \
-  --prefix-len 6 \
-  --continuation-len 3 \
-  --block-size-tokens 4 \
-  --dtype float32 \
+  --prompt "1 2 3 4 5" \
+  --decode-tokens 4 \
+  --block-size 2 \
+  --seed 1234 \
   --json
 ```
 
-The module name may change during implementation if the repository's Python
-package layout requires it, but the demo contract should stay stable:
+It initializes the deterministic tiny transformer, parses explicit integer
+token IDs, runs the uninterrupted greedy baseline, serializes the prefill
+`past_key_values` into validated Phase 1 `native_kv_page` objects, writes
+temporary metadata, payload, and target-profile files, PUTs every page through
+`bifrost-xfer`, confirms every page is servable with `bifrost-store inspect`,
+GETs every page back through `bifrost-xfer`, validates the fetched bytes with
+the Phase 1 Python validator, rehydrates the fetched pages, and compares logits
+plus greedy continuation tokens.
+
+The JSON summary includes:
+
+```json
+{
+  "status": "pass",
+  "prompt_tokens": [1, 2, 3, 4, 5],
+  "page_count": 6,
+  "put_success_count": 6,
+  "get_success_count": 6,
+  "object_ids": ["bifrost://object/blake3/..."],
+  "baseline_continuation": [7, 7, 7, 127],
+  "rehydrated_continuation": [7, 7, 7, 127],
+  "continuation_match": true,
+  "logit_max_abs_error": 0.0,
+  "total_put_ms": 12.0,
+  "total_get_ms": 10.0,
+  "rehydrate_ms": 1.0
+}
+```
+
+This store roundtrip does not implement manifests, the cross-process worker A/B
+demo, ContextStorm model scenarios, LMCache, vLLM, external model downloads,
+GPU execution, dashboards, compression, QUIC, or RDMA.
+
+The later cross-process demo contract should stay stable:
 
 1. Local deterministic tiny model.
 2. Integer token IDs supplied on the command line or by a fixture name.
@@ -140,44 +171,31 @@ reason rather than attempting partial rehydration.
 Build Rust binaries:
 
 ```text
-cd bifrostd
-cargo build --bins
+cargo build --manifest-path bifrostd/Cargo.toml --bins
 ```
 
 Start a local daemon with a fresh store root:
 
 ```text
-./target/debug/bifrost-daemon \
+bifrostd/target/debug/bifrost-daemon \
   --listen 127.0.0.1:9000 \
-  --store-root /tmp/bifrost-phase4-store
+  --spool /tmp/bifrost-phase4-store
 ```
 
 Run the demo from the repository root in another terminal:
 
 ```text
-PYTHONPATH=. python -m bifrost_tiny.demo teleport \
+PYTHONPATH=bifrost_py python examples/tiny_transformer/store_kv_roundtrip.py \
   --endpoint 127.0.0.1:9000 \
-  --store-root /tmp/bifrost-phase4-store \
-  --tokens 1,5,9,2,7,3,4,8,6 \
-  --prefix-len 6 \
-  --continuation-len 3 \
-  --block-size-tokens 4 \
-  --dtype float32
-```
-
-If the final implementation supports direct local-store mode for tests, it may
-also provide:
-
-```text
-PYTHONPATH=. python -m bifrost_tiny.demo teleport \
-  --store-root /tmp/bifrost-phase4-store \
-  --no-daemon \
-  --fixture small_multiblock \
+  --prompt "1 2 3 4 5" \
+  --decode-tokens 4 \
+  --block-size 2 \
+  --seed 1234 \
   --json
 ```
 
-Direct mode is a test convenience. The cross-process demo should still exercise
-the daemon path before Phase 4 is considered complete.
+The harness accepts `--work-dir PATH` to retain the generated metadata,
+payload, target-profile, and fetched GET files for inspection.
 
 ## Optional GPU demo
 
