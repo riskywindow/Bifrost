@@ -86,6 +86,7 @@ Phase 5 supports:
 bifrost://HOST:PORT
 bifrost+tcp://HOST:PORT
 plugin://bifrost?endpoint=HOST:PORT
+plugin://bifrost.INSTANCE_NAME?endpoint=HOST:PORT
 ```
 
 `bifrost://` is the preferred user-facing scheme. `bifrost+tcp://` is allowed
@@ -94,6 +95,41 @@ accepted for LMCache plugin configurations that route through a generic plugin
 scheme.
 
 Unsupported schemes must be rejected by the adapter.
+
+## Adapter configuration parsing
+
+`BifrostConnectorAdapter` parses:
+
+```text
+endpoint:
+  From bifrost://HOST:PORT, bifrost+tcp://HOST:PORT, endpoint query
+  parameter, or endpoint/bifrost_endpoint in LMCache extra_config.
+
+chunk_size:
+  From the URL query, LMCache extra_config, LMCache config object, or the
+  BIFROST default.
+
+allow_pickle_fallback:
+  From LMCache extra_config or URL query. This must remain false for production
+  configurations and is intended for fake CI MemoryObj fixtures.
+
+timeout_seconds:
+  From the URL query, LMCache extra_config, LMCache config object, or the
+  BIFROST default.
+
+strict_validation:
+  From the URL query, LMCache extra_config, LMCache config object, or the
+  BIFROST default.
+```
+
+Direct BIFROST URLs require both host and port. `plugin://bifrost` URLs require
+an endpoint query parameter or equivalent extra configuration because the
+generic plugin URL does not carry a daemon endpoint by itself.
+
+An example LMCache YAML file lives at
+`integrations/lmcache_bifrost/examples/lmcache_config_bifrost.yaml`. It is an
+example only; users must verify the exact plugin configuration shape against
+their installed LMCache version.
 
 ## BifrostRemoteConnector
 

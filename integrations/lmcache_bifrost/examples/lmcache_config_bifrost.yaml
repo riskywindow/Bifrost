@@ -1,0 +1,32 @@
+# Example LMCache configuration for the BIFROST remote storage plugin.
+#
+# LMCache plugin configuration keys have changed across releases. Verify this
+# shape against the LMCache version installed in your environment before using
+# it in a real serving stack.
+
+remote_storage_plugins:
+  - bifrost
+
+remote_storage_plugin:
+  bifrost:
+    module_path: lmcache_bifrost.adapter
+    class_name: BifrostConnectorAdapter
+
+# Preferred direct BIFROST URL. The adapter parses this to host:port for the
+# BIFROST daemon client.
+remote_url: bifrost://127.0.0.1:7744
+
+# Some LMCache versions route custom storage through plugin:// URLs instead.
+# If your version requires that shape, use plugin://bifrost and pass endpoint
+# through the plugin extra config supported by that version.
+# remote_url: plugin://bifrost
+# remote_storage_plugin:
+#   bifrost:
+#     module_path: lmcache_bifrost.adapter
+#     class_name: BifrostConnectorAdapter
+#     extra_config:
+#       endpoint: 127.0.0.1:7744
+#       chunk_size: 262144
+#       timeout_seconds: 5.0
+#       strict_validation: true
+#       allow_pickle_fallback: false

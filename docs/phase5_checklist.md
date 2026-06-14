@@ -37,15 +37,17 @@ Last verified: 2026-06-14
 
 ## Connector adapter
 
-- [ ] Define `BifrostConnectorAdapter`.
-- [ ] Support `bifrost://HOST:PORT`.
-- [ ] Support `bifrost+tcp://HOST:PORT`.
-- [ ] Support `plugin://bifrost?endpoint=HOST:PORT`.
-- [ ] Reject unsupported URL schemes.
-- [ ] Parse namespace, endpoint, timeout, and strict-validation settings.
-- [ ] Construct `BifrostRemoteConnector`.
-- [ ] Test adapter loading with fake LMCache interfaces.
-- [ ] Test invalid configuration fails deterministically.
+- [x] Define `BifrostConnectorAdapter`.
+- [x] Support `bifrost://HOST:PORT`.
+- [x] Support `bifrost+tcp://HOST:PORT`.
+- [x] Support `plugin://bifrost?endpoint=HOST:PORT`.
+- [x] Support `plugin://bifrost.INSTANCE_NAME` naming.
+- [x] Reject unsupported URL schemes.
+- [x] Parse endpoint, chunk size, pickle fallback, timeout, and
+  strict-validation settings.
+- [x] Construct `BifrostRemoteConnector`.
+- [x] Test adapter loading with fake LMCache interfaces.
+- [x] Test invalid configuration fails deterministically.
 
 ## Remote connector
 
