@@ -1,0 +1,24 @@
+[project]
+name = "lmcache-bifrost"
+version = "0.1.0"
+description = "BIFROST Phase 5 LMCache opaque blob codec."
+requires-python = ">=3.11"
+dependencies = [
+  "blake3>=1.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "../../bifrost_py"]
+
+[tool.setuptools.packages.find]
+include = ["lmcache_bifrost*"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

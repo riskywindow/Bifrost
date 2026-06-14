@@ -27,7 +27,7 @@ The mapping must be deterministic:
 ```text
 canonical_key_repr = canonical_lmcache_key_repr(CacheEngineKey)
 opaque_engine_key_hash = blake3(
-  "bifrost.lmcache.key.v1" || canonical_key_repr
+  "bifrost.lmcache.key.v1" || 0x00 || canonical_key_repr
 )
 ```
 
@@ -38,6 +38,17 @@ fake class must expose the same canonicalization contract.
 
 Do not use Python object identity, memory addresses, process IDs, dictionary
 iteration order, or noncanonical `repr` output as the hash input.
+
+The Phase 5 codec uses the following ordered strategy:
+
+1. LMCache/key-provided stable hooks such as canonical string, stable repr,
+   serialization, or bytes methods.
+2. Dataclass, namedtuple, mapping, sequence, and public annotated or instance
+   fields, encoded as canonical JSON with sorted object keys.
+3. Custom string output only when it is single-line and does not contain memory
+   addresses.
+
+If none of those paths is available, key hashing fails closed.
 
 ## MemoryObj mapping
 
@@ -53,11 +64,17 @@ memory_obj = deserialize_lmcache_memory_obj(payload_bytes)
 The serializer and deserializer are LMCache-owned or connector-local adapters
 around LMCache APIs. BIFROST core must treat `payload_bytes` as opaque.
 
+The codec prefers LMCache-native serialization and deserialization APIs when
+they are discoverable by introspection. If no native API is available, it may
+use a pickle fallback only when `allow_pickle_fallback` is explicitly enabled.
+The pickle fallback exists for local fake tests only. It must not be enabled
+for production or cross-trust-boundary LMCache deployments.
+
 Required payload metadata:
 
 ```text
 engine_payload_type:
-  "lmcache.MemoryObj"
+  best available MemoryObj type name, or "opaque_lmcache_memory_obj"
 
 byte_length:
   length of payload_bytes
@@ -81,17 +98,23 @@ object_type: "opaque_engine_blob"
 engine_profile.engine_name: "lmcache"
 engine_profile.integration_name: "lmcache_bifrost_remote_storage"
 engine_profile.kv_cache_format: "opaque_lmcache_memory_obj"
-tensor_profile.engine_key_hash: opaque_engine_key_hash
-tensor_profile.engine_payload_type: "lmcache.MemoryObj"
-tensor_profile.byte_length: len(payload_bytes)
-tensor_profile.compression: "none"
-prefix_profile.engine_key_hash: opaque_engine_key_hash
+engine_profile.kv_layout: "opaque"
+opaque_engine_profile.engine_key_hash: opaque_engine_key_hash
+opaque_engine_profile.engine_payload_type: best available MemoryObj type name
+opaque_engine_profile.engine_key_repr_version: "lmcache_key_repr.v1"
+payload_profile.byte_length: len(payload_bytes)
+payload_profile.compression: "none"
+payload_profile.payload_encoding: "raw_bytes"
+native_tensor_profile: null
+prefix_profile: null
 ```
 
-Model fields may be populated from LMCache or connector configuration when
-available. Missing model, tokenizer, RoPE, dtype, layer, head, and tensor-layout
-fields must remain absent or null. The connector must not invent native
-compatibility metadata.
+The current Phase 1 schema requires a `model_profile` object even for opaque
+objects. The LMCache codec therefore fills it with deterministic
+`lmcache-opaque-unknown` placeholder values and unknown BLAKE3 commitments.
+Those fields are not used for opaque compatibility checks. Native tensor
+compatibility fields remain null, and the connector must not invent native KV
+layout metadata.
 
 Mutable local state must not be included in immutable object identity.
 
@@ -126,6 +149,10 @@ The object ID must not include:
 8. Retry count.
 9. Process ID.
 10. Benchmark run ID.
+
+For deterministic codec output, `created_at_unix_ms` is fixed at `0` for
+generated opaque descriptors. Wall-clock creation time is local store state and
+must not affect immutable object identity.
 
 ## List behavior
 

@@ -18,15 +18,15 @@ Last verified: 2026-06-14
 
 ## Opaque blob codec
 
-- [ ] Define canonical LMCache `CacheEngineKey` representation.
-- [ ] Compute `opaque_engine_key_hash` with a domain-separated hash input.
-- [ ] Serialize fake LMCache `MemoryObj` fixtures to payload bytes.
-- [ ] Deserialize payload bytes back to fake `MemoryObj` fixtures.
-- [ ] Generate `opaque_engine_blob` descriptors for LMCache objects.
-- [ ] Populate LMCache engine and integration metadata.
-- [ ] Leave unknown native tensor compatibility fields null or absent.
-- [ ] Compute payload hash, descriptor hash, and object ID with Phase 1 rules.
-- [ ] Validate descriptors and payloads through Python reference validation.
+- [x] Define canonical LMCache `CacheEngineKey` representation.
+- [x] Compute `opaque_engine_key_hash` with a domain-separated hash input.
+- [x] Serialize fake LMCache `MemoryObj` fixtures to payload bytes.
+- [x] Deserialize payload bytes back to fake `MemoryObj` fixtures.
+- [x] Generate `opaque_engine_blob` descriptors for LMCache objects.
+- [x] Populate LMCache engine and integration metadata.
+- [x] Leave unknown native tensor compatibility fields null or absent.
+- [x] Compute payload hash, descriptor hash, and object ID with Phase 1 rules.
+- [x] Validate descriptors and payloads through Python reference validation.
 - [ ] Validate descriptors and payloads through Rust mirror validation.
 - [ ] Test key mismatch, payload hash mismatch, descriptor mismatch, object ID
   mismatch, and unsupported schema rejection.
@@ -63,8 +63,8 @@ Last verified: 2026-06-14
 
 ## Fake LMCache tests
 
-- [ ] Add fake `CacheEngineKey` with stable canonical representation.
-- [ ] Add fake `MemoryObj` with deterministic bytes.
+- [x] Add fake `CacheEngineKey` with stable canonical representation.
+- [x] Add fake `MemoryObj` with deterministic bytes.
 - [ ] Test fake put/get roundtrip through the connector.
 - [ ] Test fake `exists` and `exists_sync`.
 - [ ] Test fake list behavior.
