@@ -272,6 +272,22 @@ fn check_native_compatibility(
             ReasonCode::WrongPrefixHash,
         ),
         (
+            object_prefix.token_hash == target_prefix.token_hash,
+            ReasonCode::WrongPrefixHash,
+        ),
+        (
+            object_prefix.tokenizer_hash == target_prefix.tokenizer_hash,
+            ReasonCode::WrongTokenizerHash,
+        ),
+        (
+            object_prefix.rope_config_hash == target_prefix.rope_config_hash,
+            ReasonCode::WrongRopeHash,
+        ),
+        (
+            object_prefix.mm_hashes == target_prefix.allow_mm_hashes,
+            ReasonCode::WrongPrefixHash,
+        ),
+        (
             native.token_range == target_prefix.token_range,
             ReasonCode::WrongTokenRange,
         ),

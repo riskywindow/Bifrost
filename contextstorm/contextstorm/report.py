@@ -16,6 +16,10 @@ def write_report(run_dir: Path) -> tuple[Path, Path]:
         from .store_report import write_store_report
 
         return write_store_report(run_dir)
+    if run.get("benchmark_kind") == "model":
+        from .model_report import write_model_report
+
+        return write_model_report(run_dir)
     operations = run.get("operations", [])
     metrics = [operation.get("metrics", {}) for operation in operations]
     summary = {

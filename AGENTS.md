@@ -1,10 +1,10 @@
 # BIFROST Agent Guidance
 
-Last verified: 2026-06-02
+Last verified: 2026-06-14
 
 ## Current phase
 
-BIFROST is in Phase 4.
+BIFROST is in Phase 5.
 
 Phase 1 is complete. It produced immutable KV object descriptors, target
 compatibility profiles, canonical object identity hashing, Python reference
@@ -20,89 +20,94 @@ Phase 3 is complete. It produced the durable local KV object store, SQLite
 catalog, lookup, query, inspect, stats, pinning, deterministic eviction,
 prefix/session manifests, fsck, and ContextStorm store benchmarks.
 
-The Phase 4 goal is to build a CPU-friendly tiny-transformer KV correctness
-harness. BIFROST must prove that real transformer KV cache state can be
-extracted, serialized into native KV pages, stored, retrieved, rehydrated, and
-used to resume decoding with logits matching an uninterrupted baseline.
+Phase 4 is complete. It produced a CPU-friendly tiny-transformer correctness
+harness, integer tokenization, real KV extraction, native KV page
+serialization, store-backed rehydration, logit and greedy-continuation
+comparisons, fail-closed corruption tests, and a cross-process KV teleport
+demo.
 
-## Phase 4 scope
+The Phase 5 goal is to implement BIFROST as a custom LMCache remote storage
+backend. LMCache-owned KV objects must be stored as BIFROST
+`opaque_engine_blob` objects, indexed by LMCache `CacheEngineKey` hash,
+retrieved by the connector, and roundtripped through fake and optional real
+LMCache tests.
+
+## Phase 5 scope
 
 Agents may work on:
 
-1. A local deterministic PyTorch tiny transformer used only as a correctness
-   harness.
-2. Integer tokenization based on explicit token IDs, not external tokenizer
-   packages or downloaded tokenizer assets.
-3. KV extraction from the tiny model's `past_key_values`.
-4. Serialization of every generated KV page as a Phase 1 `native_kv_page`.
-5. Target profile generation for the tiny model and harness engine.
-6. Store roundtrips through the Phase 3 local store and manifest APIs.
-7. Rehydration of verified native KV pages back into the tiny model's
-   `past_key_values` layout.
-8. Logit and greedy-continuation comparisons against an uninterrupted
-   baseline.
-9. Corruption, mismatch, missing-page, and manifest-incompleteness tests that
-   prove the harness fails closed.
-10. ContextStorm model-correctness benchmark scenarios that remain CPU-only,
-   local, and deterministic.
+1. A Python BIFROST client surface for LMCache connector use.
+2. A codec that wraps LMCache-owned bytes as `opaque_engine_blob` objects.
+3. A `BifrostConnectorAdapter` for LMCache remote storage plugin loading.
+4. A `BifrostRemoteConnector` implementing LMCache remote storage methods.
+5. Mapping LMCache `CacheEngineKey` values to stable BIFROST
+   `opaque_engine_key_hash` values.
+6. Storing and retrieving LMCache `MemoryObj` payloads without interpreting
+   tensor semantics.
+7. Fake LMCache tests that run in CI without installing LMCache.
+8. Optional real LMCache integration tests that skip when LMCache is not
+   installed.
+9. Optional vLLM plus LMCache smoke tests that are opt-in and skipped by
+   default.
+10. ContextStorm LMCache-style workloads that remain local and deterministic
+    by default.
 
-Agents must not implement external integrations or production systems during
-Phase 4.
+Agents must not implement a raw vLLM KVTransfer connector in Phase 5.
 
 Do not add:
 
-1. LMCache integration.
-2. vLLM integration.
-3. Hugging Face model downloads or tokenizer downloads.
-4. Production model support.
-5. GPU requirements.
-6. Custom CUDA.
-7. Dashboards.
-8. Compression.
-9. QUIC.
-10. RDMA.
-11. Scheduler logic.
-12. Kubernetes.
+1. Raw vLLM KVTransfer integration.
+2. SGLang integration.
+3. Kubernetes.
+4. Dashboards.
+5. GPU-required tests.
+6. Hugging Face model downloads or tokenizer downloads.
+7. External model downloads.
+8. Custom CUDA.
+9. RDMA.
+10. QUIC.
+11. Compression.
+12. Parity chunks or FEC.
+13. Production authentication.
+14. Distributed routing or scheduler logic.
 
-GPU demos are optional exploratory work only. They must be skipped by default
-and must never be required by tests, CI, or default demo commands.
+GPU and real-serving demos are optional exploratory work only. They must be
+skipped by default and must never be required by tests, CI, or default demo
+commands.
 
 ## Correctness rules
 
-BIFROST may miss a cache hit, but it must never rehydrate wrong or partial KV
-state.
+BIFROST may miss a cache hit, but it must never return a wrong, corrupt,
+partial, incompatible, or semantically uncertain object as an LMCache hit.
 
-BIFROST must fail closed. If compatibility, integrity, catalog consistency,
-schema meaning, transfer completion, object identity, local store state, prefix
-identity, token identity, layer completeness, dtype, tensor layout, or
-rehydration shape is uncertain, reject the object or report a miss.
+Phase 5 must use `opaque_engine_blob` for LMCache KV objects. LMCache owns the
+tensor layout, serialization meaning, cache chunking, and rehydration semantics.
+BIFROST may hash, validate, store, transfer, retrieve, list, and delete local
+records for opaque bytes, but it must not reinterpret LMCache tensor semantics
+or convert LMCache payloads into `native_kv_page`.
 
-Phase 4 must reuse Phase 1 native KV validation as the acceptance gate for every
-KV page generated from the tiny model. Store indexing, manifest membership, and
-demo convenience code are not substitutes for object validation. A catalog row
-or manifest row does not make a page rehydratable unless file-level integrity,
-descriptor hash, payload hash, object ID, target compatibility, prefix identity,
-and tensor layout are valid.
+Every connector operation must fail closed. If serialization, descriptor
+generation, validation, store commit, catalog lookup, payload integrity,
+retrieval, deserialization, key matching, or connector lifecycle state is
+uncertain, the connector must return a miss or raise a deterministic connector
+error according to the method contract. It must not synthesize a `MemoryObj`
+from suspect bytes.
 
-Only committed and verified objects may be used for rehydration. Staging objects
-must never be listed as available cache hits and must never satisfy HAS, GET,
-lookup, query, manifest, stats, or tiny-harness APIs that imply availability.
+Only committed and verified objects may satisfy LMCache `exists`, `get`,
+`list`, or batched lookup operations. Staging objects must never be visible as
+available cache hits and must never satisfy connector APIs that imply
+availability.
 
-Every rehydration must prove layer and block completeness for the requested
-prefix. If any required layer/block page is absent, corrupt, incompatible,
-quarantined, evicted, or only partially understood, the harness must recompute
-locally or report a cache miss. It must not inject a partial session unless the
-valid prefix boundary is explicit and tested.
-
-Mutable store or harness state must never be included in immutable object
-identity. Fields such as staging path, committed path, local tier, pinned state,
-write state, last access time, expiry, transfer state, retry count, peer
-address, cache location, manifest membership, benchmark run ID, process ID,
-demo label, and eviction score describe local records, not immutable KV objects.
+Mutable store, transport, connector, or benchmark state must never be included
+in immutable object identity. Fields such as staging path, committed path,
+local tier, pinned state, write state, last access time, expiry, transfer
+state, retry count, peer address, cache location, benchmark run ID, process ID,
+demo label, and eviction score describe local records, not immutable opaque
+objects.
 
 Prefer boring correctness over clever optimization. Deterministic behavior,
 stable tests, readable validation, explicit error reasons, durable catalog
-updates, and exact baseline comparisons matter more than throughput in Phase 4.
+updates, and clean LMCache miss behavior matter more than throughput in Phase 5.
 
 ## Dependencies
 
@@ -110,10 +115,13 @@ Do not add new production dependencies without a written justification in the
 relevant change. Prefer standard library functionality and existing project
 dependencies.
 
-PyTorch may be used for the Phase 4 tiny-transformer harness if it is already
-part of the project test environment or the change explicitly documents why it
-is needed. The model must be defined locally with deterministic weights; it must
-not download external model or tokenizer assets.
+LMCache may be used by optional integration tests if it is installed in the
+developer environment. Real LMCache tests must skip when LMCache is missing and
+must not be required in CI unless CI explicitly installs LMCache for that job.
+
+vLLM may be used only by opt-in smoke tests. vLLM tests must skip by default and
+must not require GPU hardware, model downloads, cloud credentials, Docker, or
+internet access in the default test path.
 
 Test-only dependencies are acceptable when they materially improve coverage and
 are scoped to tests.
@@ -131,67 +139,75 @@ Phase 3 store errors should distinguish catalog errors, filesystem errors,
 integrity errors, compatibility errors, manifest errors, eviction errors, and
 fsck findings.
 
-Phase 4 harness errors should distinguish model determinism errors, tokenizer or
-token-hash errors, KV extraction errors, serialization errors, validation
+Phase 4 harness errors should distinguish model determinism errors, tokenizer
+or token-hash errors, KV extraction errors, serialization errors, validation
 errors, store roundtrip errors, manifest completeness errors, rehydration
 errors, logit mismatch errors, and greedy-continuation mismatch errors.
+
+Phase 5 connector errors should distinguish LMCache serialization errors,
+opaque blob validation errors, key hashing errors, store commit errors, store
+retrieval errors, missing objects, corrupt objects, descriptor mismatch, payload
+hash mismatch, connector configuration errors, connector lifecycle errors, and
+optional real-LMCache compatibility errors.
 
 ## Tests
 
 Run relevant Rust and Python tests after changes.
 
-Expected Phase 4 test coverage:
+Expected Phase 5 test coverage:
 
-1. Tiny transformer deterministic initialization and CPU-only generation.
-2. Integer tokenization, token hash construction, prefix hash construction, and
-   target profile generation.
-3. KV extraction from every layer and block boundary.
-4. Serialization of every model-generated KV page as `native_kv_page`.
-5. Phase 1 Python and Rust validation for generated descriptors and payloads.
-6. Store commit, lookup, GET, query, stats, and manifest roundtrip for generated
-   pages.
-7. Rehydration shape, dtype, layer ordering, and token-range checks.
-8. Logit comparison between uninterrupted and extract-store-rehydrate paths.
-9. Greedy continuation equality after rehydration.
-10. Missing page, corrupt payload, descriptor mismatch, target mismatch, token
-    mismatch, prefix mismatch, dtype mismatch, and layer-order mismatch failure
-    cases.
-11. Prefix and session manifest completeness and missing-block queries for tiny
-    model pages.
-12. Cross-process demo smoke tests that remain local and deterministic.
-13. ContextStorm model benchmark smoke tests that are CPU-only, local, and
-    deterministic.
-14. Phase 1 parity tests, Phase 2 transport tests, and Phase 3 store tests
-    remain green.
+1. Stable `CacheEngineKey` canonical representation and
+   `opaque_engine_key_hash` construction.
+2. LMCache `MemoryObj` to payload bytes roundtrip through the opaque blob codec.
+3. Descriptor generation for `opaque_engine_blob` with LMCache engine metadata.
+4. Phase 1 Python and Rust validation for generated opaque descriptors and
+   payloads.
+5. Store commit, lookup, HAS, GET, query, stats, and list behavior for opaque
+   LMCache blobs.
+6. `BifrostConnectorAdapter` URL parsing and connector construction.
+7. `BifrostRemoteConnector.exists`, `exists_sync`, `get`, `put`, `list`, and
+   `close`.
+8. Connector failure cases for missing object, corrupt payload, descriptor
+   mismatch, target mismatch, key mismatch, store error, and serialization
+   error.
+9. Fake LMCache tests that run in CI without importing LMCache.
+10. Optional real LMCache tests that skip when LMCache is not installed.
+11. Optional vLLM plus LMCache smoke tests that are opt-in and skipped by
+    default.
+12. ContextStorm LMCache workload smoke tests that are CPU-only, local, and
+    deterministic by default.
+13. Phase 1 parity tests, Phase 2 transport tests, Phase 3 store tests, and
+    Phase 4 tiny-transformer correctness tests remain green.
 
 Keep tests CPU-only and local by default. Tests must not require GPU hardware,
 cloud credentials, external services, LMCache, vLLM, Hugging Face downloads,
-Docker, Kubernetes, or internet access.
+Docker, Kubernetes, or internet access unless explicitly marked optional and
+skipped by default.
 
-Root-required network fault tests and GPU demos must remain opt-in and skipped
-by default.
+Root-required network fault tests, GPU demos, real LMCache tests, and vLLM
+smoke tests must remain opt-in and skipped by default.
 
 If a test cannot be run, state the reason in the final response.
 
 ## Implementation order
 
-Build the tiny-transformer correctness harness before external integrations.
+Build the LMCache remote storage integration before direct engine integrations.
 
-Use the Phase 1 native KV validator as the acceptance gate for every generated
-page. The model harness, transport, spool, catalog, store, manifest, and demo
-layers may track local state, but they must not redefine KV object identity or
-compatibility.
+Use Phase 1 opaque object validation as the acceptance gate for every LMCache
+object generated by the connector. The LMCache adapter, BIFROST client,
+transport, spool, catalog, store, manifest, and benchmark layers may track
+local state, but they must not redefine opaque object identity or reinterpret
+LMCache payload semantics.
 
 Recommended order:
 
-1. Phase 4 design docs and checklist.
-2. Deterministic tiny transformer and integer-token test fixtures.
-3. KV extraction and native page serialization.
-4. Tiny-model target profile and prefix/token hash generation.
-5. Phase 1 validation tests for generated pages.
-6. Store roundtrip and manifest completeness tests.
-7. Rehydration into `past_key_values`.
-8. Logit and greedy continuation correctness tests.
-9. Corruption and mismatch fail-closed tests.
-10. Cross-process KV teleportation demo.
-11. ContextStorm model correctness benchmark scenarios.
+1. Phase 5 design docs and checklist.
+2. Python client API for daemon-backed opaque object operations.
+3. Opaque blob codec for LMCache key and payload mapping.
+4. Fake LMCache key and memory object fixtures.
+5. Connector adapter URL parsing and configuration.
+6. Remote connector `exists`, `exists_sync`, `put`, `get`, `list`, and `close`.
+7. Store roundtrip and fail-closed tests for fake LMCache objects.
+8. Optional real LMCache import and API compatibility tests.
+9. Optional vLLM plus LMCache smoke test harness.
+10. ContextStorm LMCache workload scenarios.

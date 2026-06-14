@@ -496,7 +496,7 @@ impl Store {
             token_range_end,
         );
         let manifest = ManifestRecord {
-            manifest_id,
+            manifest_id: manifest_id.clone(),
             manifest_type: ManifestType::PrefixManifest,
             model_hash,
             tokenizer_hash,
@@ -510,6 +510,9 @@ impl Store {
             pin_count: 0,
         };
         let mut catalog = self.open_catalog()?;
+        if let Some(existing) = catalog.get_manifest(&manifest_id)? {
+            return Ok(existing);
+        }
         catalog.create_manifest(&manifest)?;
         Ok(manifest)
     }

@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 import torch
@@ -11,6 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "bifrost_py"))
 
 from bifrost_kv.errors import ACCEPTED
+from bifrost_kv.hashing import compute_descriptor_hash, compute_object_id
 from bifrost_kv.validate import validate_object
 from bifrost_model import TinyIntTokenizer, TinyTransformer, TinyTransformerConfig
 from bifrost_model.kv_cache import compare_kv_caches, split_kv_cache_into_blocks
@@ -161,6 +163,30 @@ def test_wrong_prefix_hash_rejects() -> None:
         native_page_to_kv_block(page.metadata, page.payload, target)
 
 
+def test_wrong_token_hash_rejects_as_prefix_identity_mismatch() -> None:
+    page = first_page()
+    target = deepcopy(page.target_profile)
+    target["prefix_requirements"]["token_hash"] = "blake3:" + "8" * 64
+
+    result = validate_object(page.metadata, page.payload, target)
+
+    assert result.status == "rejected"
+    assert result.reason_code == "wrong_prefix_hash"
+    with pytest.raises(ValueError, match="wrong_prefix_hash"):
+        native_page_to_kv_block(page.metadata, page.payload, target)
+
+
+def test_prefix_requirement_tokenizer_hash_mismatch_rejects() -> None:
+    page = first_page()
+    target = deepcopy(page.target_profile)
+    target["prefix_requirements"]["tokenizer_hash"] = "blake3:" + "7" * 64
+
+    result = validate_object(page.metadata, page.payload, target)
+
+    assert result.status == "rejected"
+    assert result.reason_code == "wrong_tokenizer_hash"
+
+
 def test_corrupted_payload_rejects() -> None:
     page = first_page()
     payload = bytearray(page.payload)
@@ -168,6 +194,42 @@ def test_corrupted_payload_rejects() -> None:
 
     with pytest.raises(ValueError, match="payload_hash_mismatch"):
         native_page_to_kv_block(page.metadata, bytes(payload), page.target_profile)
+
+
+def test_unknown_schema_version_rejects_before_deserialization() -> None:
+    page = first_page()
+    metadata = deepcopy(page.metadata)
+    metadata["schema_version"] = "bifrost.kv_object.v9"
+
+    result = validate_object(metadata, page.payload, page.target_profile)
+
+    assert result.status == "rejected"
+    assert result.reason_code == "unknown_schema_version"
+    with pytest.raises(ValueError, match="unknown_schema_version"):
+        native_page_to_kv_block(metadata, page.payload, page.target_profile)
+
+
+def test_object_id_mismatch_rejects() -> None:
+    page = first_page()
+    metadata = deepcopy(page.metadata)
+    metadata["object_id"] = "bifrost://object/blake3/" + "1" * 64
+
+    result = validate_object(metadata, page.payload, page.target_profile)
+
+    assert result.status == "rejected"
+    assert result.reason_code == "object_id_mismatch"
+
+
+def test_descriptor_tensor_shape_mismatch_rejects_after_identity_recompute() -> None:
+    page = first_page()
+    metadata = deepcopy(page.metadata)
+    metadata["native_tensor_profile"]["tensor_shape"] = [2, 3, 2, 8]
+    _refresh_identity(metadata, page.payload)
+
+    result = validate_object(metadata, page.payload, page.target_profile)
+
+    assert result.status == "rejected"
+    assert result.reason_code == "invalid_tensor_shape"
 
 
 def test_missing_page_prevents_full_cache_assembly() -> None:
@@ -243,3 +305,10 @@ def first_page() -> NativePage:
         TOKENS,
         BLOCK_SIZE,
     )[0]
+
+
+def _refresh_identity(metadata: dict[str, Any], payload: bytes) -> None:
+    payload_hash = metadata["integrity"]["payload_hash"]
+    descriptor_hash = compute_descriptor_hash(metadata, payload_hash)
+    metadata["integrity"]["descriptor_hash"] = descriptor_hash
+    metadata["object_id"] = compute_object_id(descriptor_hash, payload_hash)

@@ -190,6 +190,34 @@ fn create_manifest_and_add_valid_member() {
 }
 
 #[test]
+fn create_prefix_manifest_is_idempotent_for_same_identity() {
+    let root = temp_root("create-idempotent");
+    let store = Store::open(root.clone()).unwrap();
+    let fixture = native_fixture();
+    let object_id = put_fixture_direct(&store, "transfer-001", &fixture);
+    let manifest_id = create_manifest(&store, &fixture);
+    store
+        .add_manifest_member(&manifest_id, &object_id, true)
+        .unwrap();
+
+    let duplicate = store
+        .create_prefix_manifest(
+            Some(model_hash(&fixture).to_string()),
+            Some(tokenizer_hash(&fixture).to_string()),
+            Some(rope_config_hash(&fixture).to_string()),
+            prefix_hash(&fixture).to_string(),
+            token_range_start(&fixture),
+            token_range_end(&fixture),
+        )
+        .unwrap();
+    let inspection = store.get_manifest(&manifest_id).unwrap();
+
+    assert_eq!(duplicate.manifest_id, manifest_id);
+    assert_eq!(inspection.members.len(), 1);
+    cleanup(&root);
+}
+
+#[test]
 fn adding_missing_object_is_rejected() {
     let root = temp_root("missing-member");
     let store = Store::open(root.clone()).unwrap();

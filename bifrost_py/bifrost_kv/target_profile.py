@@ -96,6 +96,26 @@ def check_native_compatibility(
             errors.WRONG_PREFIX_HASH,
         ),
         (
+            object_prefix["token_hash"],
+            target_prefix["token_hash"],
+            errors.WRONG_PREFIX_HASH,
+        ),
+        (
+            object_prefix["tokenizer_hash"],
+            target_prefix["tokenizer_hash"],
+            errors.WRONG_TOKENIZER_HASH,
+        ),
+        (
+            object_prefix["rope_config_hash"],
+            target_prefix["rope_config_hash"],
+            errors.WRONG_ROPE_HASH,
+        ),
+        (
+            object_prefix["mm_hashes"],
+            target_prefix["allow_mm_hashes"],
+            errors.WRONG_PREFIX_HASH,
+        ),
+        (
             native["token_range"],
             target_prefix["token_range"],
             errors.WRONG_TOKEN_RANGE,

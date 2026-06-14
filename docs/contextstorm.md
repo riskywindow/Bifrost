@@ -2,15 +2,18 @@
 
 Last verified: 2026-05-29
 
-ContextStorm is the Phase 2 synthetic KV benchmark harness and Phase 3 local
-store benchmark harness. It exercises local BIFROST transport and store
-behavior with deterministic Phase 1-style KV objects and records the artifacts
-needed to inspect correctness and basic behavior.
+ContextStorm is the Phase 2 synthetic KV benchmark harness, Phase 3 local store
+benchmark harness, and Phase 4 tiny-transformer KV correctness workload runner.
+It exercises local BIFROST transport and store behavior with deterministic
+Phase 1-style KV objects, and it can run CPU-only tiny-model KV roundtrips that
+extract, store, retrieve, rehydrate, and compare real harness KV state.
 
-ContextStorm is not a model benchmark. It does not run inference, allocate GPU
-KV cache, call LMCache, call vLLM, emulate QUIC, compress payloads, or use
-root-required network mutation unless an operator explicitly passes the local
-fault opt-in flag.
+ContextStorm is not a production model benchmark. Its Phase 4 model workloads
+use only the local deterministic tiny transformer. It does not allocate GPU KV
+cache, call LMCache, call vLLM, download models or tokenizers, emulate QUIC,
+compress payloads, or use root-required network mutation unless an operator
+explicitly passes the local fault opt-in flag for non-model transport
+scenarios.
 
 ## Commands
 
@@ -66,6 +69,23 @@ PYTHONPATH=. python -m contextstorm.cli run scenarios/store_small_ci.yaml \
   --run-id phase3-store-small
 PYTHONPATH=. python -m contextstorm.cli report /tmp/contextstorm-runs/phase3-store-small
 ```
+
+Phase 4 model-facing correctness scenarios use the local tiny transformer and
+remain CPU-only:
+
+```text
+PYTHONPATH=. python -m contextstorm.cli run scenarios/model_roundtrip_small_ci.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase4-model-small
+PYTHONPATH=. python -m contextstorm.cli report /tmp/contextstorm-runs/phase4-model-small
+```
+
+`local_kv_roundtrip` does not require Rust binaries. `store_kv_roundtrip`,
+`manifest_kv_roundtrip`, and `kv_teleport` start one local loopback
+`bifrost-daemon` and require `bifrost-daemon`, `bifrost-xfer`, and
+`bifrost-store`. Model workloads never require root, GPU hardware, internet
+access, Hugging Face assets, LMCache, vLLM, Docker, Kubernetes, CUDA, or cloud
+credentials.
 
 ## Scenario Format
 
@@ -154,6 +174,46 @@ Supported store operations:
 12. `check_manifest`
 13. `fsck`
 
+Phase 4 model scenarios use `workload: model`:
+
+```yaml
+name: model_roundtrip_small_ci
+workload: model
+model:
+  vocab_size: 128
+  max_seq_len: 128
+  num_layers: 2
+  num_heads: 2
+  num_kv_heads: 2
+  head_dim: 8
+  dtype: float32
+  seed: 1234
+prompt: "1 2 3 4 5 6 7 8"
+decode_tokens: 4
+block_size_tokens: 4
+operations:
+  - local_kv_roundtrip
+  - store_kv_roundtrip
+repetitions: 1
+timeout_seconds: 60
+```
+
+Supported model operations:
+
+1. `local_kv_roundtrip`: one-process extract, serialize, rehydrate, and compare.
+2. `store_kv_roundtrip`: store native KV pages through the Phase 3 daemon and
+   retrieve them before rehydration.
+3. `manifest_kv_roundtrip`: create and check a prefix manifest before retrieving
+   required pages.
+4. `kv_teleport`: run the cross-process tiny-transformer prefill/decode handoff
+   demo through BIFROST.
+
+Model scenarios record `prefill_ms`, `kv_page_serialize_ms`, `page_count`,
+`total_payload_bytes`, `store_put_ms`, `store_get_ms`, `manifest_create_ms`,
+`manifest_check_ms`, `rehydrate_ms`, `decode_resume_ms`,
+`logit_max_abs_error`, `continuation_match`, `manifest_completeness`,
+`pages_stored`, `pages_rehydrated`, and failure reason details.
+
 The built-in scenarios are:
 
 1. `small_ci.yaml`: 1 MiB, one daemon, PUT/HAS/GET once.
@@ -172,6 +232,11 @@ The built-in scenarios are:
 9. `store_manifest.yaml`: prefix manifest creation, membership, completeness,
    eviction, and completeness recheck.
 10. `store_memory_tier.yaml`: optional memory tier hit/miss counters.
+11. `model_roundtrip_small_ci.yaml`: CPU-only tiny-transformer local and store
+   KV correctness smoke test.
+12. `model_manifest_roundtrip.yaml`: CPU-only tiny-transformer manifest-gated
+   store roundtrip.
+13. `model_teleport.yaml`: CPU-only cross-process tiny-transformer KV handoff.
 
 ## Workload Classes
 
@@ -236,6 +301,12 @@ summary.md
 environment notes, and per-operation metrics. `contextstorm run` writes
 `summary.json` and `summary.md` automatically after `run.json`; `contextstorm
 report RUN_DIR` regenerates those summaries.
+
+For model workloads, `summary.json` and `summary.md` include a model summary
+table, correctness status, page count and payload bytes, timing breakdown,
+failure details, and normalized per-operation metrics. A successful model run
+requires matching greedy continuation and logits within the Phase 4 `float32`
+tolerance.
 
 Fault-enabled runs also write:
 

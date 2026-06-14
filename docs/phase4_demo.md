@@ -1,6 +1,6 @@
 # Phase 4 Demo
 
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 
 ## Purpose
 
@@ -370,6 +370,25 @@ PYTHONPATH=bifrost_py python examples/tiny_transformer/kv_teleport_demo.py \
 The cross-process demo accepts `--work-dir PATH` to retain the handoff file and
 worker page files. It accepts `--restart-daemon-command "..."` for a manual
 restart hook between prefill and decode; CI does not require this option.
+
+Run the committed-corruption fail-closed demo against the same daemon and store
+root:
+
+```text
+PYTHONPATH=bifrost_py python examples/tiny_transformer/corrupt_kv_page_demo.py \
+  --endpoint 127.0.0.1:9000 \
+  --store-root /tmp/bifrost-phase4-store \
+  --prompt "1 2 3 4 5" \
+  --decode-tokens 2 \
+  --block-size 2 \
+  --seed 1234 \
+  --work-dir /tmp/bifrost-phase4-corrupt-demo \
+  --json
+```
+
+The corruption demo stores valid pages, flips one committed payload byte, runs
+`bifrost-store fsck --check`, checks manifest completeness, and reports the
+expected fail-closed result without rehydrating the corrupt page.
 
 ## Optional GPU demo
 

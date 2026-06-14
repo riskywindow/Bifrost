@@ -55,6 +55,23 @@ fn native_valid_fixture_is_accepted() {
 }
 
 #[test]
+fn native_target_token_hash_mismatch_is_rejected() {
+    let root = repo_root();
+    let meta = read_json(&root.join("fixtures/native_valid/tiny_gpt_layer0_block0.meta.json"));
+    let payload =
+        read_bytes(&root.join("fixtures/native_valid/tiny_gpt_layer0_block0.payload.bin"));
+    let mut target = read_json(&root.join("fixtures/native_valid/target_profile.json"));
+    target["prefix_requirements"]["token_hash"] = Value::String(
+        "blake3:8888888888888888888888888888888888888888888888888888888888888888".to_string(),
+    );
+
+    let result = validate_object(&meta, &payload, Some(&target));
+
+    assert_eq!(result.status, "rejected");
+    assert_eq!(result.reason_code, "wrong_prefix_hash");
+}
+
+#[test]
 fn native_layer3_block7_fixture_is_accepted() {
     let root = repo_root();
     let meta = read_json(

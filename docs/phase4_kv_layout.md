@@ -1,6 +1,6 @@
 # Phase 4 KV Layout
 
-Last verified: 2026-06-02
+Last verified: 2026-06-14
 
 ## Purpose
 
@@ -11,16 +11,18 @@ store state, or production engine behavior.
 
 ## Internal past_key_values layout
 
-The tiny transformer should represent cached KV state as an ordered tuple or
-list with one entry per decoder layer:
+The tiny transformer represents cached KV state as an ordered list with one
+entry per decoder layer:
 
 ```text
 past_key_values[layer_id] = (key, value)
-key.shape   = [batch, num_kv_heads, token_count, head_dim]
-value.shape = [batch, num_kv_heads, token_count, head_dim]
+key.shape   = [token_count, num_kv_heads, head_dim]
+value.shape = [token_count, num_kv_heads, head_dim]
 ```
 
-Required Phase 4 tests should use `batch = 1`. If later tests add larger batch
+Required Phase 4 tests are batch-free at the KV-cache boundary. Model input may
+be 1-D token IDs or batch size 1, but cached tensors must use the strict
+`[token_count, num_kv_heads, head_dim]` layout. If later tests add larger batch
 sizes, the batch dimension must become an explicit compatibility field and
 must not be silently flattened into object identity.
 
@@ -37,8 +39,8 @@ one token block with key and value tensors stacked in this canonical order:
 
 ```text
 payload tensor shape: [2, block_tokens, num_kv_heads, head_dim]
-payload[0] = key[0, :, token_start:token_end, :].transpose(0, 1)
-payload[1] = value[0, :, token_start:token_end, :].transpose(0, 1)
+payload[0] = key[token_start:token_end, :, :]
+payload[1] = value[token_start:token_end, :, :]
 tensor_layout = "kv_token_head_dim"
 tensor_role = "kv_pair"
 ```

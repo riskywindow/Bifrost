@@ -1,6 +1,6 @@
 # Phase 4 Roundtrip Correctness
 
-Last verified: 2026-06-02
+Last verified: 2026-06-14
 
 ## Purpose
 
@@ -122,6 +122,12 @@ unavailable pages.
 
 The harness must reject a manifest with `incomplete`, `corrupt`, or `unknown`
 completeness for a full-prefix rehydration.
+
+Target compatibility also binds the descriptor prefix identity to the target
+profile's `prefix_requirements`: `prefix_hash`, `token_hash`,
+`tokenizer_hash`, `rope_config_hash`, token ranges, absolute position ranges,
+and `mm_hashes` must match before a native page can be deserialized into a KV
+tensor. A token-hash mismatch is treated as a prefix identity mismatch.
 
 ## Failure cases
 

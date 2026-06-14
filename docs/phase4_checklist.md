@@ -1,6 +1,6 @@
 # Phase 4 Checklist
 
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 
 ## Tiny transformer
 
@@ -23,7 +23,7 @@ Last verified: 2026-06-13
 - [x] Build token hash from exact token sequence.
 - [x] Build prefix hash from tokenizer hash, positional config hash, token hash,
   and absolute position range.
-- [ ] Test token mismatch rejection.
+- [x] Test token mismatch rejection.
 - [x] Test prefix mismatch rejection.
 
 ## KV extraction
@@ -37,7 +37,7 @@ Last verified: 2026-06-13
 - [x] Map `layer_id`, `kv_block_id`, and `token_range` exactly.
 - [x] Include a multi-block prefix fixture.
 - [x] Include a final partial block fixture if supported.
-- [ ] Test layer-order and block-order mismatch rejection.
+- [x] Test duplicate, missing, conflicting, and wrong-coordinate page rejection.
 
 ## KV serialization
 
@@ -53,11 +53,11 @@ Last verified: 2026-06-13
 ## Validation
 
 - [x] Validate generated pages with Python reference validation.
-- [ ] Validate generated pages with Rust mirror validation.
+- [x] Validate generated pages with Rust mirror validation.
 - [x] Generate target profiles deterministically from tiny-model config.
-- [ ] Reject unknown schema versions.
+- [x] Reject unknown schema versions.
 - [x] Reject incompatible target profiles.
-- [ ] Keep Phase 1 validation reason codes stable.
+- [x] Keep Phase 1 validation reason codes stable.
 - [ ] Add Phase 4-specific errors for extraction, serialization, rehydration,
   logit mismatch, and continuation mismatch.
 
@@ -104,9 +104,9 @@ Last verified: 2026-06-13
 ## Corruption tests
 
 - [x] Flip one payload byte and verify payload hash rejection.
-- [ ] Change descriptor tensor shape and verify descriptor hash or validation
+- [x] Change descriptor tensor shape and verify descriptor hash or validation
   rejection.
-- [ ] Change object ID and verify identity rejection.
+- [x] Change object ID and verify identity rejection.
 - [x] Change model hash and verify compatibility rejection.
 - [x] Change tokenizer hash and verify compatibility rejection.
 - [x] Change positional config hash and verify compatibility rejection.
@@ -118,31 +118,146 @@ Last verified: 2026-06-13
 
 ## ContextStorm model benchmark
 
-- [ ] Add CPU-only model-correctness workload class.
-- [ ] Generate deterministic tiny-model KV pages, not synthetic byte-only pages.
-- [ ] Measure extract, validate, store, retrieve, rehydrate, and compare steps.
-- [ ] Record page counts, bytes, manifest completeness, logit diffs, and greedy
+- [x] Add CPU-only model-correctness workload class.
+- [x] Generate deterministic tiny-model KV pages, not synthetic byte-only pages.
+- [x] Measure extract, validate, store, retrieve, rehydrate, and compare steps.
+- [x] Record page counts, bytes, manifest completeness, logit diffs, and greedy
   match status.
-- [ ] Keep default scenario small enough for CI smoke tests.
-- [ ] Avoid GPU, external services, downloads, root permissions, and network
+- [x] Keep default scenario small enough for CI smoke tests.
+- [x] Avoid GPU, external services, downloads, root permissions, and network
   fault profiles by default.
-- [ ] Preserve existing Phase 2 transport and Phase 3 store scenarios.
+- [x] Preserve existing Phase 2 transport and Phase 3 store scenarios.
+
+## Phase 4 local commands
+
+Install local Python packages and CPU PyTorch:
+
+```sh
+python -m pip install \
+  --index-url https://download.pytorch.org/whl/cpu \
+  --extra-index-url https://pypi.org/simple \
+  "torch>=2.0.0"
+python -m pip install -e "bifrost_py[dev]" -e "contextstorm[dev]"
+```
+
+Build the Rust binaries used by daemon-backed tests and demos:
+
+```sh
+cargo build --manifest-path bifrostd/Cargo.toml --bins
+```
+
+Run the tiny-transformer unit and roundtrip tests:
+
+```sh
+pytest \
+  tests/test_tiny_transformer.py \
+  tests/test_tiny_tokenizer_profile.py \
+  tests/test_tiny_kv_cache.py \
+  tests/test_kv_page_codec.py \
+  tests/test_local_kv_roundtrip_script.py \
+  tests/test_store_kv_roundtrip.py \
+  tests/test_manifest_kv_roundtrip.py \
+  tests/test_kv_teleport_demo.py \
+  tests/test_phase4_corruption_incompatibility.py
+```
+
+Run the one-process `local_kv_roundtrip` demo:
+
+```sh
+python examples/tiny_transformer/local_kv_roundtrip.py \
+  --prompt "1 2 3 4 5" \
+  --decode-tokens 4 \
+  --block-size 2 \
+  --json
+```
+
+Run the daemon-backed `store_kv_roundtrip` demo:
+
+```sh
+bifrostd/target/debug/bifrost-daemon \
+  --listen 127.0.0.1:7420 \
+  --spool /tmp/bifrost-phase4-store \
+  --trace-jsonl /tmp/bifrost-phase4-store.jsonl
+
+python examples/tiny_transformer/store_kv_roundtrip.py \
+  --endpoint 127.0.0.1:7420 \
+  --prompt "1 2 3 4 5" \
+  --decode-tokens 4 \
+  --block-size 2 \
+  --work-dir /tmp/bifrost-phase4-store-roundtrip \
+  --json
+```
+
+Run the manifest-gated daemon-backed roundtrip demo:
+
+```sh
+python examples/tiny_transformer/manifest_kv_roundtrip.py \
+  --endpoint 127.0.0.1:7420 \
+  --prompt "1 2 3 4 5" \
+  --decode-tokens 4 \
+  --block-size 2 \
+  --work-dir /tmp/bifrost-phase4-manifest-roundtrip \
+  --json
+```
+
+Run the cross-process `kv_teleport_demo` against the same local daemon:
+
+```sh
+python examples/tiny_transformer/kv_teleport_demo.py \
+  --endpoint 127.0.0.1:7420 \
+  --prompt "1 2 3 4 5" \
+  --decode-tokens 4 \
+  --block-size 2 \
+  --work-dir /tmp/bifrost-phase4-teleport \
+  --json
+```
+
+Run the committed-corruption fail-closed demo against the same local daemon and
+store root:
+
+```sh
+python examples/tiny_transformer/corrupt_kv_page_demo.py \
+  --endpoint 127.0.0.1:7420 \
+  --store-root /tmp/bifrost-phase4-store \
+  --prompt "1 2 3 4 5" \
+  --decode-tokens 2 \
+  --block-size 2 \
+  --work-dir /tmp/bifrost-phase4-corrupt-demo \
+  --json
+```
+
+Run the CPU-only ContextStorm model smoke scenario:
+
+```sh
+contextstorm run contextstorm/scenarios/model_roundtrip_small_ci.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase4-local-model-roundtrip-small
+```
+
+The Phase 4 commands above are CPU-only and local. They do not require GPU,
+root permissions, external model downloads, Hugging Face assets, LMCache, vLLM,
+Docker, Kubernetes, cloud credentials, or root-required network fault profiles.
+Optional demos are local developer checks; CI only requires the stable small
+model roundtrip scenario.
 
 ## CI
 
 - [x] Run required tiny-transformer tests on CPU.
-- [ ] Skip GPU demos by default.
-- [ ] Skip optional `float16` tests when CPU support is unreliable.
-- [ ] Require no internet access.
-- [ ] Require no Hugging Face, LMCache, vLLM, Docker, Kubernetes, CUDA, or cloud
+- [x] Skip GPU demos by default.
+- [x] Skip optional `float16` tests when CPU support is unreliable.
+- [x] Require no internet access during Phase 4 test and scenario commands.
+- [x] Require no Hugging Face, LMCache, vLLM, Docker, Kubernetes, CUDA, or cloud
   credentials.
-- [ ] Keep Phase 1 parity tests green.
-- [ ] Keep Phase 2 transport tests green.
-- [ ] Keep Phase 3 store tests green.
+- [x] Keep Phase 1 parity tests green.
+- [x] Keep Phase 2 transport tests green.
+- [x] Keep Phase 3 store tests green.
 - [x] Include at least one end-to-end extract-rehydrate-logit comparison.
 - [x] Include at least one local no-daemon extract-rehydrate-greedy
   continuation comparison.
 - [x] Include at least one end-to-end extract-store-rehydrate-logit comparison.
+- [x] Run `.github/workflows/phase4.yml` with Python Phase 1 tests, Python
+  Phase 4 tiny-transformer tests, Rust binary builds, `cargo test`,
+  ContextStorm unit tests, and `model_roundtrip_small_ci`.
 
 ## Phase 4 done criteria
 
@@ -157,5 +272,5 @@ Last verified: 2026-06-13
   roundtrip.
 - [x] Corruption and mismatch cases fail closed.
 - [x] Cross-process worker A/B KV teleportation demo passes locally.
-- [ ] ContextStorm model benchmark smoke scenario passes locally and in CI.
-- [ ] No forbidden Phase 4 scope was implemented.
+- [x] ContextStorm model benchmark smoke scenario is covered by Phase 4 CI.
+- [x] No forbidden Phase 4 scope was implemented.

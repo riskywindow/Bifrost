@@ -6,9 +6,17 @@ import argparse
 from pathlib import Path
 
 from .report import write_report
-from .runner import ContextStormError, run_scenario
+from .runner import ContextStormError, _load_simple_yaml, run_scenario
 from .store_runner import is_store_scenario, run_store_scenario
 from .synthetic_kv import generate_synthetic_object, write_synthetic_object
+
+
+MODEL_OPERATIONS = {
+    "local_kv_roundtrip",
+    "store_kv_roundtrip",
+    "manifest_kv_roundtrip",
+    "kv_teleport",
+}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,7 +50,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "run":
-            if is_store_scenario(args.scenario):
+            if _is_model_scenario(args.scenario):
+                from .model_runner import run_model_scenario
+
+                run_dir = run_model_scenario(
+                    args.scenario,
+                    runs_root=args.runs_root,
+                    run_id=args.run_id,
+                )
+            elif is_store_scenario(args.scenario):
                 run_dir = run_store_scenario(
                     args.scenario,
                     runs_root=args.runs_root,
@@ -72,6 +88,12 @@ def main(argv: list[str] | None = None) -> int:
     except (ContextStormError, OSError, ValueError) as exc:
         parser.exit(2, f"contextstorm: error: {exc}\n")
     return 1
+
+
+def _is_model_scenario(path: Path) -> bool:
+    data = _load_simple_yaml(path)
+    operations = {str(op) for op in data.get("operations", [])}
+    return bool(operations & MODEL_OPERATIONS) or str(data.get("workload", "")) == "model"
 
 
 if __name__ == "__main__":

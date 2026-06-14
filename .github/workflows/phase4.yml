@@ -1,0 +1,80 @@
+name: Phase 4
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  phase4:
+    name: CPU tiny-transformer, Rust, and ContextStorm checks
+    runs-on: ubuntu-latest
+
+    env:
+      CARGO_TERM_COLOR: always
+      CUDA_VISIBLE_DEVICES: ""
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      BIFROST_PHASE4_CPU_ONLY: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            --index-url https://download.pytorch.org/whl/cpu \
+            --extra-index-url https://pypi.org/simple \
+            "torch>=2.0.0"
+          python -m pip install -e "bifrost_py[dev]" -e "contextstorm[dev]"
+
+      - name: Run Python Phase 1 tests
+        run: |
+          pytest \
+            bifrost_py/tests \
+            tests/test_cli.py \
+            tests/test_cross_language_vectors.py \
+            tests/test_fixture_suite.py
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Rust binaries
+        run: cargo build --manifest-path bifrostd/Cargo.toml --bins
+
+      - name: Run bifrostd Rust tests
+        run: cargo test --manifest-path bifrostd/Cargo.toml
+
+      - name: Run Python Phase 4 tiny-transformer tests
+        run: |
+          pytest \
+            tests/test_tiny_transformer.py \
+            tests/test_tiny_tokenizer_profile.py \
+            tests/test_tiny_kv_cache.py \
+            tests/test_kv_page_codec.py \
+            tests/test_local_kv_roundtrip_script.py \
+            tests/test_store_kv_roundtrip.py \
+            tests/test_manifest_kv_roundtrip.py \
+            tests/test_kv_teleport_demo.py \
+            tests/test_phase4_corruption_incompatibility.py
+
+      - name: Run ContextStorm unit tests
+        working-directory: contextstorm
+        run: pytest tests
+
+      - name: Run Phase 4 small model roundtrip scenario
+        run: |
+          contextstorm run contextstorm/scenarios/model_roundtrip_small_ci.yaml \
+            --runs-root /tmp/contextstorm-runs \
+            --run-id phase4-ci-model-roundtrip-small
