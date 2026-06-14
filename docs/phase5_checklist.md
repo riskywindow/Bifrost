@@ -51,19 +51,19 @@ Last verified: 2026-06-14
 
 ## Remote connector
 
-- [ ] Define `BifrostRemoteConnector`.
-- [ ] Implement async `exists`.
-- [ ] Implement sync `exists_sync`.
-- [ ] Implement async `put`.
-- [ ] Implement async `get`.
-- [ ] Implement async `list`.
-- [ ] Implement async `close`.
+- [x] Define `BifrostRemoteConnector`.
+- [x] Implement async `exists`.
+- [x] Implement sync `exists_sync`.
+- [x] Implement async `put`.
+- [x] Implement async `get`.
+- [x] Implement async `list`.
+- [x] Implement async `close`.
 - [ ] Add optional `ping` if useful for diagnostics.
 - [ ] Add batched operations only after single-key methods are correct.
-- [ ] Ensure `put` never exposes partial writes.
-- [ ] Ensure `get` never returns a `MemoryObj` from unverified bytes.
-- [ ] Ensure `list` returns only committed and verified LMCache opaque objects.
-- [ ] Test closed-connector behavior.
+- [x] Ensure `put` never exposes partial writes.
+- [x] Ensure `get` never returns a `MemoryObj` from unverified bytes.
+- [x] Ensure `list` returns only committed and verified LMCache opaque objects.
+- [x] Test closed-connector behavior.
 - [ ] Test serialization, validation, store, retrieval, and key mismatch
   failures.
 
@@ -73,13 +73,13 @@ Last verified: 2026-06-14
 - [x] Add fake `MemoryObj` with deterministic bytes.
 - [x] Add fake LMCache config, metadata, and connector context fixtures.
 - [x] Run fake LMCache codec/compat tests in CI without importing LMCache.
-- [ ] Test fake put/get roundtrip through the connector.
-- [ ] Test fake `exists` and `exists_sync`.
-- [ ] Test fake list behavior.
-- [ ] Test missing key returns miss.
-- [ ] Test corrupt committed payload fails closed.
+- [x] Test fake put/get roundtrip through the connector.
+- [x] Test fake `exists` and `exists_sync`.
+- [x] Test fake list behavior.
+- [x] Test missing key returns miss.
+- [x] Test corrupt committed payload fails closed.
 - [ ] Test descriptor key hash mismatch fails closed.
-- [ ] Test serialization failure does not create a visible hit.
+- [x] Test serialization failure does not create a visible hit.
 - [x] Run fake LMCache tests in CI without installing LMCache.
 
 ## Optional real LMCache tests
@@ -121,9 +121,9 @@ Last verified: 2026-06-14
 
 ## CI
 
-- [ ] Run fake LMCache connector tests.
-- [ ] Run opaque blob validation tests.
-- [ ] Run Python client fake/local tests.
+- [x] Run fake LMCache connector tests.
+- [x] Run opaque blob validation tests.
+- [x] Run Python client fake/local tests.
 - [ ] Keep real LMCache tests skipped unless dependency is installed in a
   dedicated optional job.
 - [ ] Keep vLLM smoke skipped unless explicitly opted in.

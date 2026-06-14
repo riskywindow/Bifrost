@@ -9,6 +9,10 @@ from lmcache_bifrost.blob_codec import (
 from lmcache_bifrost.config import BifrostLMCacheConfig
 from lmcache_bifrost.errors import (
     BifrostLMCacheError,
+    BifrostLMCacheNotFoundError,
+    BifrostLMCacheSerializationError,
+    BifrostLMCacheStoreError,
+    BifrostLMCacheValidationError,
     ConnectorConfigurationError,
     KeyCodecError,
     MemoryObjDeserializationError,
@@ -21,6 +25,10 @@ from lmcache_bifrost.lmcache_compat import has_lmcache, lmcache_version
 __all__ = [
     "BifrostLMCacheConfig",
     "BifrostLMCacheError",
+    "BifrostLMCacheNotFoundError",
+    "BifrostLMCacheSerializationError",
+    "BifrostLMCacheStoreError",
+    "BifrostLMCacheValidationError",
     "ConnectorConfigurationError",
     "KeyCodecError",
     "MemoryObjDeserializationError",

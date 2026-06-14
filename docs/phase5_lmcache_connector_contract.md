@@ -5,7 +5,7 @@ Last verified: 2026-06-14
 ## Purpose
 
 This document defines the LMCache remote storage connector contract for
-BIFROST. It is a design contract, not implementation code.
+BIFROST and records the Phase 5 implementation behavior.
 
 The connector has two public classes:
 
@@ -163,6 +163,11 @@ strict_validation:
   method semantics
 ```
 
+The connector uses `bifrost_client.BifrostAsyncClient` for async methods and a
+lazy `bifrost_client.BifrostClient` for `exists_sync` when it owns the client.
+Fake tests may inject a client object exposing the same `put_object`,
+`query_by_opaque_key_hash`, `get_object`, `list_objects`, and `close` surface.
+
 ## Required methods
 
 ### exists
@@ -177,6 +182,11 @@ payload integrity checks.
 
 Returns `False` for missing, corrupt, incompatible, evicted, quarantined,
 staged, or uncertain objects.
+
+The implementation queries by `engine_name`, `integration_name`, and
+`opaque_engine_key_hash`, then GETs candidates and validates them against the
+requested key target profile. Corrupt or incompatible candidates are treated as
+misses for `exists`.
 
 ### exists_sync
 
@@ -205,6 +215,10 @@ Returns `None` for cache misses and unavailable objects. Deterministic
 connector errors may be raised for local configuration errors, closed connector
 state, or serialization contract violations.
 
+The implementation raises `BifrostLMCacheValidationError` for corrupt,
+descriptor-mismatched, payload-hash-mismatched, or wrong-key objects. Missing
+objects remain ordinary LMCache misses and return `None`.
+
 ### put
 
 ```text
@@ -216,6 +230,10 @@ validates descriptor and payload, and commits the verified object to BIFROST.
 
 `put` must fail closed. If serialization, descriptor construction, validation,
 or store commit fails, no object may become visible as an available cache hit.
+
+The implementation validates generated metadata and payload through the Phase 1
+Python validator before sending to the daemon, then requires the client PUT
+result to report both `stored` and `verified`.
 
 ### list
 
@@ -229,6 +247,14 @@ the connector namespace.
 The list result is advisory. Callers must still use `get` or `exists` for
 integrity-checked access.
 
+The implementation returns sorted entries of the form:
+
+```text
+lmcache:{opaque_engine_key_hash}
+```
+
+Each listed object is fetched and validated before its hash is returned.
+
 ### close
 
 ```text
@@ -240,6 +266,9 @@ Releases client resources and marks the connector closed. After `close`,
 return misses according to the final implementation contract. They must not
 silently reopen a connector unless that behavior is explicitly documented and
 tested.
+
+The implementation makes `close` idempotent. After close, connector operations
+raise `ConnectorConfigurationError`.
 
 ## Optional methods
 
