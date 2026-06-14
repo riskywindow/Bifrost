@@ -34,6 +34,50 @@ Responsibilities:
 The adapter must not perform store reads or writes. It may validate static
 configuration and construct client objects.
 
+## LMCache compatibility boundary
+
+The integration must import without LMCache installed. Optional LMCache imports
+are isolated in `lmcache_bifrost.lmcache_compat`, which probes for:
+
+```text
+ConnectorAdapter
+ConnectorContext
+RemoteConnector
+CacheEngineKey
+MemoryObj
+LMCacheEngineConfig
+LMCacheMetadata
+```
+
+`has_lmcache()` returns whether the `lmcache` package can be imported.
+`lmcache_version()` returns a version string when one is discoverable, otherwise
+`None`. Importing `lmcache_bifrost` must not raise only because LMCache is
+absent; errors belong in code paths that actually require real LMCache classes
+or native serialization APIs.
+
+CI-safe tests use fake `CacheEngineKey`, `MemoryObj`, config, metadata, and
+connector context classes. These fakes are only test fixtures. They may exercise
+the pickle fallback when `allow_pickle_fallback` is enabled, but production
+paths must prefer LMCache-native serialization and must fail closed when no
+native API is discoverable.
+
+Memory object serialization capability detection returns one of:
+
+```text
+lmcache_native:
+  A bytes-returning LMCache object method such as to_bytes, serialize, or dumps
+  was found.
+
+pickle_fallback:
+  A known fake CI MemoryObj fixture was detected. This is test-only and still
+  requires explicit config opt-in before serialization.
+
+unsupported:
+  No safe native API was discovered. The connector must treat this as a
+  serialization miss or deterministic serialization error according to the
+  method contract, not guess a payload format.
+```
+
 ## Supported URL schemes
 
 Phase 5 supports:

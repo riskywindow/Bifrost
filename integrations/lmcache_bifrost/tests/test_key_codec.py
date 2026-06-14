@@ -1,18 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import pytest
 
 from lmcache_bifrost.errors import KeyCodecError
 from lmcache_bifrost.key_codec import opaque_engine_key_hash, stable_key_repr
-
-
-@dataclass(frozen=True)
-class FakeCacheEngineKey:
-    model_id: str
-    block_hash: str
-    tokens: tuple[int, ...]
+from tests.fakes import FakeCacheEngineKey
 
 
 def test_fake_key_repr_is_stable() -> None:

@@ -20,6 +20,10 @@ Last verified: 2026-06-14
 
 - [x] Define canonical LMCache `CacheEngineKey` representation.
 - [x] Compute `opaque_engine_key_hash` with a domain-separated hash input.
+- [x] Add optional LMCache compatibility imports that do not break CI when
+  LMCache is absent.
+- [x] Detect LMCache-native, fake pickle fallback, and unsupported MemoryObj
+  serialization capabilities.
 - [x] Serialize fake LMCache `MemoryObj` fixtures to payload bytes.
 - [x] Deserialize payload bytes back to fake `MemoryObj` fixtures.
 - [x] Generate `opaque_engine_blob` descriptors for LMCache objects.
@@ -65,6 +69,8 @@ Last verified: 2026-06-14
 
 - [x] Add fake `CacheEngineKey` with stable canonical representation.
 - [x] Add fake `MemoryObj` with deterministic bytes.
+- [x] Add fake LMCache config, metadata, and connector context fixtures.
+- [x] Run fake LMCache codec/compat tests in CI without importing LMCache.
 - [ ] Test fake put/get roundtrip through the connector.
 - [ ] Test fake `exists` and `exists_sync`.
 - [ ] Test fake list behavior.
@@ -72,13 +78,13 @@ Last verified: 2026-06-14
 - [ ] Test corrupt committed payload fails closed.
 - [ ] Test descriptor key hash mismatch fails closed.
 - [ ] Test serialization failure does not create a visible hit.
-- [ ] Run fake LMCache tests in CI without installing LMCache.
+- [x] Run fake LMCache tests in CI without installing LMCache.
 
 ## Optional real LMCache tests
 
-- [ ] Detect whether LMCache is installed.
-- [ ] Skip with a clear reason when LMCache is unavailable.
-- [ ] Probe LMCache version and connector API shape.
+- [x] Detect whether LMCache is installed.
+- [x] Skip with a clear reason when LMCache is unavailable.
+- [x] Probe LMCache version and connector API shape.
 - [ ] Construct real or minimal LMCache key objects.
 - [ ] Construct real or minimal LMCache memory objects.
 - [ ] Test adapter import through LMCache plugin loading when possible.

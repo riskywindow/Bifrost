@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
-
 import pytest
 
 from bifrost_kv.errors import (
@@ -23,19 +21,7 @@ from lmcache_bifrost.blob_codec import (
 )
 from lmcache_bifrost.config import BifrostLMCacheConfig
 from lmcache_bifrost.errors import MemoryObjSerializationError
-
-
-@dataclass(frozen=True)
-class FakeCacheEngineKey:
-    model_id: str
-    block_hash: str
-    tokens: tuple[int, ...]
-
-
-@dataclass(frozen=True)
-class FakeMemoryObj:
-    payload: bytes
-    dtype: str = "float16"
+from tests.fakes import FakeCacheEngineKey, FakeMemoryObj
 
 
 def test_fake_memory_obj_roundtrips_with_pickle_fallback_enabled() -> None:

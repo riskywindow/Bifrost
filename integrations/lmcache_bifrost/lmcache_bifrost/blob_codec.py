@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import pickle
 import socket
 from typing import Any
@@ -22,6 +21,11 @@ from lmcache_bifrost.errors import (
     OpaqueBlobValidationError,
 )
 from lmcache_bifrost.key_codec import opaque_engine_key_hash
+from lmcache_bifrost.lmcache_compat import (
+    deserialize_with_lmcache_native,
+    lmcache_version,
+    serialize_with_lmcache_native,
+)
 
 SCHEMA_VERSION = "bifrost.kv_object.v1alpha1"
 TARGET_SCHEMA_VERSION = "bifrost.target_profile.v1alpha1"
@@ -33,7 +37,7 @@ UNKNOWN_HASH = blake3_hex(b"bifrost.lmcache.unknown.v1")
 def serialize_memory_obj(memory_obj: object, config: BifrostLMCacheConfig) -> bytes:
     """Serialize an LMCache MemoryObj without interpreting tensor semantics."""
 
-    native = _native_serialize(memory_obj)
+    native = serialize_with_lmcache_native(memory_obj)
     if native is not None:
         return native
     if not config.allow_pickle_fallback:
@@ -58,7 +62,7 @@ def deserialize_memory_obj(payload: bytes, config: BifrostLMCacheConfig) -> obje
         except Exception as exc:
             raise MemoryObjDeserializationError(f"pickle fallback failed: {exc}") from exc
 
-    native = _native_deserialize(payload)
+    native = deserialize_with_lmcache_native(payload)
     if native is not None:
         return native
     raise MemoryObjDeserializationError(
@@ -140,40 +144,6 @@ def build_opaque_target_profile(
     }
 
 
-def _native_serialize(memory_obj: object) -> bytes | None:
-    for name in ("to_bytes", "serialize", "dumps"):
-        attr = getattr(memory_obj, name, None)
-        if attr is None or not callable(attr):
-            continue
-        try:
-            value = attr()
-        except TypeError:
-            continue
-        if isinstance(value, (bytes, bytearray, memoryview)):
-            return bytes(value)
-    return None
-
-
-def _native_deserialize(payload: bytes) -> object | None:
-    for module_name, function_names in (
-        ("lmcache", ("deserialize_memory_obj", "load_memory_obj")),
-        ("lmcache.v1.memory_management", ("deserialize_memory_obj", "load_memory_obj")),
-        ("lmcache.storage_backend", ("deserialize_memory_obj", "load_memory_obj")),
-    ):
-        try:
-            module = importlib.import_module(module_name)
-        except ImportError:
-            continue
-        for function_name in function_names:
-            function = getattr(module, function_name, None)
-            if callable(function):
-                try:
-                    return function(payload)
-                except TypeError:
-                    continue
-    return None
-
-
 def _engine_profile(config: BifrostLMCacheConfig) -> dict[str, Any]:
     return {
         "engine_name": config.engine_name,
@@ -225,12 +195,7 @@ def _chunk_hashes(payload: bytes, chunk_size: int) -> list[str]:
 
 
 def _lmcache_version() -> str:
-    try:
-        module = importlib.import_module("lmcache")
-    except ImportError:
-        return "uninstalled"
-    version = getattr(module, "__version__", None)
-    return str(version) if version else "unknown"
+    return lmcache_version() or "uninstalled"
 
 
 __all__ = [

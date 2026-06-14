@@ -16,6 +16,7 @@ from lmcache_bifrost.errors import (
     OpaqueBlobValidationError,
 )
 from lmcache_bifrost.key_codec import opaque_engine_key_hash, stable_key_repr
+from lmcache_bifrost.lmcache_compat import has_lmcache, lmcache_version
 
 __all__ = [
     "BifrostLMCacheConfig",
@@ -28,6 +29,8 @@ __all__ = [
     "build_opaque_metadata",
     "build_opaque_target_profile",
     "deserialize_memory_obj",
+    "has_lmcache",
+    "lmcache_version",
     "opaque_engine_key_hash",
     "serialize_memory_obj",
     "stable_key_repr",
