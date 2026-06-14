@@ -48,7 +48,7 @@ Last verified: 2026-06-13
 - [x] Record exact tensor shape, dtype, byte length, and layout.
 - [x] Compute payload hash, descriptor hash, and object ID with Phase 1 rules.
 - [x] Ensure mutable store and demo state is excluded from object identity.
-- [ ] Test dtype, shape, layout, byte-length, and hash mismatch rejection.
+- [x] Test dtype, shape, layout, byte-length, and hash mismatch rejection.
 
 ## Validation
 
@@ -70,7 +70,7 @@ Last verified: 2026-06-13
 - [x] Recheck file-level integrity before use.
 - [x] Test roundtrip through daemon-backed store path.
 - [ ] Test local-store convenience path if implemented.
-- [ ] Test missing, evicted, quarantined, corrupt, and catalog-inconsistent
+- [x] Test missing, evicted, quarantined, corrupt, and catalog-inconsistent
   objects fail closed.
 
 ## Manifest integration
@@ -109,7 +109,7 @@ Last verified: 2026-06-13
 - [ ] Change object ID and verify identity rejection.
 - [x] Change model hash and verify compatibility rejection.
 - [x] Change tokenizer hash and verify compatibility rejection.
-- [ ] Change positional config hash and verify compatibility rejection.
+- [x] Change positional config hash and verify compatibility rejection.
 - [x] Change prefix hash and verify miss or rejection.
 - [x] Remove one layer/block page and verify no full rehydration occurs.
 - [x] Mark one page quarantined or evicted and verify manifest incompleteness.

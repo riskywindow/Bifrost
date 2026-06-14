@@ -151,3 +151,46 @@ Phase 4 tests should prove fail-closed behavior for:
 
 In each case the expected behavior is a miss, rejection, quarantine, or explicit
 test failure. The harness must never silently use suspect KV state.
+
+## Adversarial real-page checks
+
+`tests/test_phase4_corruption_incompatibility.py` exercises real tiny-
+transformer KV pages rather than synthetic byte fixtures. It covers:
+
+1. Payload byte flips before PUT, which must be rejected by Phase 1 validation.
+2. Payload byte flips after commit, which must make GET miss, make fsck dirty,
+   and make any complete manifest report the member unavailable.
+3. Metadata descriptor hash corruption, which must make the object unservable
+   and produce a fsck metadata hash finding.
+4. Deleted committed payload files, which must be detected as catalog/file
+   inconsistency and make manifest completeness incomplete.
+5. Quarantined members, which must not satisfy GET or rehydration.
+6. Duplicate layer/block coordinates, missing layers, missing blocks, wrong
+   model hash, wrong tokenizer hash, wrong positional-config hash, wrong dtype,
+   wrong prefix hash, wrong layer ID, wrong block ID, and wrong tensor layout.
+
+The store-backed checks intentionally verify behavior at multiple gates:
+
+```text
+PUT validates descriptor + payload + target before commit.
+GET revalidates committed bytes before returning them.
+fsck reports catalog/file/integrity drift.
+manifest check treats corrupt, missing, evicted, quarantined, or unservable
+members as incomplete or corrupt.
+native_pages_to_kv_cache refuses incomplete or conflicting layer/block sets.
+```
+
+The corruption demo can be run against a local daemon:
+
+```bash
+python examples/tiny_transformer/corrupt_kv_page_demo.py \
+  --endpoint 127.0.0.1:7420 \
+  --store-root /path/to/bifrost-store-root \
+  --work-dir /tmp/bifrost-corrupt-demo \
+  --json
+```
+
+The demo stores valid pages, corrupts one committed payload file, runs
+`bifrost-store fsck --check`, prints the specific finding types, checks manifest
+completeness, and reports the expected rehydration failure without injecting
+suspect KV state.
