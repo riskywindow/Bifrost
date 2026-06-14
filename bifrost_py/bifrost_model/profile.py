@@ -179,7 +179,9 @@ def build_native_target_profile(
     *,
     block_size_tokens: int = DEFAULT_BLOCK_SIZE_TOKENS,
 ) -> dict[str, Any]:
-    prefix_profile = build_prefix_profile(tokens, tokenizer, config, token_range)
+    token_ids = _validate_tokens(tokens, tokenizer)
+    prefix_profile = build_prefix_profile(token_ids, tokenizer, config, token_range)
+    full_prefix_profile = build_prefix_profile(token_ids, tokenizer, config)
     return {
         "schema_version": SUPPORTED_TARGET_SCHEMA_VERSION,
         "accepts_object_type": "native_kv_page",
@@ -188,8 +190,8 @@ def build_native_target_profile(
             config, block_size_tokens=block_size_tokens
         ),
         "prefix_requirements": {
-            "prefix_hash": prefix_profile["prefix_hash"],
-            "token_hash": prefix_profile["token_hash"],
+            "prefix_hash": full_prefix_profile["prefix_hash"],
+            "token_hash": full_prefix_profile["token_hash"],
             "tokenizer_hash": prefix_profile["tokenizer_hash"],
             "rope_config_hash": prefix_profile["rope_config_hash"],
             "token_range": prefix_profile["token_range"],

@@ -51,6 +51,15 @@ def kv_block_to_native_page(
     payload = _block_payload_bytes(block)
     start, end = block.token_range
     token_range = {"start": start, "end": end}
+    page_prefix_profile = build_prefix_profile(
+        token_ids,
+        tokenizer,
+        config,
+        token_range=token_range,
+    )
+    full_prefix_profile = build_prefix_profile(token_ids, tokenizer, config)
+    page_prefix_profile["prefix_hash"] = full_prefix_profile["prefix_hash"]
+    page_prefix_profile["token_hash"] = full_prefix_profile["token_hash"]
     metadata: dict[str, Any] = {
         "schema_version": SUPPORTED_SCHEMA_VERSION,
         "object_type": "native_kv_page",
@@ -61,12 +70,7 @@ def kv_block_to_native_page(
         "engine_profile": build_engine_profile(
             config, block_size_tokens=block_size_tokens
         ),
-        "prefix_profile": build_prefix_profile(
-            token_ids,
-            tokenizer,
-            config,
-            token_range=token_range,
-        ),
+        "prefix_profile": page_prefix_profile,
         "payload_profile": {
             "byte_length": len(payload),
             "compression": "none",
@@ -144,6 +148,13 @@ def kv_cache_to_native_pages(
             },
             block_size_tokens=block_size_tokens,
         )
+        full_prefix_profile = build_prefix_profile(token_ids, tokenizer, config)
+        target_profile["prefix_requirements"]["prefix_hash"] = full_prefix_profile[
+            "prefix_hash"
+        ]
+        target_profile["prefix_requirements"]["token_hash"] = full_prefix_profile[
+            "token_hash"
+        ]
         _raise_if_rejected(metadata, payload, target_profile)
         pages.append(
             NativePage(

@@ -75,14 +75,15 @@ Last verified: 2026-06-13
 
 ## Manifest integration
 
-- [ ] Create prefix manifests for tiny-model page sets.
+- [x] Create prefix manifests for tiny-model page sets.
 - [ ] Create session manifests if continuation state needs session grouping.
-- [ ] Add every required layer/block page as a required member.
-- [ ] Check manifest completeness before rehydration.
-- [ ] Report deterministic missing-block reasons.
-- [ ] Pin and unpin manifests without changing object identity.
-- [ ] Test incomplete manifest rejection.
-- [ ] Test corrupt member makes manifest corrupt or unavailable.
+- [x] Add every required layer/block page as a required member.
+- [x] Check manifest completeness before rehydration.
+- [x] Report deterministic missing-block reasons.
+- [x] Pin manifests without changing object identity.
+- [x] Test incomplete manifest rejection.
+- [x] Test corrupt or unavailable member makes manifest incomplete or
+  unavailable.
 
 ## Cross-process demo
 
@@ -111,7 +112,7 @@ Last verified: 2026-06-13
 - [ ] Change positional config hash and verify compatibility rejection.
 - [x] Change prefix hash and verify miss or rejection.
 - [x] Remove one layer/block page and verify no full rehydration occurs.
-- [ ] Mark one page quarantined or evicted and verify manifest incompleteness.
+- [x] Mark one page quarantined or evicted and verify manifest incompleteness.
 - [ ] Force logit mismatch with wrong-but-well-shaped KV and verify test
   failure.
 

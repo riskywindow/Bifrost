@@ -23,6 +23,7 @@ from bifrost_model.profile import (
 from bifrost_model.tokenizer import TinyIntTokenizer
 from bifrost_model.tiny_transformer import TinyTransformer
 from bifrost_model.store_roundtrip import run_store_roundtrip
+from bifrost_model.manifest_roundtrip import run_manifest_roundtrip
 
 __all__ = [
     "TinyIntTokenizer",
@@ -40,6 +41,7 @@ __all__ = [
     "native_page_to_kv_block",
     "native_pages_to_kv_cache",
     "rope_config_hash",
+    "run_manifest_roundtrip",
     "run_store_roundtrip",
     "set_deterministic",
     "token_hash",

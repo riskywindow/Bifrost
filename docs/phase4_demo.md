@@ -1,6 +1,6 @@
 # Phase 4 Demo
 
-Last verified: 2026-06-02
+Last verified: 2026-06-13
 
 ## Purpose
 
@@ -103,9 +103,49 @@ The JSON summary includes:
 }
 ```
 
-This store roundtrip does not implement manifests, the cross-process worker A/B
-demo, ContextStorm model scenarios, LMCache, vLLM, external model downloads,
-GPU execution, dashboards, compression, QUIC, or RDMA.
+The daemon-backed manifest roundtrip adds the Phase 3 prefix manifest gate:
+
+```text
+PYTHONPATH=bifrost_py python examples/tiny_transformer/manifest_kv_roundtrip.py \
+  --endpoint 127.0.0.1:9000 \
+  --prompt "1 2 3 4 5" \
+  --decode-tokens 4 \
+  --block-size 2 \
+  --seed 1234 \
+  --json
+```
+
+After all pages are PUT and inspected, the script creates a prefix manifest
+using the full prompt prefix identity: `model_hash`, `tokenizer_hash`,
+`rope_config_hash`, `prefix_hash`, and token range `[0, prompt_token_count)`.
+It adds every generated page object as a required member. The store derives the
+member `layer_id`, `kv_block_id`, and page token range from each committed
+object descriptor. Before rehydration, the script checks manifest completeness
+and verifies the inspected member list covers every expected tiny-model
+`(layer_id, kv_block_id)` page.
+
+The JSON summary includes:
+
+```json
+{
+  "status": "pass",
+  "manifest_id": "bifrost://manifest/blake3/...",
+  "manifest_completeness": "complete",
+  "page_count": 6,
+  "required_member_count": 6,
+  "missing_member_count": 0,
+  "continuation_match": true,
+  "logit_max_abs_error": 0.0
+}
+```
+
+If the store reports an incomplete, corrupt, or unknown manifest, or if the
+manifest omits an expected layer/block page, the harness reports failure rather
+than attempting partial rehydration.
+
+These store roundtrips do not implement the cross-process worker A/B demo,
+ContextStorm model scenarios, LMCache, vLLM, external model downloads, GPU
+execution, dashboards, compression, QUIC, or RDMA.
 
 The later cross-process demo contract should stay stable:
 
@@ -120,12 +160,53 @@ The later cross-process demo contract should stay stable:
 
 ## Expected output
 
-Human-readable output should include:
+Human-readable output from the manifest-gated demo includes:
 
 ```text
 model: bifrost_tiny_transformer phase4.v1
 device: cpu
 dtype: float32
+prompt_tokens: [1, 2, 3, 4, 5]
+manifest_id: bifrost://manifest/blake3/...
+manifest_completeness: complete
+page_count: 6
+required_member_count: 6
+missing_member_count: 0
+put_success_count: 6
+get_success_count: 6
+baseline_continuation: [7, 7, 7, 127]
+rehydrated_continuation: [7, 7, 7, 127]
+continuation_match: true
+logit_max_abs_error: 0.000000000
+total_put_ms: 12.000
+total_get_ms: 10.000
+rehydrate_ms: 1.000
+result: pass
+```
+
+JSON output should be stable for tests. The manifest-gated demo includes:
+
+```json
+{
+  "status": "pass",
+  "manifest_id": "bifrost://manifest/blake3/...",
+  "manifest_completeness": "complete",
+  "page_count": 6,
+  "required_member_count": 6,
+  "missing_member_count": 0,
+  "continuation_match": true,
+  "logit_max_abs_error": 0.0,
+  "prompt_tokens": [1, 2, 3, 4, 5],
+  "put_success_count": 6,
+  "get_success_count": 6,
+  "baseline_continuation": [7, 7, 7, 127],
+  "rehydrated_continuation": [7, 7, 7, 127]
+}
+```
+
+The later cross-process demo should preserve the same correctness signal:
+
+```text
 prefix_tokens: 6
 continuation_tokens: 3
 block_size_tokens: 4
@@ -196,6 +277,20 @@ PYTHONPATH=bifrost_py python examples/tiny_transformer/store_kv_roundtrip.py \
 
 The harness accepts `--work-dir PATH` to retain the generated metadata,
 payload, target-profile, and fetched GET files for inspection.
+
+Run the manifest-gated variant:
+
+```text
+PYTHONPATH=bifrost_py python examples/tiny_transformer/manifest_kv_roundtrip.py \
+  --endpoint 127.0.0.1:9000 \
+  --prompt "1 2 3 4 5" \
+  --decode-tokens 4 \
+  --block-size 2 \
+  --seed 1234 \
+  --json
+```
+
+The manifest-gated variant accepts the same `--work-dir PATH` option.
 
 ## Optional GPU demo
 
