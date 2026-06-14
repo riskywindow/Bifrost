@@ -89,17 +89,17 @@ Last verified: 2026-06-13
 
 - [x] Add a no-daemon one-process script that serializes validated native KV
   pages, rehydrates them, and compares logits plus greedy continuation.
-- [ ] Process A runs prefix and extracts native KV pages.
-- [ ] Process A stores pages through BIFROST.
-- [ ] Process A records or prints manifest ID and comparison metadata.
-- [ ] Process B retrieves pages by manifest or prefix query.
-- [ ] Process B rehydrates `past_key_values`.
-- [ ] Process B resumes greedy decoding.
-- [ ] Demo compares logits and greedy token IDs with baseline.
+- [x] Process A runs prefix and extracts native KV pages.
+- [x] Process A stores pages through BIFROST.
+- [x] Process A records or prints manifest ID and comparison metadata.
+- [x] Process B retrieves pages by manifest-gated handoff members.
+- [x] Process B rehydrates `past_key_values`.
+- [x] Process B resumes greedy decoding.
+- [x] Demo compares logits and greedy token IDs with baseline.
 - [x] Local no-daemon demo emits stable human-readable and JSON output.
 - [x] Store-backed daemon demo emits stable human-readable and JSON output.
-- [ ] Cross-process worker A/B demo emits stable human-readable and JSON output.
-- [ ] Demo remains CPU-only and deterministic by default.
+- [x] Cross-process worker A/B demo emits stable human-readable and JSON output.
+- [x] Demo remains CPU-only and deterministic by default.
 
 ## Corruption tests
 
@@ -150,12 +150,12 @@ Last verified: 2026-06-13
   `past_key_values`.
 - [x] Every generated KV page is a validated Phase 1 `native_kv_page`.
 - [x] Native pages roundtrip through the Phase 3 store.
-- [ ] Prefix or session manifest proves layer/block completeness.
+- [x] Prefix or session manifest proves layer/block completeness.
 - [x] Rehydrated logits match uninterrupted baseline within required
   `float32` tolerance.
 - [x] Greedy continuation tokens match baseline in the no-daemon local
   roundtrip.
 - [x] Corruption and mismatch cases fail closed.
-- [ ] Cross-process worker A/B KV teleportation demo passes locally.
+- [x] Cross-process worker A/B KV teleportation demo passes locally.
 - [ ] ContextStorm model benchmark smoke scenario passes locally and in CI.
 - [ ] No forbidden Phase 4 scope was implemented.
