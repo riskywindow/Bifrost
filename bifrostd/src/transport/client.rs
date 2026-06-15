@@ -1,11 +1,12 @@
 use crate::cache::validate_object;
 use crate::transport::{
     chunk_bytes, iter_chunks, read_frame, write_frame, ChunkInfo, ChunkManifest, Frame,
-    FrameHeader, FrameType, PathSpec, PathStatus, Reassembler, RoundRobinScheduler,
-    StoreEvictRequest, StoreEvictResponse, StoreInspectResponse, StoreListResponse,
-    StoreManifestRequest, StoreManifestResponse, StoreObjectFilter, StoreObjectSummary,
-    StoreOperationResponse, StoreStatsResponse, StoreTtlRequest, TraceEvent, TraceSink,
-    TransportMetrics, TransportResult, TRANSPORT_VERSION,
+    FrameHeader, FrameType, OpaqueKeyListRequest, OpaqueKeyListResponse, OpaqueKeyQueryRequest,
+    OpaqueKeyQueryResponse, OpaqueKeySummary, PathSpec, PathStatus, Reassembler,
+    RoundRobinScheduler, StoreEvictRequest, StoreEvictResponse, StoreInspectResponse,
+    StoreListResponse, StoreManifestRequest, StoreManifestResponse, StoreObjectFilter,
+    StoreObjectSummary, StoreOperationResponse, StoreStatsResponse, StoreTtlRequest, TraceEvent,
+    TraceSink, TransportMetrics, TransportResult, TRANSPORT_VERSION,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -66,6 +67,20 @@ pub struct GetOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreListOutcome {
     pub objects: Vec<StoreObjectSummary>,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpaqueKeyQueryOutcome {
+    pub found: bool,
+    pub key: Option<OpaqueKeySummary>,
+    pub object: Option<StoreObjectSummary>,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpaqueKeyListOutcome {
+    pub keys: Vec<OpaqueKeySummary>,
     pub reason: String,
 }
 
@@ -894,6 +909,68 @@ pub async fn query_store_objects(
     let response: StoreListResponse = serde_json::from_slice(&result.payload)?;
     Ok(StoreListOutcome {
         objects: response.objects,
+        reason: result.header.reason.unwrap_or_default(),
+    })
+}
+
+pub async fn query_opaque_key(
+    endpoint: &str,
+    request: OpaqueKeyQueryRequest,
+) -> anyhow::Result<OpaqueKeyQueryOutcome> {
+    let payload = serde_json::to_vec(&request)?;
+    let result = store_json_request(
+        endpoint,
+        FrameType::OpaqueKeyQueryRequest,
+        FrameType::OpaqueKeyQueryResult,
+        None,
+        payload,
+    )
+    .await?;
+    if result.header.status.as_deref() != Some("ok") {
+        return Ok(OpaqueKeyQueryOutcome {
+            found: false,
+            key: None,
+            object: None,
+            reason: result
+                .header
+                .reason
+                .unwrap_or_else(|| "opaque_key_query_failed".to_string()),
+        });
+    }
+    let response: OpaqueKeyQueryResponse = serde_json::from_slice(&result.payload)?;
+    Ok(OpaqueKeyQueryOutcome {
+        found: response.found,
+        key: response.key,
+        object: response.object,
+        reason: response.reason.unwrap_or_default(),
+    })
+}
+
+pub async fn list_opaque_keys(
+    endpoint: &str,
+    request: OpaqueKeyListRequest,
+) -> anyhow::Result<OpaqueKeyListOutcome> {
+    let payload = serde_json::to_vec(&request)?;
+    let result = store_json_request(
+        endpoint,
+        FrameType::OpaqueKeyListRequest,
+        FrameType::OpaqueKeyListResult,
+        None,
+        payload,
+    )
+    .await?;
+    if result.header.status.as_deref() != Some("ok") {
+        return Ok(OpaqueKeyListOutcome {
+            keys: Vec::new(),
+            reason: result
+                .header
+                .reason
+                .unwrap_or_else(|| "opaque_key_list_failed".to_string()),
+        });
+    }
+    let response: OpaqueKeyListResponse = serde_json::from_slice(&result.payload)?;
+    Ok(OpaqueKeyListOutcome {
+        keys: response.keys,
         reason: result.header.reason.unwrap_or_default(),
     })
 }

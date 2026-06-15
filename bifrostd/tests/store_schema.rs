@@ -86,6 +86,7 @@ fn expected_tables_exist() {
         "prefix_manifests",
         "manifest_members",
         "store_events",
+        "opaque_key_index",
     ];
 
     for table in tables {
@@ -114,6 +115,7 @@ fn expected_indexes_exist() {
         "idx_prefix_manifests_prefix_hash",
         "idx_manifest_members_manifest_id",
         "idx_manifest_members_object_id",
+        "idx_opaque_key_index_object_id",
     ];
 
     for index in indexes {
@@ -141,6 +143,13 @@ fn schema_version_is_correct() {
         row_count(
             &catalog,
             "SELECT COUNT(*) FROM schema_migrations WHERE version = 1 AND name = 'initial_catalog_schema'",
+        ),
+        1
+    );
+    assert_eq!(
+        row_count(
+            &catalog,
+            "SELECT COUNT(*) FROM schema_migrations WHERE version = 2 AND name = 'opaque_key_index'",
         ),
         1
     );

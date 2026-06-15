@@ -11,6 +11,14 @@ from .store_runner import is_store_scenario, run_store_scenario
 from .synthetic_kv import generate_synthetic_object, write_synthetic_object
 
 
+LMCACHE_OPERATIONS = {
+    "exists",
+    "fake_lmcache_connector_roundtrip",
+    "fake_lmcache_connector_repeated_get",
+    "fake_lmcache_connector_batched_ops",
+    "real_lmcache_connector_smoke",
+    "vllm_lmcache_smoke",
+}
 MODEL_OPERATIONS = {
     "local_kv_roundtrip",
     "store_kv_roundtrip",
@@ -50,7 +58,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "run":
-            if _is_model_scenario(args.scenario):
+            if _is_lmcache_scenario(args.scenario):
+                from .lmcache_runner import run_lmcache_scenario
+
+                run_dir = run_lmcache_scenario(
+                    args.scenario,
+                    runs_root=args.runs_root,
+                    run_id=args.run_id,
+                )
+            elif _is_model_scenario(args.scenario):
                 from .model_runner import run_model_scenario
 
                 run_dir = run_model_scenario(
@@ -94,6 +110,12 @@ def _is_model_scenario(path: Path) -> bool:
     data = _load_simple_yaml(path)
     operations = {str(op) for op in data.get("operations", [])}
     return bool(operations & MODEL_OPERATIONS) or str(data.get("workload", "")) == "model"
+
+
+def _is_lmcache_scenario(path: Path) -> bool:
+    data = _load_simple_yaml(path)
+    operations = {str(op) for op in data.get("operations", [])}
+    return bool(operations & LMCACHE_OPERATIONS) or str(data.get("workload", "")) == "lmcache"
 
 
 if __name__ == "__main__":

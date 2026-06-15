@@ -1,0 +1,12 @@
+name: lmcache_connector_fake_large
+workload: lmcache
+object_count: 64
+payload_size_bytes: 1 MiB
+chunk_size_bytes: 256 KiB
+operations:
+  - fake_lmcache_connector_roundtrip
+  - fake_lmcache_connector_repeated_get
+  - fake_lmcache_connector_batched_ops
+repeated_get_count: 5
+repetitions: 1
+timeout_seconds: 180

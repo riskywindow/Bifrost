@@ -1,4 +1,4 @@
-pub const LATEST_SCHEMA_VERSION: i64 = 1;
+pub const LATEST_SCHEMA_VERSION: i64 = 2;
 
 pub const CREATE_SCHEMA_MIGRATIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 "#;
 
 pub const MIGRATION_V1_NAME: &str = "initial_catalog_schema";
+pub const MIGRATION_V2_NAME: &str = "opaque_key_index";
 
 pub const MIGRATION_V1_SQL: &str = r#"
 CREATE TABLE objects (
@@ -116,4 +117,34 @@ CREATE INDEX idx_object_compatibility_layer_block ON object_compatibility(layer_
 CREATE INDEX idx_prefix_manifests_prefix_hash ON prefix_manifests(prefix_hash);
 CREATE INDEX idx_manifest_members_manifest_id ON manifest_members(manifest_id);
 CREATE INDEX idx_manifest_members_object_id ON manifest_members(object_id);
+"#;
+
+pub const MIGRATION_V2_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS opaque_key_index (
+  engine_name TEXT NOT NULL,
+  integration_name TEXT NOT NULL,
+  opaque_engine_key_hash TEXT NOT NULL,
+  opaque_engine_key_repr TEXT,
+  object_id TEXT NOT NULL,
+  created_at_unix_ms INTEGER NOT NULL,
+  last_accessed_unix_ms INTEGER,
+  PRIMARY KEY(engine_name, integration_name, opaque_engine_key_hash),
+  FOREIGN KEY(object_id) REFERENCES objects(object_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_opaque_key_index_object_id ON opaque_key_index(object_id);
+
+INSERT OR IGNORE INTO opaque_key_index(
+  engine_name, integration_name, opaque_engine_key_hash, opaque_engine_key_repr,
+  object_id, created_at_unix_ms, last_accessed_unix_ms
+)
+SELECT
+  c.engine_name, c.integration_name, c.opaque_engine_key_hash, NULL,
+  c.object_id, o.created_at_unix_ms, o.last_accessed_unix_ms
+FROM object_compatibility c
+INNER JOIN objects o ON o.object_id = c.object_id
+WHERE o.object_type = 'opaque_engine_blob'
+  AND c.engine_name IS NOT NULL
+  AND c.integration_name IS NOT NULL
+  AND c.opaque_engine_key_hash IS NOT NULL;
 "#;

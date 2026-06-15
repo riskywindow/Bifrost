@@ -10,6 +10,7 @@ from bifrost_client.models import ObjectSummary, PutResult, StoredObject
 from lmcache_bifrost.config import BifrostLMCacheConfig
 from lmcache_bifrost.connector import BifrostRemoteConnector
 from lmcache_bifrost.errors import (
+    BifrostLMCacheStoreError,
     BifrostLMCacheValidationError,
     ConnectorConfigurationError,
     MemoryObjSerializationError,
@@ -58,6 +59,36 @@ def test_fake_connector_corrupt_stored_payload_raises_validation_error() -> None
         assert await connector.exists(key) is False
         with pytest.raises(BifrostLMCacheValidationError):
             await connector.get(key)
+
+    asyncio.run(run())
+
+
+def test_fake_connector_descriptor_key_hash_mismatch_fails_closed() -> None:
+    async def run() -> None:
+        client = FakeBifrostClient()
+        connector = _connector(client)
+        key = FakeCacheEngineKey("tiny", "abc", (1, 2, 3))
+        await connector.put(key, FakeMemoryObj(b"payload"))
+        client.replace_stored_key_hash(key, "blake3:" + "f" * 64)
+
+        assert await connector.exists(key) is False
+        with pytest.raises(BifrostLMCacheValidationError, match="engine_key_hash"):
+            await connector.get(key)
+        assert await connector.list() == []
+
+    asyncio.run(run())
+
+
+def test_fake_connector_put_wrong_object_id_result_fails_closed() -> None:
+    async def run() -> None:
+        client = WrongObjectIdPutClient()
+        connector = _connector(client)
+        key = FakeCacheEngineKey("tiny", "abc", (1, 2, 3))
+
+        with pytest.raises(BifrostLMCacheStoreError, match="wrong object_id"):
+            await connector.put(key, FakeMemoryObj(b"payload"))
+
+        assert await connector.exists(key) is False
 
     asyncio.run(run())
 
@@ -121,7 +152,12 @@ def _connector(client: "FakeBifrostClient") -> BifrostRemoteConnector:
 class FakeBifrostClient:
     def __init__(self) -> None:
         self.objects: dict[str, StoredObject] = {}
+        self.query_aliases: dict[tuple[str, str, str], str] = {}
         self.close_count = 0
+        self.alive = True
+
+    def ping(self) -> bool:
+        return self.alive
 
     def put_object(
         self,
@@ -164,6 +200,9 @@ class FakeBifrostClient:
             if opaque["engine_key_hash"] != opaque_engine_key_hash:
                 continue
             matches.append(_summary(stored))
+        alias = self.query_aliases.get((engine_name, integration_name, opaque_engine_key_hash))
+        if alias is not None and alias in self.objects:
+            matches.append(_summary(self.objects[alias], key_hash=opaque_engine_key_hash))
         return matches
 
     def get_object(self, object_id: str) -> StoredObject:
@@ -190,8 +229,48 @@ class FakeBifrostClient:
                 return
         raise AssertionError("test key was not stored")
 
+    def replace_stored_key_hash(self, key: FakeCacheEngineKey, key_hash: str) -> None:
+        current_hash = opaque_engine_key_hash(key)
+        for object_id, stored in list(self.objects.items()):
+            if stored.metadata["opaque_engine_profile"]["engine_key_hash"] == current_hash:
+                metadata = {
+                    **stored.metadata,
+                    "opaque_engine_profile": {
+                        **stored.metadata["opaque_engine_profile"],
+                        "engine_key_hash": key_hash,
+                    },
+                }
+                self.objects[object_id] = replace(stored, metadata=metadata)
+                engine = stored.metadata["engine_profile"]
+                self.query_aliases[
+                    (
+                        engine["engine_name"],
+                        engine["integration_name"],
+                        current_hash,
+                    )
+                ] = object_id
+                return
+        raise AssertionError("test key was not stored")
 
-def _summary(stored: StoredObject) -> ObjectSummary:
+
+class WrongObjectIdPutClient(FakeBifrostClient):
+    def put_object(
+        self,
+        metadata: dict[str, Any],
+        payload: bytes,
+        chunk_size: int,
+    ) -> PutResult:
+        del metadata, payload, chunk_size
+        return PutResult(
+            object_id="bifrost://object/blake3/" + "f" * 64,
+            payload_hash=None,
+            descriptor_hash=None,
+            stored=True,
+            verified=True,
+        )
+
+
+def _summary(stored: StoredObject, *, key_hash: str | None = None) -> ObjectSummary:
     metadata = stored.metadata
     engine = metadata["engine_profile"]
     opaque = metadata["opaque_engine_profile"]
@@ -202,5 +281,5 @@ def _summary(stored: StoredObject) -> ObjectSummary:
         byte_length=len(stored.payload),
         engine_name=engine["engine_name"],
         integration_name=engine["integration_name"],
-        opaque_engine_key_hash=opaque["engine_key_hash"],
+        opaque_engine_key_hash=key_hash or opaque["engine_key_hash"],
     )

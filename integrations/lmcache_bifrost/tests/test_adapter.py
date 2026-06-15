@@ -3,9 +3,10 @@ from __future__ import annotations
 import pytest
 
 from lmcache_bifrost.adapter import BifrostConnectorAdapter, parse_config
+from lmcache_bifrost.config import BifrostLMCacheConfig
 from lmcache_bifrost.connector import BifrostRemoteConnector
 from lmcache_bifrost.errors import ConnectorConfigurationError
-from lmcache_bifrost.lmcache_compat import ConnectorAdapter, has_lmcache
+from lmcache_bifrost.lmcache_compat import ConnectorAdapter
 from tests.fakes import FakeConnectorContext, FakeLMCacheConfig
 
 
@@ -15,6 +16,12 @@ def test_adapter_can_parse_bifrost_url() -> None:
         "bifrost://localhost:7744?chunk_size=262144"
     )
     assert BifrostConnectorAdapter.can_parse("bifrost+tcp://127.0.0.1:7744")
+
+
+def test_default_config_endpoint_is_daemon_host_port() -> None:
+    config = BifrostLMCacheConfig()
+
+    assert config.endpoint == "127.0.0.1:8765"
 
 
 def test_adapter_can_parse_plugin_url() -> None:
@@ -97,7 +104,10 @@ def test_invalid_plugin_config_fails_deterministically() -> None:
         parse_config(context)
 
 
-@pytest.mark.skipif(not has_lmcache(), reason="LMCache is not installed")
+@pytest.mark.skipif(
+    ConnectorAdapter is None,
+    reason="LMCache ConnectorAdapter is not importable in this environment",
+)
 def test_real_lmcache_adapter_subclass_when_installed() -> None:
     assert ConnectorAdapter is not None
     assert issubclass(BifrostConnectorAdapter, ConnectorAdapter)

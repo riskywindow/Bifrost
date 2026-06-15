@@ -18,6 +18,7 @@ use crate::store::manifest::{
 use crate::store::memory_tier::{MemoryTier, MemoryTierConfig};
 use crate::store::object_record::{
     ObjectCompatibility, ObjectListFilter, ObjectLocation, ObjectRecord, ObjectState,
+    OpaqueKeyListFilter, OpaqueKeyRecord,
 };
 use crate::store::{open_catalog, StoreStats};
 use crate::transport::ChunkManifest;
@@ -305,6 +306,62 @@ impl Store {
 
     pub fn list_objects(&self, filter: &ObjectListFilter) -> StoreResult<Vec<ObjectRecord>> {
         self.open_catalog()?.list_objects(filter)
+    }
+
+    pub fn get_object_by_opaque_key(
+        &self,
+        engine_name: &str,
+        integration_name: &str,
+        opaque_engine_key_hash: &str,
+    ) -> StoreResult<Option<ObjectInspection>> {
+        let catalog = self.open_catalog()?;
+        let Some(index) = catalog.get_object_by_opaque_key(
+            engine_name,
+            integration_name,
+            opaque_engine_key_hash,
+        )?
+        else {
+            return Ok(None);
+        };
+        drop(catalog);
+
+        let inspection = match self.inspect_object(&index.object_id) {
+            Ok(inspection) => inspection,
+            Err(StoreError::NotFound(_)) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        if !inspection.servable {
+            return Ok(None);
+        }
+        if inspection.compatibility.engine_name.as_deref() != Some(engine_name)
+            || inspection.compatibility.integration_name.as_deref() != Some(integration_name)
+            || inspection.compatibility.opaque_engine_key_hash.as_deref()
+                != Some(opaque_engine_key_hash)
+        {
+            return Ok(None);
+        }
+        let mut catalog = self.open_catalog()?;
+        catalog.update_opaque_key_access(engine_name, integration_name, opaque_engine_key_hash)?;
+        Ok(Some(inspection))
+    }
+
+    pub fn list_opaque_keys(
+        &self,
+        filter: &OpaqueKeyListFilter,
+    ) -> StoreResult<Vec<OpaqueKeyRecord>> {
+        let catalog = self.open_catalog()?;
+        let entries = catalog.list_opaque_keys(filter)?;
+        drop(catalog);
+
+        let mut result = Vec::with_capacity(entries.len());
+        for mut entry in entries {
+            entry.serveable = self
+                .inspect_object(&entry.object_id)
+                .map(|inspection| inspection.servable)
+                .unwrap_or(false);
+            result.push(entry);
+        }
+        Ok(result)
     }
 
     pub fn stats(&self) -> StoreResult<StoreStats> {

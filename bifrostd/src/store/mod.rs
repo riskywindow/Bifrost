@@ -31,7 +31,7 @@ pub use manifest::{
 pub use memory_tier::{MemoryTier, MemoryTierConfig, MemoryTierStats};
 pub use object_record::{
     ObjectAccess, ObjectCompatibility, ObjectListFilter, ObjectLocation, ObjectRecord, ObjectState,
-    StoreEvent,
+    OpaqueKeyListFilter, OpaqueKeyRecord, StoreEvent,
 };
 pub use schema::LATEST_SCHEMA_VERSION;
 pub use stats::StoreStats;

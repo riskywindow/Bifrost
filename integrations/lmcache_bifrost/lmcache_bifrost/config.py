@@ -9,7 +9,7 @@ from lmcache_bifrost.errors import ConnectorConfigurationError
 
 @dataclass(frozen=True, slots=True)
 class BifrostLMCacheConfig:
-    endpoint: str = "http://127.0.0.1:8765"
+    endpoint: str = "127.0.0.1:8765"
     chunk_size: int = 1024 * 1024
     allow_pickle_fallback: bool = False
     key_repr_version: str = "lmcache_key_repr.v1"
@@ -17,6 +17,7 @@ class BifrostLMCacheConfig:
     integration_name: str = "lmcache_bifrost_remote_storage"
     timeout_seconds: float = 5.0
     strict_validation: bool = True
+    metrics_jsonl_path: str | None = None
 
     def __post_init__(self) -> None:
         if not self.endpoint:
@@ -31,6 +32,8 @@ class BifrostLMCacheConfig:
             raise ConnectorConfigurationError("integration_name must be non-empty")
         if self.timeout_seconds <= 0:
             raise ConnectorConfigurationError("timeout_seconds must be positive")
+        if self.metrics_jsonl_path is not None and not str(self.metrics_jsonl_path):
+            raise ConnectorConfigurationError("metrics_jsonl_path must be non-empty")
 
 
 __all__ = ["BifrostLMCacheConfig"]

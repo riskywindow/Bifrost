@@ -233,12 +233,7 @@ def _native_serializer(memory_obj: object) -> str | None:
         attr = getattr(memory_obj, name, None)
         if attr is None or not callable(attr):
             continue
-        try:
-            value = attr()
-        except TypeError:
-            continue
-        if isinstance(value, (bytes, bytearray, memoryview)):
-            return name
+        return name
     return None
 
 

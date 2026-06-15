@@ -1,10 +1,12 @@
 use crate::store::{EvictionPolicy, EvictionRequest, MemoryTierConfig, Store, StoreError};
 use crate::transport::{
     chunk_bytes, iter_chunks, read_frame, write_frame, ChunkManifest, Frame, FrameHeader,
-    FrameType, StoreEvictRequest, StoreEvictResponse, StoreInspectResponse, StoreLifecycleRequest,
-    StoreListResponse, StoreManifestRequest, StoreManifestResponse, StoreObjectFilter,
-    StoreObjectSummary, StoreOperationResponse, StoreStatsResponse, StoreTtlRequest, TraceEvent,
-    TraceSink, TransportError, TransportMetrics, TransportResult, TRANSPORT_VERSION,
+    FrameType, OpaqueKeyListRequest, OpaqueKeyListResponse, OpaqueKeyQueryRequest,
+    OpaqueKeyQueryResponse, OpaqueKeySummary, StoreEvictRequest, StoreEvictResponse,
+    StoreInspectResponse, StoreLifecycleRequest, StoreListResponse, StoreManifestRequest,
+    StoreManifestResponse, StoreObjectFilter, StoreObjectSummary, StoreOperationResponse,
+    StoreStatsResponse, StoreTtlRequest, TraceEvent, TraceSink, TransportError, TransportMetrics,
+    TransportResult, TRANSPORT_VERSION,
 };
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
@@ -258,6 +260,14 @@ pub async fn handle_connection_observed(
                 send_fsck_result(&mut stream, &store, &frame).await?;
                 return Ok(());
             }
+            FrameType::OpaqueKeyQueryRequest => {
+                send_opaque_key_query_result(&mut stream, &store, &frame).await?;
+                return Ok(());
+            }
+            FrameType::OpaqueKeyListRequest => {
+                send_opaque_key_list_result(&mut stream, &store, &frame).await?;
+                return Ok(());
+            }
             _ => {
                 metrics.record_transfer_failed();
                 send_error(
@@ -270,6 +280,111 @@ pub async fn handle_connection_observed(
                 .await?;
                 return Ok(());
             }
+        }
+    }
+}
+
+async fn send_opaque_key_query_result(
+    stream: &mut TcpStream,
+    store: &Store,
+    request: &Frame,
+) -> TransportResult<()> {
+    let operation: OpaqueKeyQueryRequest = serde_json::from_slice(&request.payload)?;
+    match store.get_object_by_opaque_key(
+        &operation.engine_name,
+        &operation.integration_name,
+        &operation.opaque_engine_key_hash,
+    ) {
+        Ok(Some(inspection)) => {
+            let key = Some(OpaqueKeySummary {
+                engine_name: operation.engine_name.clone(),
+                integration_name: operation.integration_name.clone(),
+                opaque_engine_key_hash: operation.opaque_engine_key_hash.clone(),
+                opaque_engine_key_repr: None,
+                object_id: inspection.record.object_id.clone(),
+                serveable: true,
+                state: Some(inspection.record.state.as_str().to_string()),
+                created_at_unix_ms: Some(inspection.record.created_at_unix_ms),
+                last_accessed_unix_ms: inspection.record.last_accessed_unix_ms,
+            });
+            let response = OpaqueKeyQueryResponse {
+                found: true,
+                key,
+                object: Some(StoreObjectSummary::from_parts(
+                    &inspection.record,
+                    &inspection.compatibility,
+                )),
+                reason: None,
+            };
+            let payload = serde_json::to_vec(&response)?;
+            let mut result = FrameHeader::new(
+                FrameType::OpaqueKeyQueryResult,
+                request.header.transfer_id.clone(),
+                payload.len() as u64,
+            );
+            result.status = Some("ok".to_string());
+            result.reason = Some(String::new());
+            write_frame(stream, &result, &payload).await
+        }
+        Ok(None) => {
+            let payload = serde_json::to_vec(&OpaqueKeyQueryResponse {
+                found: false,
+                key: None,
+                object: None,
+                reason: Some("not_found".to_string()),
+            })?;
+            let mut result = FrameHeader::new(
+                FrameType::OpaqueKeyQueryResult,
+                request.header.transfer_id.clone(),
+                payload.len() as u64,
+            );
+            result.status = Some("ok".to_string());
+            result.reason = Some(String::new());
+            write_frame(stream, &result, &payload).await
+        }
+        Err(error) => {
+            send_store_result_error(
+                stream,
+                FrameType::OpaqueKeyQueryResult,
+                &request.header.transfer_id,
+                &error.to_string(),
+            )
+            .await
+        }
+    }
+}
+
+async fn send_opaque_key_list_result(
+    stream: &mut TcpStream,
+    store: &Store,
+    request: &Frame,
+) -> TransportResult<()> {
+    let operation: OpaqueKeyListRequest = if request.payload.is_empty() {
+        OpaqueKeyListRequest::default()
+    } else {
+        serde_json::from_slice(&request.payload)?
+    };
+    match store.list_opaque_keys(&operation.to_list_filter()) {
+        Ok(keys) => {
+            let keys = keys.iter().map(OpaqueKeySummary::from).collect::<Vec<_>>();
+            let payload = serde_json::to_vec(&OpaqueKeyListResponse { keys })?;
+            let mut result = FrameHeader::new(
+                FrameType::OpaqueKeyListResult,
+                request.header.transfer_id.clone(),
+                payload.len() as u64,
+            );
+            result.status = Some("ok".to_string());
+            result.reason = Some(String::new());
+            write_frame(stream, &result, &payload).await
+        }
+        Err(error) => {
+            send_store_result_error(
+                stream,
+                FrameType::OpaqueKeyListResult,
+                &request.header.transfer_id,
+                &error.to_string(),
+            )
+            .await
         }
     }
 }

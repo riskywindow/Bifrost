@@ -1,0 +1,15 @@
+name: serve_workload_small_ci
+workload: serving_requests
+generator: fake-ci-small
+output_jsonl: serving_requests.jsonl
+summary_json: serving_workload_summary.json
+request_count: 8
+prefix_repeat_groups: 2
+max_tokens: 16
+seed: 1234
+prefix_size: small
+requires_model: false
+requires_internet: false
+requires_gpu: false
+requires_tokenizer: false
+notes: "Deterministic Phase 6 serving request JSONL generation only; does not start vLLM, LMCache, or bifrostd."

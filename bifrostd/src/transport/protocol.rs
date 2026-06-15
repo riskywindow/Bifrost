@@ -34,6 +34,8 @@ pub struct StoreObjectFilter {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub engine_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub integration_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opaque_engine_key_hash: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layer_id: Option<i64>,
@@ -50,6 +52,7 @@ impl StoreObjectFilter {
             model_hash: self.model_hash.clone(),
             prefix_hash: self.prefix_hash.clone(),
             engine_name: self.engine_name.clone(),
+            integration_name: self.integration_name.clone(),
             opaque_engine_key_hash: self.opaque_engine_key_hash.clone(),
             layer_id: self.layer_id,
             kv_block_id: self.kv_block_id,
@@ -72,6 +75,8 @@ pub struct StoreObjectSummary {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub engine_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub integration_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opaque_engine_key_hash: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layer_id: Option<i64>,
@@ -92,6 +97,7 @@ impl StoreObjectSummary {
             model_hash: compatibility.model_hash.clone(),
             prefix_hash: compatibility.prefix_hash.clone(),
             engine_name: compatibility.engine_name.clone(),
+            integration_name: compatibility.integration_name.clone(),
             opaque_engine_key_hash: compatibility.opaque_engine_key_hash.clone(),
             layer_id: compatibility.layer_id,
             kv_block_id: compatibility.kv_block_id,
@@ -99,6 +105,83 @@ impl StoreObjectSummary {
             last_accessed_unix_ms: record.last_accessed_unix_ms,
         }
     }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OpaqueKeyListRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub integration_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<i64>,
+}
+
+impl OpaqueKeyListRequest {
+    pub fn to_list_filter(&self) -> crate::store::OpaqueKeyListFilter {
+        crate::store::OpaqueKeyListFilter {
+            engine_name: self.engine_name.clone(),
+            integration_name: self.integration_name.clone(),
+            limit: self.limit,
+            offset: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OpaqueKeyQueryRequest {
+    pub engine_name: String,
+    pub integration_name: String,
+    pub opaque_engine_key_hash: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OpaqueKeySummary {
+    pub engine_name: String,
+    pub integration_name: String,
+    pub opaque_engine_key_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opaque_engine_key_repr: Option<String>,
+    pub object_id: String,
+    pub serveable: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at_unix_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_accessed_unix_ms: Option<i64>,
+}
+
+impl From<&crate::store::OpaqueKeyRecord> for OpaqueKeySummary {
+    fn from(record: &crate::store::OpaqueKeyRecord) -> Self {
+        Self {
+            engine_name: record.engine_name.clone(),
+            integration_name: record.integration_name.clone(),
+            opaque_engine_key_hash: record.opaque_engine_key_hash.clone(),
+            opaque_engine_key_repr: record.opaque_engine_key_repr.clone(),
+            object_id: record.object_id.clone(),
+            serveable: record.serveable,
+            state: record.object_state.map(|state| state.as_str().to_string()),
+            created_at_unix_ms: Some(record.created_at_unix_ms),
+            last_accessed_unix_ms: record.last_accessed_unix_ms,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OpaqueKeyQueryResponse {
+    pub found: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<OpaqueKeySummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub object: Option<StoreObjectSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OpaqueKeyListResponse {
+    pub keys: Vec<OpaqueKeySummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

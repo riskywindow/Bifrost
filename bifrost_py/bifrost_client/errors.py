@@ -11,6 +11,14 @@ class BifrostConnectionError(BifrostClientError):
     """The client could not connect to or communicate with the daemon."""
 
 
+class BifrostTimeoutError(BifrostConnectionError):
+    """The daemon operation exceeded the configured timeout."""
+
+
+class BifrostClosedError(BifrostClientError):
+    """The client was used after it was closed."""
+
+
 class BifrostProtocolError(BifrostClientError):
     """The daemon sent or received an invalid transport frame."""
 

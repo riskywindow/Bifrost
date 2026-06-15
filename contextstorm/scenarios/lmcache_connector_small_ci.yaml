@@ -1,0 +1,15 @@
+name: lmcache_connector_small_ci
+workload: lmcache
+object_count: 5
+payload_size_bytes: 64 KiB
+chunk_size_bytes: 64 KiB
+operations:
+  - put
+  - exists
+  - get
+  - list
+  - stats
+  - fsck
+  - fake_lmcache_connector_corrupt_object
+repetitions: 1
+timeout_seconds: 60

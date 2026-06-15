@@ -14,10 +14,12 @@ from bifrost_kv.validate import validate_object
 
 from .errors import (
     BifrostClientError,
+    BifrostClosedError,
     BifrostConnectionError,
     BifrostNotFoundError,
     BifrostProtocolError,
     BifrostServerError,
+    BifrostTimeoutError,
     BifrostValidationError,
 )
 from .models import BifrostClientConfig, ObjectSummary, PutResult, StoreStats, StoredObject
@@ -66,8 +68,8 @@ class BifrostAsyncClient:
     async def ping(self) -> bool:
         self._ensure_open()
         reader, writer, transfer_id = await self._open_handshaken("ping")
-        writer.close()
-        await writer.wait_closed()
+        del reader
+        await self._close_writer(writer)
         self._connected = True
         return bool(transfer_id)
 
@@ -107,7 +109,7 @@ class BifrostAsyncClient:
                 payload_hash=manifest["payload_hash"],
                 flags={"chunk_manifest": manifest},
             )
-            await write_async_frame(writer, begin, descriptor)
+            await self._write_frame(writer, begin, descriptor)
 
             for chunk in _iter_chunks(payload, chunk_size):
                 chunk_payload = chunk["bytes"]
@@ -122,7 +124,7 @@ class BifrostAsyncClient:
                     object_payload_len=len(chunk_payload),
                     payload_hash=chunk["hash"],
                 )
-                await write_async_frame(writer, header, chunk_payload)
+                await self._write_frame(writer, header, chunk_payload)
                 ack = await self._read_frame(reader)
                 raise_for_error_frame(ack)
                 if ack.header.get("type") != "chunk_ack":
@@ -139,7 +141,7 @@ class BifrostAsyncClient:
                 total_chunks=manifest["total_chunks"],
                 object_payload_len=len(payload),
             )
-            await write_async_frame(writer, commit)
+            await self._write_frame(writer, commit)
             result = await self._read_frame(reader)
             raise_for_error_frame(result)
             if result.header.get("type") != "put_result":
@@ -158,23 +160,34 @@ class BifrostAsyncClient:
                 reason=reason,
             )
         finally:
-            writer.close()
-            await writer.wait_closed()
+            await self._close_writer(writer)
+
+    async def put_objects(
+        self,
+        items: list[tuple[dict[str, Any], bytes]],
+        chunk_size: int = 256 * 1024,
+    ) -> list[PutResult]:
+        return [
+            await self.put_object(metadata, payload, chunk_size)
+            for metadata, payload in items
+        ]
 
     async def has_object(self, object_id: str) -> bool:
         self._ensure_open()
         reader, writer, transfer_id = await self._open_handshaken("has")
         try:
             request = frame_header("has_request", transfer_id, 0, object_id=object_id)
-            await write_async_frame(writer, request)
+            await self._write_frame(writer, request)
             result = await self._read_frame(reader)
             raise_for_error_frame(result)
             if result.header.get("type") != "has_result":
                 raise BifrostProtocolError(f"expected has_result, got {result.header.get('type')}")
             return bool(result.header.get("present"))
         finally:
-            writer.close()
-            await writer.wait_closed()
+            await self._close_writer(writer)
+
+    async def has_objects(self, object_ids: list[str]) -> list[bool]:
+        return [await self.has_object(object_id) for object_id in object_ids]
 
     async def get_object(self, object_id: str) -> StoredObject:
         self._ensure_open()
@@ -187,7 +200,7 @@ class BifrostAsyncClient:
                 object_id=object_id,
                 chunk_size=self.config.default_chunk_size,
             )
-            await write_async_frame(writer, request)
+            await self._write_frame(writer, request)
             first = await self._read_frame(reader)
             raise_for_error_frame(first)
             if first.header.get("type") != "get_result":
@@ -237,8 +250,10 @@ class BifrostAsyncClient:
                 descriptor_hash=integrity.get("descriptor_hash"),
             )
         finally:
-            writer.close()
-            await writer.wait_closed()
+            await self._close_writer(writer)
+
+    async def get_objects(self, object_ids: list[str]) -> list[StoredObject]:
+        return [await self.get_object(object_id) for object_id in object_ids]
 
     async def query_by_opaque_key_hash(
         self,
@@ -260,6 +275,21 @@ class BifrostAsyncClient:
             if isinstance(engine, dict) and engine.get("integration_name") == integration_name:
                 filtered.append(replace(summary, integration_name=integration_name))
         return filtered
+
+    async def query_by_opaque_key_hashes(
+        self,
+        engine_name: str,
+        integration_name: str,
+        opaque_engine_key_hashes: list[str],
+    ) -> dict[str, list[ObjectSummary]]:
+        return {
+            key_hash: await self.query_by_opaque_key_hash(
+                engine_name,
+                integration_name,
+                key_hash,
+            )
+            for key_hash in opaque_engine_key_hashes
+        }
 
     async def list_objects(
         self,
@@ -319,7 +349,11 @@ class BifrostAsyncClient:
         payload = b"" if request_type == "stats_request" else compact_json_bytes(value)
         reader, writer, transfer_id = await self._open_handshaken("store")
         try:
-            await write_async_frame(writer, frame_header(request_type, transfer_id, len(payload)), payload)
+            await self._write_frame(
+                writer,
+                frame_header(request_type, transfer_id, len(payload)),
+                payload,
+            )
             frame = await self._read_frame(reader)
             raise_for_error_frame(frame)
             if frame.header.get("type") != response_type:
@@ -328,8 +362,7 @@ class BifrostAsyncClient:
                 )
             return frame
         finally:
-            writer.close()
-            await writer.wait_closed()
+            await self._close_writer(writer)
 
     async def _open_handshaken(
         self, prefix: str
@@ -349,13 +382,15 @@ class BifrostAsyncClient:
                 supported_versions=[TRANSPORT_VERSION],
                 flags={"hello": {"role": "client"}},
             )
-            await write_async_frame(writer, hello)
+            await self._write_frame(writer, hello)
             response = await self._read_frame(reader)
             raise_for_error_frame(response)
             if response.header.get("type") != "hello":
                 raise BifrostProtocolError(f"expected daemon hello, got {response.header.get('type')}")
             return reader, writer, transfer_id
-        except (OSError, asyncio.TimeoutError) as exc:
+        except asyncio.TimeoutError as exc:
+            raise BifrostTimeoutError("timed out connecting to daemon") from exc
+        except OSError as exc:
             raise BifrostConnectionError(str(exc)) from exc
 
     async def _read_frame(self, reader: asyncio.StreamReader) -> Frame:
@@ -365,11 +400,34 @@ class BifrostAsyncClient:
                 timeout=self.config.timeout_seconds,
             )
         except asyncio.TimeoutError as exc:
-            raise BifrostConnectionError("timed out waiting for daemon frame") from exc
+            raise BifrostTimeoutError("timed out waiting for daemon frame") from exc
+
+    async def _write_frame(
+        self,
+        writer: asyncio.StreamWriter,
+        header: dict[str, Any],
+        payload: bytes = b"",
+    ) -> None:
+        try:
+            await asyncio.wait_for(
+                write_async_frame(writer, header, payload),
+                timeout=self.config.timeout_seconds,
+            )
+        except asyncio.TimeoutError as exc:
+            raise BifrostTimeoutError("timed out writing daemon frame") from exc
+        except OSError as exc:
+            raise BifrostConnectionError(str(exc)) from exc
+
+    async def _close_writer(self, writer: asyncio.StreamWriter) -> None:
+        writer.close()
+        try:
+            await asyncio.wait_for(writer.wait_closed(), timeout=self.config.timeout_seconds)
+        except (asyncio.TimeoutError, OSError):
+            pass
 
     def _ensure_open(self) -> None:
         if self._closed:
-            raise BifrostClientError("BIFROST client is closed")
+            raise BifrostClosedError("BIFROST client is closed")
 
 
 def _split_endpoint(endpoint: str) -> tuple[str, int]:
@@ -440,6 +498,7 @@ def _summary_from_wire(item: dict[str, Any]) -> ObjectSummary:
         model_hash=item.get("model_hash"),
         prefix_hash=item.get("prefix_hash"),
         engine_name=item.get("engine_name"),
+        integration_name=item.get("integration_name"),
         opaque_engine_key_hash=item.get("opaque_engine_key_hash"),
         layer_id=item.get("layer_id"),
         kv_block_id=item.get("kv_block_id"),

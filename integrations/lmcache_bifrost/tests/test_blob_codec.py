@@ -21,6 +21,7 @@ from lmcache_bifrost.blob_codec import (
 )
 from lmcache_bifrost.config import BifrostLMCacheConfig
 from lmcache_bifrost.errors import MemoryObjSerializationError
+from lmcache_bifrost.lmcache_compat import detect_memory_obj_codec
 from tests.fakes import FakeCacheEngineKey, FakeMemoryObj
 
 
@@ -39,6 +40,29 @@ def test_pickle_fallback_disabled_rejects_fake_object() -> None:
 
     with pytest.raises(MemoryObjSerializationError):
         serialize_memory_obj(FakeMemoryObj(b"payload"), config)
+
+
+def test_native_codec_detection_does_not_call_serializer() -> None:
+    memory_obj = SideEffectNativeMemoryObj(b"native")
+
+    capability = detect_memory_obj_codec(memory_obj)
+
+    assert capability.name == "lmcache_native"
+    assert memory_obj.calls == 0
+
+
+def test_native_serializer_failure_is_typed() -> None:
+    config = BifrostLMCacheConfig()
+
+    with pytest.raises(MemoryObjSerializationError, match="LMCache-native"):
+        serialize_memory_obj(FailingNativeMemoryObj(), config)
+
+
+def test_native_serializer_empty_bytes_rejected() -> None:
+    config = BifrostLMCacheConfig()
+
+    with pytest.raises(MemoryObjSerializationError, match="empty bytes"):
+        serialize_memory_obj(EmptyNativeMemoryObj(), config)
 
 
 def test_generated_opaque_metadata_validates() -> None:
@@ -130,6 +154,20 @@ def test_descriptor_mismatch_fails_validation() -> None:
     assert result.reason_code == "descriptor_hash_mismatch"
 
 
+def test_generated_opaque_metadata_with_unknown_schema_is_rejected() -> None:
+    config = BifrostLMCacheConfig(allow_pickle_fallback=True)
+    key = FakeCacheEngineKey("tiny", "abc", (1, 2, 3))
+    memory_obj = FakeMemoryObj(b"payload")
+    payload = serialize_memory_obj(memory_obj, config)
+    metadata = build_opaque_metadata(key, memory_obj, payload, config)
+    mutated = deepcopy(metadata)
+    mutated["schema_version"] = "bifrost.kv_object.future"
+
+    result = validate_object(mutated, payload, build_opaque_target_profile(key, config))
+
+    assert result.reason_code == "unknown_schema_version"
+
+
 def test_object_id_recomputed_from_phase1_identity_helpers() -> None:
     config = BifrostLMCacheConfig(allow_pickle_fallback=True)
     key = FakeCacheEngineKey("tiny", "abc", (1, 2, 3))
@@ -142,3 +180,23 @@ def test_object_id_recomputed_from_phase1_identity_helpers() -> None:
     assert metadata["integrity"]["payload_hash"] == payload_hash
     assert metadata["integrity"]["descriptor_hash"] == descriptor_hash
     assert metadata["object_id"] == compute_object_id(descriptor_hash, payload_hash)
+
+
+class SideEffectNativeMemoryObj:
+    def __init__(self, payload: bytes) -> None:
+        self.payload = payload
+        self.calls = 0
+
+    def to_bytes(self) -> bytes:
+        self.calls += 1
+        return self.payload
+
+
+class FailingNativeMemoryObj:
+    def to_bytes(self) -> bytes:
+        raise RuntimeError("native serializer unavailable")
+
+
+class EmptyNativeMemoryObj:
+    def to_bytes(self) -> bytes:
+        return b""

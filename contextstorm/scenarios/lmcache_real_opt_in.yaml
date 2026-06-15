@@ -1,0 +1,12 @@
+name: lmcache_real_opt_in
+workload: lmcache
+object_count: 1
+payload_size_bytes: 64 KiB
+chunk_size_bytes: 64 KiB
+operations:
+  - real_lmcache_connector_smoke
+  - vllm_lmcache_smoke
+repetitions: 1
+timeout_seconds: 60
+real_lmcache_opt_in_env: BIFROST_RUN_REAL_LMCACHE_CONTEXTSTORM
+vllm_opt_in_env: BIFROST_RUN_VLLM_LMCACHE_CONTEXTSTORM

@@ -24,6 +24,7 @@ from lmcache_bifrost.errors import (
 )
 from lmcache_bifrost.key_codec import opaque_engine_key_hash
 from lmcache_bifrost.lmcache_compat import RemoteConnector as LMCacheRemoteConnector
+from lmcache_bifrost.metrics import ConnectorJsonlLogger, ConnectorMetrics, monotonic_ms
 
 _BaseRemoteConnector = LMCacheRemoteConnector or object
 _SERVEABLE_STATES = frozenset(("verified", "pinned", "evictable"))
@@ -50,9 +51,64 @@ class BifrostRemoteConnector(_BaseRemoteConnector):  # type: ignore[misc]
         self._owns_client = client is None
         self._sync_client: BifrostClient | None = None
         self.closed = False
+        self._metrics = ConnectorMetrics()
+        self._jsonl_logger = ConnectorJsonlLogger(config.metrics_jsonl_path)
+
+    def support_ping(self) -> bool:
+        return True
+
+    async def ping(self) -> bool:
+        self._ensure_open()
+        ping = getattr(self.client, "ping", None)
+        stats = getattr(self.client, "stats", None)
+        try:
+            if callable(ping):
+                return bool(await self._maybe_await(ping()))
+            if callable(stats):
+                await self._maybe_await(stats())
+                return True
+        except BifrostClientError as exc:
+            raise BifrostLMCacheStoreError(f"ping_failed: {exc}") from exc
+        except Exception as exc:  # pragma: no cover - defensive wrapper.
+            raise BifrostLMCacheStoreError(f"ping_failed: {exc}") from exc
+        raise BifrostLMCacheStoreError("ping_failed: no daemon ping or stats API")
+
+    def support_batched_contains(self) -> bool:
+        return True
+
+    async def batched_contains(self, keys: object) -> list[bool]:
+        return [await self.exists(key) for key in _iter_keys(keys)]
+
+    def support_batched_get(self) -> bool:
+        return True
+
+    async def batched_get(self, keys: object) -> list[object | None]:
+        return [await self.get(key) for key in _iter_keys(keys)]
+
+    def support_batched_put(self) -> bool:
+        return True
+
+    async def batched_put(self, items: object) -> None:
+        for index, key, memory_obj in _iter_items(items):
+            try:
+                await self.put(key, memory_obj)
+            except (
+                BifrostLMCacheSerializationError,
+                BifrostLMCacheStoreError,
+                BifrostLMCacheValidationError,
+                ConnectorConfigurationError,
+            ) as exc:
+                raise type(exc)(f"batched_put_failed:index={index}:reason={exc}") from exc
+            except Exception as exc:  # pragma: no cover - defensive wrapper.
+                raise BifrostLMCacheStoreError(
+                    f"batched_put_failed:index={index}:reason={exc}"
+                ) from exc
 
     async def exists(self, key: object) -> bool:
         self._ensure_open()
+        self._metrics.increment("exists_count")
+        key_hash: str | None = None
+        start_ms = monotonic_ms()
         try:
             key_hash = opaque_engine_key_hash(key)
             candidates = await self._query_by_key_hash(key_hash)
@@ -68,11 +124,20 @@ class BifrostRemoteConnector(_BaseRemoteConnector):  # type: ignore[misc]
                 except BifrostLMCacheStoreError:
                     continue
             return False
-        except BifrostLMCacheStoreError:
+        except BifrostLMCacheStoreError as exc:
+            self._emit_error("exists", key_hash, None, 0, start_ms, exc)
             return False
+        finally:
+            self._emit_event(
+                "connector_exists",
+                operation="exists",
+                opaque_engine_key_hash=key_hash,
+                duration_ms=monotonic_ms() - start_ms,
+            )
 
     def exists_sync(self, key: object) -> bool:
         self._ensure_open()
+        self._metrics.increment("exists_count")
         try:
             key_hash = opaque_engine_key_hash(key)
             candidates = self._query_by_key_hash_sync(key_hash)
@@ -93,68 +158,165 @@ class BifrostRemoteConnector(_BaseRemoteConnector):  # type: ignore[misc]
 
     async def get(self, key: object) -> object | None:
         self._ensure_open()
-        key_hash = opaque_engine_key_hash(key)
-        candidates = await self._query_by_key_hash(key_hash)
-        for summary in candidates:
-            if not self._summary_is_servable(summary):
-                continue
-            stored = await self._get_object(summary.object_id)
-            payload = self._validate_stored_object(stored, key, key_hash)
-            try:
-                return deserialize_memory_obj(payload, self.config)
-            except BifrostLMCacheSerializationError:
-                raise
-            except Exception as exc:  # pragma: no cover - defensive wrapper.
-                raise BifrostLMCacheSerializationError(
-                    f"LMCache MemoryObj deserialization failed: {exc}"
-                ) from exc
-        return None
+        self._metrics.increment("get_count")
+        start_ms = monotonic_ms()
+        key_hash: str | None = None
+        object_id: str | None = None
+        bytes_count = 0
+        self._emit_event("connector_get_started", operation="get")
+        try:
+            key_hash = opaque_engine_key_hash(key)
+            candidates = await self._query_by_key_hash(key_hash)
+            for summary in candidates:
+                if not self._summary_is_servable(summary):
+                    continue
+                object_id = summary.object_id
+                stored = await self._get_object(summary.object_id)
+                payload = self._validate_stored_object(stored, key, key_hash)
+                bytes_count = len(payload)
+                try:
+                    memory_obj = deserialize_memory_obj(payload, self.config)
+                except BifrostLMCacheSerializationError:
+                    self._metrics.increment("serialization_error_count")
+                    raise
+                except Exception as exc:  # pragma: no cover - defensive wrapper.
+                    self._metrics.increment("serialization_error_count")
+                    raise BifrostLMCacheSerializationError(
+                        f"LMCache MemoryObj deserialization failed: {exc}"
+                    ) from exc
+                self._metrics.increment("bytes_get", bytes_count)
+                return memory_obj
+            return None
+        except BifrostLMCacheValidationError as exc:
+            self._metrics.increment("get_error_count")
+            self._metrics.increment("validation_error_count")
+            self._emit_error("get", key_hash, object_id, bytes_count, start_ms, exc)
+            raise
+        except BifrostLMCacheSerializationError as exc:
+            self._metrics.increment("get_error_count")
+            self._emit_error("get", key_hash, object_id, bytes_count, start_ms, exc)
+            raise
+        except Exception as exc:
+            self._metrics.increment("get_error_count")
+            self._emit_error("get", key_hash, object_id, bytes_count, start_ms, exc)
+            raise
+        finally:
+            duration_ms = monotonic_ms() - start_ms
+            self._metrics.add_duration_ms("total_get_ms", duration_ms)
+            self._emit_event(
+                "connector_get_completed",
+                operation="get",
+                opaque_engine_key_hash=key_hash,
+                object_id=object_id,
+                bytes_count=bytes_count,
+                duration_ms=duration_ms,
+            )
 
     async def put(self, key: object, memory_obj: object) -> None:
         self._ensure_open()
+        self._metrics.increment("put_count")
+        start_ms = monotonic_ms()
+        key_hash: str | None = None
+        object_id: str | None = None
+        bytes_count = 0
+        self._emit_event("connector_put_started", operation="put")
         try:
+            key_hash = opaque_engine_key_hash(key)
             payload = serialize_memory_obj(memory_obj, self.config)
+            bytes_count = len(payload)
             metadata = build_opaque_metadata(key, memory_obj, payload, self.config)
-        except BifrostLMCacheSerializationError:
+            object_id = metadata["object_id"]
+        except BifrostLMCacheSerializationError as exc:
+            self._metrics.increment("put_error_count")
+            self._metrics.increment("serialization_error_count")
+            self._metrics.add_duration_ms("total_put_ms", monotonic_ms() - start_ms)
+            self._emit_error("put", key_hash, object_id, bytes_count, start_ms, exc)
             raise
-        except BifrostLMCacheValidationError:
+        except BifrostLMCacheValidationError as exc:
+            self._metrics.increment("put_error_count")
+            self._metrics.increment("validation_error_count")
+            self._metrics.add_duration_ms("total_put_ms", monotonic_ms() - start_ms)
+            self._emit_error("put", key_hash, object_id, bytes_count, start_ms, exc)
             raise
         except Exception as exc:  # pragma: no cover - defensive wrapper.
+            self._metrics.increment("put_error_count")
+            self._metrics.increment("validation_error_count")
+            wrapped = BifrostLMCacheValidationError(
+                f"failed to build opaque LMCache object: {exc}"
+            )
+            self._metrics.add_duration_ms("total_put_ms", monotonic_ms() - start_ms)
+            self._emit_error("put", key_hash, object_id, bytes_count, start_ms, wrapped)
             raise BifrostLMCacheValidationError(
                 f"failed to build opaque LMCache object: {exc}"
             ) from exc
 
-        self._validate_stored_object(
-            _StoredObject(metadata=metadata, payload=payload, object_id=metadata["object_id"]),
-            key,
-            opaque_engine_key_hash(key),
-        )
+        try:
+            self._validate_stored_object(
+                _StoredObject(metadata=metadata, payload=payload, object_id=object_id),
+                key,
+                key_hash,
+            )
+        except BifrostLMCacheValidationError as exc:
+            self._metrics.increment("put_error_count")
+            self._metrics.increment("validation_error_count")
+            self._metrics.add_duration_ms("total_put_ms", monotonic_ms() - start_ms)
+            self._emit_error("put", key_hash, object_id, bytes_count, start_ms, exc)
+            raise
         try:
             result = await self._maybe_await(
                 self.client.put_object(metadata, payload, self.config.chunk_size)
             )
         except BifrostClientError as exc:
+            self._metrics.increment("put_error_count")
+            self._metrics.add_duration_ms("total_put_ms", monotonic_ms() - start_ms)
+            self._emit_error("put", key_hash, object_id, bytes_count, start_ms, exc)
             raise BifrostLMCacheStoreError(f"BIFROST PUT failed: {exc}") from exc
         except Exception as exc:  # pragma: no cover - defensive wrapper.
+            self._metrics.increment("put_error_count")
+            self._metrics.add_duration_ms("total_put_ms", monotonic_ms() - start_ms)
+            self._emit_error("put", key_hash, object_id, bytes_count, start_ms, exc)
             raise BifrostLMCacheStoreError(f"BIFROST PUT failed: {exc}") from exc
 
         if not bool(getattr(result, "stored", False)) or not bool(
             getattr(result, "verified", False)
         ):
             reason = getattr(result, "reason", "put_not_verified")
-            raise BifrostLMCacheStoreError(f"BIFROST PUT was not verified: {reason}")
-        if getattr(result, "object_id", metadata["object_id"]) != metadata["object_id"]:
-            raise BifrostLMCacheStoreError("BIFROST PUT returned the wrong object_id")
+            self._metrics.increment("put_error_count")
+            self._metrics.add_duration_ms("total_put_ms", monotonic_ms() - start_ms)
+            error = BifrostLMCacheStoreError(f"BIFROST PUT was not verified: {reason}")
+            self._emit_error("put", key_hash, object_id, bytes_count, start_ms, error)
+            raise error
+        if getattr(result, "object_id", object_id) != object_id:
+            self._metrics.increment("put_error_count")
+            self._metrics.add_duration_ms("total_put_ms", monotonic_ms() - start_ms)
+            error = BifrostLMCacheStoreError("BIFROST PUT returned the wrong object_id")
+            self._emit_error("put", key_hash, object_id, bytes_count, start_ms, error)
+            raise error
+        duration_ms = monotonic_ms() - start_ms
+        self._metrics.increment("bytes_put", bytes_count)
+        self._metrics.add_duration_ms("total_put_ms", duration_ms)
+        self._emit_event(
+            "connector_put_completed",
+            operation="put",
+            opaque_engine_key_hash=key_hash,
+            object_id=object_id,
+            bytes_count=bytes_count,
+            duration_ms=duration_ms,
+        )
 
     async def list(self) -> list[str]:
         self._ensure_open()
+        self._metrics.increment("list_count")
+        start_ms = monotonic_ms()
         try:
             summaries = await self._maybe_await(
                 self.client.list_objects(engine_name=self.config.engine_name)
             )
         except BifrostClientError as exc:
+            self._emit_error("list", None, None, 0, start_ms, exc)
             raise BifrostLMCacheStoreError(f"BIFROST LIST failed: {exc}") from exc
         except Exception as exc:  # pragma: no cover - defensive wrapper.
+            self._emit_error("list", None, None, 0, start_ms, exc)
             raise BifrostLMCacheStoreError(f"BIFROST LIST failed: {exc}") from exc
 
         entries: set[str] = set()
@@ -172,11 +334,15 @@ class BifrostRemoteConnector(_BaseRemoteConnector):  # type: ignore[misc]
     async def close(self) -> None:
         if self.closed:
             return
+        self._metrics.increment("close_count")
         await self._close_client(self.client)
         if self._sync_client is not None:
             self._sync_client.close()
             self._sync_client = None
         self.closed = True
+
+    def metrics_snapshot(self) -> dict[str, Any]:
+        return self._metrics.snapshot()
 
     def _ensure_open(self) -> None:
         if self.closed:
@@ -317,6 +483,46 @@ class BifrostRemoteConnector(_BaseRemoteConnector):  # type: ignore[misc]
             return await value
         return value
 
+    def _emit_event(
+        self,
+        event_name: str,
+        *,
+        operation: str,
+        opaque_engine_key_hash: str | None = None,
+        object_id: str | None = None,
+        bytes_count: int | None = None,
+        duration_ms: float | None = None,
+        reason_code: str | None = None,
+    ) -> None:
+        self._jsonl_logger.emit(
+            event_name,
+            operation=operation,
+            opaque_engine_key_hash=opaque_engine_key_hash,
+            object_id=object_id,
+            bytes_count=bytes_count,
+            duration_ms=duration_ms,
+            reason_code=reason_code,
+        )
+
+    def _emit_error(
+        self,
+        operation: str,
+        opaque_engine_key_hash: str | None,
+        object_id: str | None,
+        bytes_count: int,
+        start_ms: float,
+        exc: Exception | None = None,
+    ) -> None:
+        self._emit_event(
+            "connector_error",
+            operation=operation,
+            opaque_engine_key_hash=opaque_engine_key_hash,
+            object_id=object_id,
+            bytes_count=bytes_count,
+            duration_ms=monotonic_ms() - start_ms,
+            reason_code=_reason_code(exc),
+        )
+
 
 class _StoredObject:
     def __init__(self, metadata: dict[str, Any], payload: bytes, object_id: str) -> None:
@@ -350,6 +556,59 @@ def _payload(stored: Any) -> bytes:
 def _object_id(stored: Any) -> str | None:
     object_id = getattr(stored, "object_id", None)
     return object_id if isinstance(object_id, str) else None
+
+
+def _reason_code(exc: Exception | None) -> str:
+    if exc is None:
+        return "connector_error"
+    if isinstance(exc, BifrostLMCacheSerializationError):
+        return "lmcache_serialization_error"
+    if isinstance(exc, BifrostLMCacheValidationError):
+        return "opaque_blob_validation_error"
+    if isinstance(exc, BifrostLMCacheStoreError):
+        return "store_error"
+    if isinstance(exc, ConnectorConfigurationError):
+        return "connector_configuration_error"
+    if isinstance(exc, BifrostClientError):
+        return "store_error"
+    return "connector_error"
+
+
+def _iter_keys(keys: object) -> list[object]:
+    if isinstance(keys, (str, bytes, bytearray, memoryview)):
+        raise ConnectorConfigurationError("batched keys must be an iterable of keys")
+    try:
+        return list(keys)  # type: ignore[arg-type]
+    except TypeError as exc:
+        raise ConnectorConfigurationError("batched keys must be an iterable of keys") from exc
+
+
+def _iter_items(items: object) -> list[tuple[int, object, object]]:
+    if isinstance(items, dict):
+        return [
+            (index, key, memory_obj)
+            for index, (key, memory_obj) in enumerate(items.items())
+        ]
+    if isinstance(items, (str, bytes, bytearray, memoryview)):
+        raise ConnectorConfigurationError(
+            "batched put items must be an iterable of (key, memory_obj) pairs"
+        )
+    result: list[tuple[int, object, object]] = []
+    try:
+        iterator = iter(items)  # type: ignore[arg-type]
+    except TypeError as exc:
+        raise ConnectorConfigurationError(
+            "batched put items must be an iterable of (key, memory_obj) pairs"
+        ) from exc
+    for index, item in enumerate(iterator):
+        try:
+            key, memory_obj = item  # type: ignore[misc]
+        except (TypeError, ValueError) as exc:
+            raise ConnectorConfigurationError(
+                f"batched_put_failed:index={index}:reason=invalid_item"
+            ) from exc
+        result.append((index, key, memory_obj))
+    return result
 
 
 __all__ = ["BifrostRemoteConnector"]

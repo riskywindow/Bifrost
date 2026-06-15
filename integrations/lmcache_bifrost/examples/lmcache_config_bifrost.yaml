@@ -11,6 +11,11 @@ remote_storage_plugin:
   bifrost:
     module_path: lmcache_bifrost.adapter
     class_name: BifrostConnectorAdapter
+    extra_config:
+      chunk_size: 262144
+      timeout_seconds: 5.0
+      strict_validation: true
+      allow_pickle_fallback: false
 
 # Preferred direct BIFROST URL. The adapter parses this to host:port for the
 # BIFROST daemon client.

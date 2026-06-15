@@ -111,3 +111,180 @@ LMCache while keeping BIFROST behind a stable storage boundary.
 A future direct vLLM connector may use `native_kv_page` if vLLM exposes enough
 stable tensor layout and compatibility metadata. That future work must have a
 separate phase, design document, and fail-closed test plan.
+
+## Plugin roundtrip example
+
+A daemon-backed plugin smoke example lives at
+`examples/lmcache_bifrost/plugin_roundtrip.py`. It constructs a fake
+`CacheEngineKey` and fake `MemoryObj` by default, instantiates
+`BifrostRemoteConnector`, then runs `put`, `exists`, `get`, and `list` against a
+local `bifrostd`.
+
+The fake `MemoryObj` path intentionally requires explicit pickle fallback:
+
+```bash
+python examples/lmcache_bifrost/plugin_roundtrip.py \
+  --endpoint 127.0.0.1:7744 \
+  --allow-pickle-fallback
+```
+
+JSON output is available for smoke tests and automation:
+
+```bash
+python examples/lmcache_bifrost/plugin_roundtrip.py \
+  --endpoint 127.0.0.1:7744 \
+  --allow-pickle-fallback \
+  --json
+```
+
+The output includes:
+
+```text
+status
+endpoint
+key_repr
+opaque_engine_key_hash
+object_id
+put_success
+exists_result
+get_success
+list_count
+payload_roundtrip_match
+fsck_status
+```
+
+When `bifrost-store` is available, the script also reports an `fsck_status`.
+Store stats are included as best-effort diagnostics. These diagnostics do not
+change the connector correctness rule: only committed and verified objects may
+satisfy LMCache hits.
+
+## Optional real LMCache smoke
+
+Real LMCache coverage is optional and must be explicitly enabled. The pytest
+module `integrations/lmcache_bifrost/tests/test_real_lmcache_optional.py`
+skips unless both conditions are true:
+
+```bash
+export BIFROST_RUN_REAL_LMCACHE_TESTS=1
+python -c "import lmcache"
+```
+
+Run it with:
+
+```bash
+PYTHONPATH=bifrost_py:integrations/lmcache_bifrost \
+  BIFROST_RUN_REAL_LMCACHE_TESTS=1 \
+  pytest integrations/lmcache_bifrost/tests/test_real_lmcache_optional.py
+```
+
+These tests probe real LMCache imports, adapter construction, connector method
+compatibility, and construction of `BifrostRemoteConnector` with a minimal
+LMCache-shaped context. They do not require GPU hardware, vLLM, Hugging Face
+tokens, internet access, model downloads, or a running BIFROST daemon.
+
+A standalone compatibility script lives at
+`examples/lmcache_bifrost/real_lmcache_smoke.py`:
+
+```bash
+python examples/lmcache_bifrost/real_lmcache_smoke.py --compat-only
+python examples/lmcache_bifrost/real_lmcache_smoke.py --compat-only --json
+```
+
+The script reports the LMCache version, discovered compatibility classes,
+connector method availability, adapter construction, and connector construction.
+If a real `MemoryObj` can be constructed through a CPU-safe public no-argument
+constructor, it attempts native byte serialization and deserialization through
+the BIFROST opaque blob codec. If that public construction or native
+deserialization route is unavailable, `--compat-only` exits with status 0 and
+reports `compatibility only`.
+
+For LMCache versions where valid `MemoryObj` construction requires a live
+LMCache runtime, run the script with an explicit local factory:
+
+```bash
+PYTHONPATH=bifrost_py:integrations/lmcache_bifrost:/path/to/factory \
+  python examples/lmcache_bifrost/real_lmcache_smoke.py \
+  --memoryobj-factory my_lmcache_factory:make_memory_obj \
+  --json
+```
+
+The factory must return a CPU-safe real LMCache `MemoryObj` and must not
+download models, contact external services, require GPU hardware, or use
+private LMCache APIs.
+
+## LMCache configuration examples
+
+Example LMCache configuration files live under
+`integrations/lmcache_bifrost/examples/`:
+
+```text
+lmcache_config_bifrost.yaml
+lmcache_config_bifrost_pickle_dev.yaml
+```
+
+`lmcache_config_bifrost.yaml` shows the production-shaped plugin registration,
+including `remote_storage_plugins`, `module_path`, `class_name`, and a
+`bifrost://HOST:PORT` remote URL.
+
+`lmcache_config_bifrost_pickle_dev.yaml` is local development only. It enables
+`allow_pickle_fallback` for fake/demo objects and must not be used with
+untrusted payloads or production LMCache traffic.
+
+LMCache plugin YAML fields have changed across releases. Treat these files as
+version-sensitive examples and verify the exact configuration shape against the
+installed LMCache version.
+
+## Connector observability
+
+`BifrostRemoteConnector` keeps lightweight in-process counters for local
+debugging and tests:
+
+```python
+snapshot = connector.metrics_snapshot()
+```
+
+The snapshot includes operation counts, error counts, bytes moved, and total
+`put`/`get` wall-clock milliseconds:
+
+```text
+put_count
+get_count
+exists_count
+list_count
+close_count
+put_error_count
+get_error_count
+serialization_error_count
+validation_error_count
+bytes_put
+bytes_get
+total_put_ms
+total_get_ms
+```
+
+These counters are connector-local process state. They are not part of
+immutable BIFROST object identity and are not used to decide cache correctness.
+
+Optional JSONL connector events can be enabled with `metrics_jsonl_path` in the
+adapter query string, LMCache extra config, or direct `BifrostLMCacheConfig`:
+
+```text
+bifrost://127.0.0.1:7744?metrics_jsonl_path=/tmp/bifrost-lmcache.jsonl
+```
+
+Each line is valid JSON and includes `timestamp_unix_ms`, `operation`, and any
+available `opaque_engine_key_hash`, `object_id`, `bytes`, `duration_ms`, and
+`reason_code`. Event names are:
+
+```text
+connector_put_started
+connector_put_completed
+connector_get_started
+connector_get_completed
+connector_exists
+connector_error
+```
+
+Store-level inspection remains separate. `bifrost-store inspect` exposes the
+object type, LMCache engine and integration names, opaque engine key hash, byte
+length, state, pin count, last access time, and payload hash for opaque objects.

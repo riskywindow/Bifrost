@@ -1,0 +1,117 @@
+name: Phase 5
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  phase5:
+    name: LMCache connector, Rust, Python, and ContextStorm checks
+    runs-on: ubuntu-latest
+
+    env:
+      CARGO_TERM_COLOR: always
+      CUDA_VISIBLE_DEVICES: ""
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      BIFROST_PHASE4_CPU_ONLY: "1"
+      BIFROST_RUN_REAL_LMCACHE_TESTS: "0"
+      BIFROST_RUN_VLLM_SMOKE: "0"
+      BIFROST_RUN_REAL_LMCACHE_CONTEXTSTORM: "0"
+      BIFROST_RUN_VLLM_LMCACHE_CONTEXTSTORM: "0"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            --index-url https://download.pytorch.org/whl/cpu \
+            --extra-index-url https://pypi.org/simple \
+            "torch>=2.0.0"
+          python -m pip install \
+            -e "bifrost_py[dev]" \
+            -e "contextstorm[dev]" \
+            -e "integrations/lmcache_bifrost[dev]"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Rust binaries
+        run: cargo build --manifest-path bifrostd/Cargo.toml --bins
+
+      - name: Run bifrostd Rust tests
+        run: cargo test --manifest-path bifrostd/Cargo.toml
+
+      - name: Run Python Phase 1 tests
+        run: |
+          pytest \
+            bifrost_py/tests \
+            tests/test_cli.py \
+            tests/test_cross_language_vectors.py \
+            tests/test_fixture_suite.py
+
+      - name: Run Python Phase 4 tiny-transformer tests
+        run: |
+          pytest \
+            tests/test_tiny_transformer.py \
+            tests/test_tiny_tokenizer_profile.py \
+            tests/test_tiny_kv_cache.py \
+            tests/test_kv_page_codec.py \
+            tests/test_local_kv_roundtrip_script.py \
+            tests/test_store_kv_roundtrip.py \
+            tests/test_manifest_kv_roundtrip.py \
+            tests/test_kv_teleport_demo.py \
+            tests/test_phase4_corruption_incompatibility.py
+
+      - name: Run Python client and Phase 5 scaffold tests
+        run: |
+          pytest \
+            tests/test_bifrost_python_client_protocol.py \
+            tests/test_bifrost_python_client_integration.py \
+            tests/test_lmcache_bifrost_plugin_roundtrip_script.py \
+            tests/test_lmcache_bifrost_real_lmcache_smoke_script.py \
+            tests/test_vllm_smoke_scaffold.py
+
+      - name: Run LMCache BIFROST fake integration tests
+        run: pytest integrations/lmcache_bifrost/tests
+
+      - name: Run ContextStorm unit tests
+        working-directory: contextstorm
+        run: pytest tests
+
+      - name: Run Phase 2 small transport scenario
+        run: |
+          contextstorm run contextstorm/scenarios/small_ci.yaml \
+            --runs-root /tmp/contextstorm-runs \
+            --run-id phase5-ci-transport-small
+
+      - name: Run Phase 3 small store scenario
+        run: |
+          contextstorm run contextstorm/scenarios/store_small_ci.yaml \
+            --runs-root /tmp/contextstorm-runs \
+            --run-id phase5-ci-store-small
+
+      - name: Run Phase 4 small model roundtrip scenario
+        run: |
+          contextstorm run contextstorm/scenarios/model_roundtrip_small_ci.yaml \
+            --runs-root /tmp/contextstorm-runs \
+            --run-id phase5-ci-model-roundtrip-small
+
+      - name: Run Phase 5 LMCache connector small scenario
+        run: |
+          contextstorm run contextstorm/scenarios/lmcache_connector_small_ci.yaml \
+            --runs-root /tmp/contextstorm-runs \
+            --run-id phase5-ci-lmcache-connector-small

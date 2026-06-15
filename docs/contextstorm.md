@@ -1,19 +1,21 @@
 # ContextStorm Synthetic Benchmark
 
-Last verified: 2026-05-29
+Last verified: 2026-06-15
 
 ContextStorm is the Phase 2 synthetic KV benchmark harness, Phase 3 local store
-benchmark harness, and Phase 4 tiny-transformer KV correctness workload runner.
+benchmark harness, Phase 4 tiny-transformer KV correctness workload runner, and
+Phase 5 LMCache connector workload runner.
 It exercises local BIFROST transport and store behavior with deterministic
 Phase 1-style KV objects, and it can run CPU-only tiny-model KV roundtrips that
 extract, store, retrieve, rehydrate, and compare real harness KV state.
 
 ContextStorm is not a production model benchmark. Its Phase 4 model workloads
-use only the local deterministic tiny transformer. It does not allocate GPU KV
-cache, call LMCache, call vLLM, download models or tokenizers, emulate QUIC,
-compress payloads, or use root-required network mutation unless an operator
-explicitly passes the local fault opt-in flag for non-model transport
-scenarios.
+use only the local deterministic tiny transformer. Its default Phase 5 LMCache
+workloads use fake LMCache-shaped objects and the BIFROST remote storage
+connector. It does not allocate GPU KV cache, require real LMCache, call vLLM,
+download models or tokenizers, emulate QUIC, compress payloads, or use
+root-required network mutation unless an operator explicitly passes the local
+fault opt-in flag for non-model transport scenarios.
 
 ## Commands
 
@@ -86,6 +88,22 @@ PYTHONPATH=. python -m contextstorm.cli report /tmp/contextstorm-runs/phase4-mod
 `bifrost-store`. Model workloads never require root, GPU hardware, internet
 access, Hugging Face assets, LMCache, vLLM, Docker, Kubernetes, CUDA, or cloud
 credentials.
+
+Phase 5 LMCache connector scenarios use fake LMCache-shaped keys and memory
+objects by default, store them as BIFROST `opaque_engine_blob` objects through
+the LMCache remote connector, and remain CPU-only/local:
+
+```text
+PYTHONPATH=. python -m contextstorm.cli run scenarios/lmcache_connector_small_ci.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase5-lmcache-small
+PYTHONPATH=. python -m contextstorm.cli report /tmp/contextstorm-runs/phase5-lmcache-small
+```
+
+`lmcache_connector_small_ci.yaml` starts one local loopback `bifrost-daemon`
+and requires `bifrost-daemon` and `bifrost-store`. It does not require real
+LMCache, vLLM, GPU hardware, internet access, Hugging Face assets, model
+downloads, Docker, Kubernetes, CUDA, cloud credentials, or root privileges.
 
 ## Scenario Format
 
@@ -214,6 +232,57 @@ Model scenarios record `prefill_ms`, `kv_page_serialize_ms`, `page_count`,
 `logit_max_abs_error`, `continuation_match`, `manifest_completeness`,
 `pages_stored`, `pages_rehydrated`, and failure reason details.
 
+Phase 5 LMCache scenarios use `workload: lmcache`:
+
+```yaml
+name: lmcache_connector_small_ci
+workload: lmcache
+object_count: 5
+payload_size_bytes: 64 KiB
+chunk_size_bytes: 64 KiB
+operations:
+  - put
+  - exists
+  - get
+  - list
+  - stats
+  - fsck
+  - fake_lmcache_connector_corrupt_object
+repetitions: 1
+timeout_seconds: 60
+```
+
+Supported LMCache operations:
+
+1. `put`: store fake LMCache `MemoryObj` payloads through
+   `BifrostRemoteConnector.put`.
+2. `exists`: verify `exists` returns true after a put.
+3. `get`: retrieve fake objects and compare payload roundtrips.
+4. `list`: list committed verified LMCache opaque keys.
+5. `stats`: collect BIFROST store object counts.
+6. `fsck`: run store fsck and require a clean result.
+7. `fake_lmcache_connector_corrupt_object`: corrupt a local fake committed
+   payload and verify `exists` misses while `get` fails closed with a
+   validation error.
+8. `fake_lmcache_connector_roundtrip`: combined put/exists/get/list/stats and
+   missing-key correctness probe.
+9. `fake_lmcache_connector_repeated_get`: repeated fake get workload.
+10. `fake_lmcache_connector_batched_ops`: batched put/contains/get when the
+   connector exposes batched methods.
+11. `real_lmcache_connector_smoke`: opt-in marker skipped by default.
+12. `vllm_lmcache_smoke`: opt-in marker skipped by default.
+
+LMCache reports include connector put/exists/get/list/close timing,
+serialization and deserialization timing, object and byte counts, roundtrip
+match count, missing-key count, validation error count, BIFROST store object
+count, corruption rejection count, fsck status, optional batch timings, and
+correctness checks for fake roundtrips, exists-after-put, missing returns
+`None`, corruption rejection, and clean fsck.
+
+The optional real-LMCache and vLLM scenarios skip by default. They are markers
+for explicitly enabled local smoke work and do not implement a raw vLLM
+KVTransfer connector.
+
 The built-in scenarios are:
 
 1. `small_ci.yaml`: 1 MiB, one daemon, PUT/HAS/GET once.
@@ -237,6 +306,12 @@ The built-in scenarios are:
 12. `model_manifest_roundtrip.yaml`: CPU-only tiny-transformer manifest-gated
    store roundtrip.
 13. `model_teleport.yaml`: CPU-only cross-process tiny-transformer KV handoff.
+14. `lmcache_connector_small_ci.yaml`: five fake LMCache opaque objects through
+   the connector, plus list/stats/fsck.
+15. `lmcache_connector_fake_large.yaml`: opt-in local fake connector workload
+   with repeated get and batched operations.
+16. `lmcache_real_opt_in.yaml`: real LMCache and vLLM smoke markers skipped by
+   default.
 
 ## Workload Classes
 

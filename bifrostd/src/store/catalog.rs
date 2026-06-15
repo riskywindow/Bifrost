@@ -1,13 +1,13 @@
 use crate::store::errors::{StoreError, StoreResult};
 use crate::store::eviction::{EvictionCandidate, EvictionPolicy};
-use crate::store::lifecycle::{can_evict, ensure_valid_state_transition};
+use crate::store::lifecycle::{can_evict, can_serve, ensure_valid_state_transition};
 use crate::store::manifest::{
     CompletenessState, ManifestListFilter, ManifestMember, ManifestRecord,
 };
 use crate::store::migrations;
 use crate::store::object_record::{
     ObjectAccess, ObjectCompatibility, ObjectListFilter, ObjectLocation, ObjectRecord, ObjectState,
-    StoreEvent,
+    OpaqueKeyListFilter, OpaqueKeyRecord, StoreEvent,
 };
 use crate::store::stats::StoreStats;
 use rusqlite::types::Value;
@@ -138,6 +138,7 @@ impl Catalog {
             "INSERT INTO object_access(object_id) VALUES (?1)",
             params![record.object_id],
         )?;
+        upsert_opaque_key_index(&tx, record, compatibility, None)?;
         log_event(
             &tx,
             "object_committed",
@@ -223,6 +224,12 @@ impl Catalog {
              WHERE object_id = ?1",
             params![object_id, now],
         )?;
+        tx.execute(
+            "UPDATE opaque_key_index
+             SET last_accessed_unix_ms = ?2
+             WHERE object_id = ?1",
+            params![object_id, now],
+        )?;
         log_event(
             &tx,
             "object_accessed",
@@ -251,6 +258,12 @@ impl Catalog {
         tx.execute(
             "UPDATE objects
              SET last_accessed_unix_ms = ?2, access_count = access_count + 1
+             WHERE object_id = ?1",
+            params![object_id, now],
+        )?;
+        tx.execute(
+            "UPDATE opaque_key_index
+             SET last_accessed_unix_ms = ?2
              WHERE object_id = ?1",
             params![object_id, now],
         )?;
@@ -928,6 +941,12 @@ impl Catalog {
         push_text_filter(
             &mut clauses,
             &mut values,
+            "c.integration_name",
+            filter.integration_name.as_deref(),
+        );
+        push_text_filter(
+            &mut clauses,
+            &mut values,
             "c.opaque_engine_key_hash",
             filter.opaque_engine_key_hash.as_deref(),
         );
@@ -963,6 +982,139 @@ impl Catalog {
         let rows = stmt.query_map(params_from_iter(values.iter()), object_record_from_row)?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(StoreError::from)
+    }
+
+    pub fn upsert_opaque_key_index_for_object(
+        &mut self,
+        object_id: &str,
+        opaque_engine_key_repr: Option<&str>,
+    ) -> StoreResult<()> {
+        let record = self
+            .get_object_record(object_id)?
+            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
+        let compatibility = self
+            .get_object_compatibility(object_id)?
+            .ok_or_else(|| StoreError::NotFound(object_id.to_string()))?;
+        let tx = self.conn.transaction()?;
+        upsert_opaque_key_index(&tx, &record, &compatibility, opaque_engine_key_repr)?;
+        log_event(
+            &tx,
+            "opaque_key_index_upserted",
+            Some(object_id),
+            None,
+            Some(json!({})),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn get_object_by_opaque_key(
+        &self,
+        engine_name: &str,
+        integration_name: &str,
+        opaque_engine_key_hash: &str,
+    ) -> StoreResult<Option<OpaqueKeyRecord>> {
+        self.conn
+            .query_row(
+                "SELECT k.engine_name, k.integration_name, k.opaque_engine_key_hash,
+                        k.opaque_engine_key_repr, k.object_id, k.created_at_unix_ms,
+                        k.last_accessed_unix_ms, o.state, o.pin_count
+                 FROM opaque_key_index k
+                 LEFT JOIN objects o ON o.object_id = k.object_id
+                 WHERE k.engine_name = ?1
+                   AND k.integration_name = ?2
+                   AND k.opaque_engine_key_hash = ?3",
+                params![engine_name, integration_name, opaque_engine_key_hash],
+                opaque_key_record_from_row,
+            )
+            .optional()
+            .map_err(StoreError::from)
+    }
+
+    pub fn list_opaque_keys(
+        &self,
+        filter: &OpaqueKeyListFilter,
+    ) -> StoreResult<Vec<OpaqueKeyRecord>> {
+        let mut sql = String::from(
+            "SELECT k.engine_name, k.integration_name, k.opaque_engine_key_hash,
+                    k.opaque_engine_key_repr, k.object_id, k.created_at_unix_ms,
+                    k.last_accessed_unix_ms, o.state, o.pin_count
+             FROM opaque_key_index k
+             LEFT JOIN objects o ON o.object_id = k.object_id",
+        );
+        let mut clauses = Vec::new();
+        let mut values = Vec::new();
+        push_opaque_key_filter(
+            &mut clauses,
+            &mut values,
+            "k.engine_name",
+            filter.engine_name.as_deref(),
+        );
+        push_opaque_key_filter(
+            &mut clauses,
+            &mut values,
+            "k.integration_name",
+            filter.integration_name.as_deref(),
+        );
+        if !clauses.is_empty() {
+            sql.push_str(" WHERE ");
+            sql.push_str(&clauses.join(" AND "));
+        }
+        sql.push_str(
+            " ORDER BY k.engine_name ASC, k.integration_name ASC, k.opaque_engine_key_hash ASC",
+        );
+        if let Some(limit) = filter.limit {
+            sql.push_str(" LIMIT ?");
+            values.push(Value::Integer(limit));
+        } else if filter.offset.is_some() {
+            sql.push_str(" LIMIT -1");
+        }
+        if let Some(offset) = filter.offset {
+            sql.push_str(" OFFSET ?");
+            values.push(Value::Integer(offset));
+        }
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_from_iter(values.iter()), opaque_key_record_from_row)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    }
+
+    pub fn list_all_opaque_key_index_entries(&self) -> StoreResult<Vec<OpaqueKeyRecord>> {
+        self.list_opaque_keys(&OpaqueKeyListFilter::default())
+    }
+
+    pub fn update_opaque_key_access(
+        &mut self,
+        engine_name: &str,
+        integration_name: &str,
+        opaque_engine_key_hash: &str,
+    ) -> StoreResult<()> {
+        let now = now_unix_ms();
+        let tx = self.conn.transaction()?;
+        let changed = tx.execute(
+            "UPDATE opaque_key_index
+             SET last_accessed_unix_ms = ?4
+             WHERE engine_name = ?1
+               AND integration_name = ?2
+               AND opaque_engine_key_hash = ?3",
+            params![engine_name, integration_name, opaque_engine_key_hash, now],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::NotFound(opaque_engine_key_hash.to_string()));
+        }
+        log_event(
+            &tx,
+            "opaque_key_accessed",
+            None,
+            None,
+            Some(json!({
+                "engine_name": engine_name,
+                "integration_name": integration_name,
+                "opaque_engine_key_hash": opaque_engine_key_hash,
+            })),
+        )?;
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn store_stats(&self) -> StoreResult<StoreStats> {
@@ -1155,11 +1307,64 @@ fn push_text_filter(
             "c.model_hash" => "c.model_hash = ?",
             "c.prefix_hash" => "c.prefix_hash = ?",
             "c.engine_name" => "c.engine_name = ?",
+            "c.integration_name" => "c.integration_name = ?",
             "c.opaque_engine_key_hash" => "c.opaque_engine_key_hash = ?",
             _ => unreachable!("unsupported text filter"),
         });
         values.push(Value::Text(value.to_string()));
     }
+}
+
+fn push_opaque_key_filter(
+    clauses: &mut Vec<&'static str>,
+    values: &mut Vec<Value>,
+    column: &'static str,
+    value: Option<&str>,
+) {
+    if let Some(value) = value {
+        clauses.push(match column {
+            "k.engine_name" => "k.engine_name = ?",
+            "k.integration_name" => "k.integration_name = ?",
+            _ => unreachable!("unsupported opaque key filter"),
+        });
+        values.push(Value::Text(value.to_string()));
+    }
+}
+
+fn upsert_opaque_key_index(
+    tx: &rusqlite::Transaction<'_>,
+    record: &ObjectRecord,
+    compatibility: &ObjectCompatibility,
+    opaque_engine_key_repr: Option<&str>,
+) -> StoreResult<()> {
+    if record.object_type != "opaque_engine_blob" {
+        return Ok(());
+    }
+    let Some(engine_name) = compatibility.engine_name.as_deref() else {
+        return Ok(());
+    };
+    let Some(integration_name) = compatibility.integration_name.as_deref() else {
+        return Ok(());
+    };
+    let Some(opaque_engine_key_hash) = compatibility.opaque_engine_key_hash.as_deref() else {
+        return Ok(());
+    };
+    tx.execute(
+        "INSERT OR REPLACE INTO opaque_key_index(
+            engine_name, integration_name, opaque_engine_key_hash, opaque_engine_key_repr,
+            object_id, created_at_unix_ms, last_accessed_unix_ms
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            engine_name,
+            integration_name,
+            opaque_engine_key_hash,
+            opaque_engine_key_repr,
+            record.object_id,
+            record.created_at_unix_ms,
+            record.last_accessed_unix_ms,
+        ],
+    )?;
+    Ok(())
 }
 
 fn push_i64_filter(
@@ -1238,6 +1443,27 @@ fn object_access_from_row(row: &Row<'_>) -> rusqlite::Result<ObjectAccess> {
         put_count: row.get("put_count")?,
         bytes_read_total: row.get("bytes_read_total")?,
         bytes_written_total: row.get("bytes_written_total")?,
+    })
+}
+
+fn opaque_key_record_from_row(row: &Row<'_>) -> rusqlite::Result<OpaqueKeyRecord> {
+    let object_state: Option<ObjectState> = row.get("state")?;
+    let pin_count: Option<i64> = row.get("pin_count")?;
+    Ok(OpaqueKeyRecord {
+        engine_name: row.get("engine_name")?,
+        integration_name: row.get("integration_name")?,
+        opaque_engine_key_hash: row.get("opaque_engine_key_hash")?,
+        opaque_engine_key_repr: row.get("opaque_engine_key_repr")?,
+        object_id: row.get("object_id")?,
+        created_at_unix_ms: row.get("created_at_unix_ms")?,
+        last_accessed_unix_ms: row.get("last_accessed_unix_ms")?,
+        object_state,
+        serveable: object_state
+            .zip(pin_count)
+            .map(|(state, pin_count)| {
+                can_serve(state, pin_count) && state != ObjectState::Committed
+            })
+            .unwrap_or(false),
     })
 }
 

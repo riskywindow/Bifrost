@@ -141,6 +141,16 @@ async def _roundtrip_with_restart(daemon: Daemon, store_bin: Path) -> None:
     assert fsck["status"] == "clean"
     assert fsck["findings"] == []
 
+    key_hash = opaque_engine_key_hash(key)
+    opaque_entry = _opaque_get_key_json(daemon.endpoint, store_bin, key_hash)
+    inspect_text = _inspect_text(
+        daemon.endpoint,
+        store_bin,
+        opaque_entry["object"]["object_id"],
+    )
+    assert "object_type=opaque_engine_blob" in inspect_text
+    assert f"opaque_engine_key_hash={key_hash}" in inspect_text
+
 
 def _fsck_json(endpoint: str, store_bin: Path) -> dict[str, Any]:
     result = subprocess.run(
@@ -152,6 +162,54 @@ def _fsck_json(endpoint: str, store_bin: Path) -> dict[str, Any]:
     )
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
+
+
+def _opaque_get_key_json(
+    endpoint: str,
+    store_bin: Path,
+    opaque_engine_key_hash: str,
+) -> dict[str, Any]:
+    result = subprocess.run(
+        [
+            str(store_bin),
+            "opaque",
+            "get-key",
+            "--endpoint",
+            endpoint,
+            "--engine-name",
+            "lmcache",
+            "--integration-name",
+            "lmcache_bifrost_remote_storage",
+            "--opaque-engine-key-hash",
+            opaque_engine_key_hash,
+            "--json",
+        ],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+def _inspect_text(endpoint: str, store_bin: Path, object_id: str) -> str:
+    result = subprocess.run(
+        [
+            str(store_bin),
+            "inspect",
+            "--endpoint",
+            endpoint,
+            "--object-id",
+            object_id,
+        ],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout
 
 
 def _find_binary(name: str) -> Path | None:

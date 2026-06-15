@@ -154,6 +154,43 @@ For deterministic codec output, `created_at_unix_ms` is fixed at `0` for
 generated opaque descriptors. Wall-clock creation time is local store state and
 must not affect immutable object identity.
 
+## Store opaque key index
+
+The Rust store maintains a mutable sidecar lookup table for opaque engine keys:
+
+```text
+opaque_key_index(
+  engine_name,
+  integration_name,
+  opaque_engine_key_hash
+) -> object_id
+```
+
+The sidecar row also carries optional `opaque_engine_key_repr`,
+`created_at_unix_ms`, and `last_accessed_unix_ms` local catalog fields. These
+fields are store/index state only. They must not be added to the immutable
+object identity and must not change the Phase 1 descriptor hash or object ID.
+
+The `object_compatibility` table remains the canonical catalog copy of
+descriptor-derived compatibility fields, including `engine_name`,
+`integration_name`, and `opaque_engine_key_hash`. The sidecar index is a
+serving lookup acceleration and is backfilled from existing compatibility rows
+by schema migration.
+
+Opaque key lookup is fail-closed:
+
+1. The key index must match the full engine and integration namespace.
+2. The pointed object must still exist in the catalog.
+3. The pointed object must be committed, verified, pinned, or otherwise
+   serveable according to store lifecycle rules.
+4. The deterministic metadata and payload files must still validate.
+5. The descriptor compatibility fields must still match the requested key.
+
+Evicted, quarantined, corrupt, missing, staged, or partially committed objects
+must not satisfy opaque key query APIs as cache hits. List APIs may expose index
+rows for diagnostics, but each row must report whether the current object is
+serveable.
+
 ## List behavior
 
 Connector `list` returns stable key representations for committed and verified

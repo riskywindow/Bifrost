@@ -1,7 +1,8 @@
 use bifrostd::spool::Spool;
 use bifrostd::transport::{
-    chunk_bytes, inspect_store_object, list_store_objects, put_object, query_store_objects,
-    serve_listener, store_stats, ChunkManifest, StoreObjectFilter, DEFAULT_CHUNK_SIZE,
+    chunk_bytes, inspect_store_object, list_opaque_keys, list_store_objects, put_object,
+    query_opaque_key, query_store_objects, serve_listener, store_stats, ChunkManifest,
+    OpaqueKeyListRequest, OpaqueKeyQueryRequest, StoreObjectFilter, DEFAULT_CHUNK_SIZE,
 };
 use serde_json::Value;
 use std::fs;
@@ -74,6 +75,18 @@ fn prefix_hash(fixture: &Fixture) -> &str {
 
 fn opaque_engine_key_hash(fixture: &Fixture) -> &str {
     fixture.metadata["opaque_engine_profile"]["engine_key_hash"]
+        .as_str()
+        .unwrap()
+}
+
+fn engine_name(fixture: &Fixture) -> &str {
+    fixture.metadata["engine_profile"]["engine_name"]
+        .as_str()
+        .unwrap()
+}
+
+fn integration_name(fixture: &Fixture) -> &str {
+    fixture.metadata["engine_profile"]["integration_name"]
         .as_str()
         .unwrap()
 }
@@ -224,6 +237,35 @@ async fn query_by_opaque_engine_key_returns_opaque_object() {
     assert_eq!(query.objects.len(), 1);
     assert_eq!(query.objects[0].object_id, object_id);
     assert_eq!(query.objects[0].object_type, "opaque_engine_blob");
+
+    let opaque_query = query_opaque_key(
+        &daemon.endpoint,
+        OpaqueKeyQueryRequest {
+            engine_name: engine_name(&opaque).to_string(),
+            integration_name: integration_name(&opaque).to_string(),
+            opaque_engine_key_hash: opaque_engine_key_hash(&opaque).to_string(),
+        },
+    )
+    .await
+    .unwrap();
+    assert!(opaque_query.found);
+    assert_eq!(opaque_query.object.unwrap().object_id, object_id);
+
+    let opaque_list = list_opaque_keys(
+        &daemon.endpoint,
+        OpaqueKeyListRequest {
+            engine_name: Some(engine_name(&opaque).to_string()),
+            integration_name: Some(integration_name(&opaque).to_string()),
+            limit: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(opaque_list.keys.len(), 1);
+    assert_eq!(
+        opaque_list.keys[0].opaque_engine_key_hash,
+        opaque_engine_key_hash(&opaque)
+    );
     cleanup(&root);
 }
 
@@ -238,6 +280,62 @@ async fn stats_returns_object_count_and_bytes() {
     assert_eq!(stats.stats.object_count, 1);
     assert_eq!(stats.stats.verified_count, 1);
     assert_eq!(stats.stats.total_logical_bytes, native.payload.len() as i64);
+    cleanup(&root);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn opaque_cli_list_and_get_key_return_index_entries() {
+    let (daemon, root) = start_daemon("opaque-cli").await;
+    let opaque = opaque_fixture();
+    let object_id = put_fixture(&daemon.endpoint, &opaque).await;
+
+    let list = Command::new(env!("CARGO_BIN_EXE_bifrost-store"))
+        .args([
+            "opaque",
+            "list",
+            "--endpoint",
+            &daemon.endpoint,
+            "--engine-name",
+            engine_name(&opaque),
+            "--integration-name",
+            integration_name(&opaque),
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        list.status.success(),
+        "{}",
+        String::from_utf8_lossy(&list.stderr)
+    );
+    let list_json: Value = serde_json::from_slice(&list.stdout).unwrap();
+    assert_eq!(list_json["keys"].as_array().unwrap().len(), 1);
+    assert_eq!(list_json["keys"][0]["object_id"], object_id);
+
+    let get_key = Command::new(env!("CARGO_BIN_EXE_bifrost-store"))
+        .args([
+            "opaque",
+            "get-key",
+            "--endpoint",
+            &daemon.endpoint,
+            "--engine-name",
+            engine_name(&opaque),
+            "--integration-name",
+            integration_name(&opaque),
+            "--opaque-engine-key-hash",
+            opaque_engine_key_hash(&opaque),
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        get_key.status.success(),
+        "{}",
+        String::from_utf8_lossy(&get_key.stderr)
+    );
+    let get_key_json: Value = serde_json::from_slice(&get_key.stdout).unwrap();
+    assert_eq!(get_key_json["found"], true);
+    assert_eq!(get_key_json["object"]["object_id"], object_id);
     cleanup(&root);
 }
 

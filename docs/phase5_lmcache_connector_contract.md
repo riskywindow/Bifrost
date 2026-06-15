@@ -275,11 +275,16 @@ raise `ConnectorConfigurationError`.
 ### ping
 
 ```text
+support_ping() -> bool
 async ping() -> bool
 ```
 
-Checks connectivity to the configured BIFROST endpoint. `ping` must not create
-objects or mutate store state.
+`support_ping` returns `True`. `ping` checks connectivity to the configured
+BIFROST endpoint by calling the BIFROST client `ping` API, or `stats` when an
+injected test client only exposes that diagnostic path. `ping` must not create
+objects or mutate store state. A live daemon returns `True`; connection,
+protocol, or client errors raise `BifrostLMCacheStoreError` with a
+`ping_failed` reason prefix.
 
 ### Batched operations
 
@@ -287,14 +292,34 @@ Optional batched operations may be added after the single-key methods are
 correct:
 
 ```text
-async exists_many(keys: list[CacheEngineKey]) -> list[bool]
-async get_many(keys: list[CacheEngineKey]) -> list[MemoryObj | None]
-async put_many(items: list[tuple[CacheEngineKey, MemoryObj]]) -> None
+support_batched_contains() -> bool
+async batched_contains(keys: list[CacheEngineKey]) -> list[bool]
+
+support_batched_get() -> bool
+async batched_get(keys: list[CacheEngineKey]) -> list[MemoryObj | None]
+
+support_batched_put() -> bool
+async batched_put(items: list[tuple[CacheEngineKey, MemoryObj]]) -> None
 ```
 
-Batched methods must preserve per-key fail-closed behavior. A corrupt or
-unavailable object must not poison unrelated valid objects, and partial write
-visibility rules must match single-key `put`.
+The support methods return `True` for the current fake-compatible Phase 5
+surface. Real LMCache batched return-type expectations vary by version and are
+treated as experimental until pinned by optional real-LMCache compatibility
+tests.
+
+The current implementation performs one verified single-key operation per
+input because the BIFROST daemon does not expose a server-side batch query or
+batch commit protocol. This is intentionally conservative: `batched_contains`
+uses `exists`, `batched_get` uses `get`, and `batched_put` uses `put`.
+
+Batched methods must preserve per-key fail-closed behavior. Missing keys return
+`False` for `batched_contains` and `None` for `batched_get`. Corrupt,
+incompatible, or uncertain hits follow the same behavior as single-key
+`exists` and `get`. `batched_put` stops at the first failed item and raises the
+underlying deterministic connector error type with a
+`batched_put_failed:index=N:reason=...` message. Items committed before the
+failure remain subject to ordinary single-key commit rules; later items are not
+silently reported as stored.
 
 ## Failure semantics
 

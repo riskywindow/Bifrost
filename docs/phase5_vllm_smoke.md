@@ -60,6 +60,45 @@ The vLLM configuration should enable LMCache through documented LMCache/vLLM
 mechanisms for the installed versions. The smoke must pin or print versions in
 its output so failures can be triaged against API changes.
 
+The repository scaffold lives under `examples/lmcache_bifrost/`:
+
+```text
+vllm_lmcache_smoke.py
+vllm_lmcache_bifrost_config.yaml
+run_vllm_lmcache_bifrost_smoke.sh
+```
+
+Readiness-only probing is safe in normal development and CI because it does not
+start vLLM and does not load or download a model:
+
+```text
+PYTHONPATH=bifrost_py:integrations/lmcache_bifrost \
+  python examples/lmcache_bifrost/vllm_lmcache_smoke.py --json
+```
+
+The active request path is double-gated. It requires both `--run` and
+`BIFROST_RUN_VLLM_SMOKE=1`. The wrapper script also refuses to run without that
+environment variable:
+
+```text
+BIFROST_RUN_VLLM_SMOKE=1 \
+BIFROST_VLLM_MODEL=/path/to/local/model \
+examples/lmcache_bifrost/run_vllm_lmcache_bifrost_smoke.sh
+```
+
+The wrapper expects a daemon like:
+
+```text
+cargo run --manifest-path bifrostd/Cargo.toml --bin bifrost-daemon -- \
+  --listen 127.0.0.1:7744 \
+  --spool /tmp/bifrost-vllm-lmcache-smoke/spool
+```
+
+The config file intentionally contains comments around version-sensitive
+LMCache and vLLM fields. Developers should verify the exact key names against
+their installed versions before treating a local smoke failure as a BIFROST
+connector failure.
+
 ## Success criteria
 
 The smoke succeeds when:
@@ -81,6 +120,12 @@ The smoke is allowed to miss cache reuse if LMCache or vLLM behavior changes.
 It is not allowed to treat corrupt, staged, mismatched, or unverified objects as
 hits.
 
+The scaffold reports `remote_put_increased` from the BIFROST store
+`object_count` delta and `remote_get_increased` from the BIFROST
+`total_access_count` delta. These are smoke diagnostics, not production
+metrics. A local run can still require version-specific LMCache/vLLM flags to
+make the remote connector path active.
+
 ## Skip conditions
 
 The smoke must skip when:
@@ -94,3 +139,6 @@ The smoke must skip when:
    requested.
 
 Skip output should state the exact reason.
+
+The default scaffold tests assert that these paths remain skipped by default,
+that the YAML parses, and that no test starts vLLM or downloads model assets.

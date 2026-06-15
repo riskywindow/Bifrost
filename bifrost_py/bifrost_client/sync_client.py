@@ -8,6 +8,7 @@ import threading
 from typing import Any, Coroutine, TypeVar
 
 from .async_client import BifrostAsyncClient
+from .errors import BifrostClosedError
 from .models import BifrostClientConfig, ObjectSummary, PutResult, StoreStats, StoredObject
 
 T = TypeVar("T")
@@ -62,11 +63,24 @@ class BifrostClient:
     ) -> PutResult:
         return self._run(self._client.put_object(metadata, payload, chunk_size))
 
+    def put_objects(
+        self,
+        items: list[tuple[dict[str, Any], bytes]],
+        chunk_size: int = 256 * 1024,
+    ) -> list[PutResult]:
+        return self._run(self._client.put_objects(items, chunk_size))
+
     def has_object(self, object_id: str) -> bool:
         return self._run(self._client.has_object(object_id))
 
+    def has_objects(self, object_ids: list[str]) -> list[bool]:
+        return self._run(self._client.has_objects(object_ids))
+
     def get_object(self, object_id: str) -> StoredObject:
         return self._run(self._client.get_object(object_id))
+
+    def get_objects(self, object_ids: list[str]) -> list[StoredObject]:
+        return self._run(self._client.get_objects(object_ids))
 
     def query_by_opaque_key_hash(
         self,
@@ -82,6 +96,20 @@ class BifrostClient:
             )
         )
 
+    def query_by_opaque_key_hashes(
+        self,
+        engine_name: str,
+        integration_name: str,
+        opaque_engine_key_hashes: list[str],
+    ) -> dict[str, list[ObjectSummary]]:
+        return self._run(
+            self._client.query_by_opaque_key_hashes(
+                engine_name,
+                integration_name,
+                opaque_engine_key_hashes,
+            )
+        )
+
     def list_objects(self, **filters: Any) -> list[ObjectSummary]:
         return self._run(self._client.list_objects(**filters))
 
@@ -90,7 +118,8 @@ class BifrostClient:
 
     def _run(self, coroutine: Coroutine[Any, Any, T]) -> T:
         if self._closed:
-            raise RuntimeError("BIFROST client is closed")
+            coroutine.close()
+            raise BifrostClosedError("BIFROST client is closed")
         future = asyncio.run_coroutine_threadsafe(coroutine, self._loop)
         try:
             return future.result()

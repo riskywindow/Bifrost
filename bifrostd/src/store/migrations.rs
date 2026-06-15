@@ -1,6 +1,7 @@
 use crate::store::errors::{StoreError, StoreResult};
 use crate::store::schema::{
     CREATE_SCHEMA_MIGRATIONS, LATEST_SCHEMA_VERSION, MIGRATION_V1_NAME, MIGRATION_V1_SQL,
+    MIGRATION_V2_NAME, MIGRATION_V2_SQL,
 };
 use rusqlite::{params, Connection, OptionalExtension};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -12,11 +13,18 @@ pub struct Migration {
     pub sql: &'static str,
 }
 
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: MIGRATION_V1_NAME,
-    sql: MIGRATION_V1_SQL,
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: MIGRATION_V1_NAME,
+        sql: MIGRATION_V1_SQL,
+    },
+    Migration {
+        version: 2,
+        name: MIGRATION_V2_NAME,
+        sql: MIGRATION_V2_SQL,
+    },
+];
 
 pub fn init_schema(conn: &mut Connection) -> StoreResult<()> {
     conn.execute_batch(CREATE_SCHEMA_MIGRATIONS)?;

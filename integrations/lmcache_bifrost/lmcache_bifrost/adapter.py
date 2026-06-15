@@ -73,6 +73,12 @@ def parse_config(context: object) -> BifrostLMCacheConfig:
         extra_config,
         lmcache_config,
     )
+    metrics_jsonl_path = _string_setting(
+        "metrics_jsonl_path",
+        query,
+        extra_config,
+        lmcache_config,
+    )
 
     return BifrostLMCacheConfig(
         endpoint=endpoint,
@@ -88,6 +94,9 @@ def parse_config(context: object) -> BifrostLMCacheConfig:
         strict_validation=strict_validation
         if strict_validation is not None
         else defaults.strict_validation,
+        metrics_jsonl_path=metrics_jsonl_path
+        if metrics_jsonl_path is not None
+        else defaults.metrics_jsonl_path,
     )
 
 
@@ -225,6 +234,21 @@ def _bool_setting(
     if lowered in ("0", "false", "no", "off"):
         return False
     raise ConnectorConfigurationError(f"{name} must be a boolean")
+
+
+def _string_setting(
+    name: str,
+    query: Mapping[str, str],
+    extra_config: Mapping[str, Any],
+    lmcache_config: object | None,
+) -> str | None:
+    value = _setting_value(name, query, extra_config, lmcache_config)
+    if value is None:
+        return None
+    value = str(value)
+    if not value:
+        raise ConnectorConfigurationError(f"{name} must be non-empty")
+    return value
 
 
 def _setting_value(

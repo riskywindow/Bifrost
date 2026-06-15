@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from contextstorm.cli import _is_lmcache_scenario
 from contextstorm.runner import load_scenario, run_scenario
 
 
@@ -15,6 +16,11 @@ def test_scenario_yaml_loads() -> None:
     assert scenario.object_size_bytes == 1048576
     assert scenario.operations == ("put", "has", "get")
     assert scenario.paths[0].name == "primary"
+
+
+def test_small_ci_is_not_routed_as_lmcache() -> None:
+    assert _is_lmcache_scenario(Path("scenarios/small_ci.yaml")) is False
+    assert _is_lmcache_scenario(Path("scenarios/lmcache_connector_small_ci.yaml")) is True
 
 
 def test_small_ci_runs_when_binaries_are_available(tmp_path: Path) -> None:

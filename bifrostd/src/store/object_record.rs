@@ -118,6 +118,27 @@ pub struct ObjectCompatibility {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpaqueKeyRecord {
+    pub engine_name: String,
+    pub integration_name: String,
+    pub opaque_engine_key_hash: String,
+    pub opaque_engine_key_repr: Option<String>,
+    pub object_id: String,
+    pub created_at_unix_ms: i64,
+    pub last_accessed_unix_ms: Option<i64>,
+    pub object_state: Option<ObjectState>,
+    pub serveable: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OpaqueKeyListFilter {
+    pub engine_name: Option<String>,
+    pub integration_name: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectAccess {
     pub object_id: String,
     pub last_get_unix_ms: Option<i64>,
@@ -144,6 +165,7 @@ pub struct ObjectListFilter {
     pub model_hash: Option<String>,
     pub prefix_hash: Option<String>,
     pub engine_name: Option<String>,
+    pub integration_name: Option<String>,
     pub opaque_engine_key_hash: Option<String>,
     pub layer_id: Option<i64>,
     pub kv_block_id: Option<i64>,

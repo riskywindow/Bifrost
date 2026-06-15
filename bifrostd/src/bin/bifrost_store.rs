@@ -1,9 +1,11 @@
 use bifrostd::store::{FsckMode, ManifestListFilter};
 use bifrostd::transport::{
     check_manifest, clear_ttl, create_prefix_manifest, evict_store, fsck_store, inspect_manifest,
-    inspect_store_object, list_manifests, list_store_objects, manifest_add_member, manifest_pin,
-    manifest_unpin, pin_object, quarantine_object, query_store_objects, set_ttl, store_stats,
-    unpin_object, StoreEvictRequest, StoreObjectFilter, StoreObjectSummary, StoreOperationOutcome,
+    inspect_store_object, list_manifests, list_opaque_keys, list_store_objects,
+    manifest_add_member, manifest_pin, manifest_unpin, pin_object, quarantine_object,
+    query_opaque_key, query_store_objects, set_ttl, store_stats, unpin_object,
+    OpaqueKeyListRequest, OpaqueKeyQueryRequest, OpaqueKeySummary, StoreEvictRequest,
+    StoreObjectFilter, StoreObjectSummary, StoreOperationOutcome,
 };
 use clap::{Parser, Subcommand};
 use serde_json::json;
@@ -49,6 +51,8 @@ enum Command {
         prefix_hash: Option<String>,
         #[arg(long)]
         engine_name: Option<String>,
+        #[arg(long)]
+        integration_name: Option<String>,
         #[arg(long)]
         opaque_engine_key_hash: Option<String>,
         #[arg(long)]
@@ -117,6 +121,38 @@ enum Command {
     Manifest {
         #[command(subcommand)]
         command: ManifestCommand,
+    },
+    Opaque {
+        #[command(subcommand)]
+        command: OpaqueCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum OpaqueCommand {
+    List {
+        #[arg(long, default_value = "127.0.0.1:7420")]
+        endpoint: String,
+        #[arg(long)]
+        engine_name: Option<String>,
+        #[arg(long)]
+        integration_name: Option<String>,
+        #[arg(long)]
+        limit: Option<i64>,
+        #[arg(long)]
+        json: bool,
+    },
+    GetKey {
+        #[arg(long, default_value = "127.0.0.1:7420")]
+        endpoint: String,
+        #[arg(long)]
+        engine_name: String,
+        #[arg(long)]
+        integration_name: String,
+        #[arg(long)]
+        opaque_engine_key_hash: String,
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -241,6 +277,7 @@ async fn main() {
             model_hash,
             prefix_hash,
             engine_name,
+            integration_name,
             opaque_engine_key_hash,
             layer_id,
             kv_block_id,
@@ -252,6 +289,7 @@ async fn main() {
                     model_hash,
                     prefix_hash,
                     engine_name,
+                    integration_name,
                     opaque_engine_key_hash,
                     layer_id,
                     kv_block_id,
@@ -325,6 +363,7 @@ async fn main() {
             .await
             .and_then(run_operation),
         Command::Manifest { command } => run_manifest(command).await,
+        Command::Opaque { command } => run_opaque(command).await,
     };
 
     match result {
@@ -553,6 +592,87 @@ fn ensure_manifest_ok(outcome: &bifrostd::transport::StoreManifestOutcome) -> an
     }
 }
 
+async fn run_opaque(command: OpaqueCommand) -> anyhow::Result<i32> {
+    match command {
+        OpaqueCommand::List {
+            endpoint,
+            engine_name,
+            integration_name,
+            limit,
+            json,
+        } => {
+            let outcome = list_opaque_keys(
+                &endpoint,
+                OpaqueKeyListRequest {
+                    engine_name,
+                    integration_name,
+                    limit,
+                },
+            )
+            .await?;
+            if !outcome.reason.is_empty() {
+                anyhow::bail!(outcome.reason);
+            }
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string(&json!({ "keys": outcome.keys }))?
+                );
+            } else {
+                print_opaque_keys(&outcome.keys);
+            }
+            Ok(0)
+        }
+        OpaqueCommand::GetKey {
+            endpoint,
+            engine_name,
+            integration_name,
+            opaque_engine_key_hash,
+            json,
+        } => {
+            let outcome = query_opaque_key(
+                &endpoint,
+                OpaqueKeyQueryRequest {
+                    engine_name,
+                    integration_name,
+                    opaque_engine_key_hash: opaque_engine_key_hash.clone(),
+                },
+            )
+            .await?;
+            if !outcome.reason.is_empty() && !outcome.found {
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::to_string(&json!({
+                            "found": false,
+                            "reason": outcome.reason,
+                        }))?
+                    );
+                } else {
+                    println!(
+                        "miss opaque_engine_key_hash={} reason={}",
+                        opaque_engine_key_hash, outcome.reason
+                    );
+                }
+                return Ok(1);
+            }
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string(&json!({
+                        "found": outcome.found,
+                        "key": outcome.key,
+                        "object": outcome.object,
+                    }))?
+                );
+            } else if let Some(key) = outcome.key.as_ref() {
+                print_opaque_key(key);
+            }
+            Ok(if outcome.found { 0 } else { 1 })
+        }
+    }
+}
+
 async fn run_list(endpoint: &str, filter: StoreObjectFilter, as_json: bool) -> anyhow::Result<i32> {
     let outcome = list_store_objects(endpoint, filter).await?;
     if !outcome.reason.is_empty() {
@@ -596,6 +716,29 @@ async fn run_inspect(endpoint: &str, object_id: &str, as_json: bool) -> anyhow::
     } else if outcome.found {
         if let Some(object) = outcome.response.object.as_ref() {
             print_object(object);
+            println!(
+                "payload_hash={} descriptor_hash={} bytes_on_disk={} servable={}",
+                outcome
+                    .response
+                    .payload_hash
+                    .as_deref()
+                    .unwrap_or("-"),
+                outcome
+                    .response
+                    .descriptor_hash
+                    .as_deref()
+                    .unwrap_or("-"),
+                outcome
+                    .response
+                    .bytes_on_disk
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "-".to_string()),
+                outcome
+                    .response
+                    .servable
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "-".to_string())
+            );
         }
     } else {
         println!(
@@ -692,13 +835,34 @@ fn print_objects(objects: &[StoreObjectSummary]) {
     }
 }
 
+fn print_opaque_keys(keys: &[OpaqueKeySummary]) {
+    for key in keys {
+        print_opaque_key(key);
+    }
+}
+
+fn print_opaque_key(key: &OpaqueKeySummary) {
+    println!(
+        "engine_name={} integration_name={} opaque_engine_key_hash={} object_id={} serveable={} repr={}",
+        key.engine_name,
+        key.integration_name,
+        key.opaque_engine_key_hash,
+        key.object_id,
+        key.serveable,
+        key.opaque_engine_key_repr.as_deref().unwrap_or("-")
+    );
+}
+
 fn print_object(object: &StoreObjectSummary) {
     println!(
-        "object_id={} object_type={} state={} byte_length={} prefix_hash={} layer_id={} kv_block_id={} pin_count={} last_accessed_unix_ms={}",
+        "object_id={} object_type={} state={} byte_length={} engine_name={} integration_name={} opaque_engine_key_hash={} prefix_hash={} layer_id={} kv_block_id={} pin_count={} last_accessed_unix_ms={}",
         object.object_id,
         object.object_type,
         object.state,
         object.byte_length,
+        object.engine_name.as_deref().unwrap_or("-"),
+        object.integration_name.as_deref().unwrap_or("-"),
+        object.opaque_engine_key_hash.as_deref().unwrap_or("-"),
         object.prefix_hash.as_deref().unwrap_or("-"),
         object
             .layer_id

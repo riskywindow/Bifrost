@@ -37,8 +37,17 @@ UNKNOWN_HASH = blake3_hex(b"bifrost.lmcache.unknown.v1")
 def serialize_memory_obj(memory_obj: object, config: BifrostLMCacheConfig) -> bytes:
     """Serialize an LMCache MemoryObj without interpreting tensor semantics."""
 
-    native = serialize_with_lmcache_native(memory_obj)
+    try:
+        native = serialize_with_lmcache_native(memory_obj)
+    except Exception as exc:
+        raise MemoryObjSerializationError(
+            f"LMCache-native MemoryObj serialization failed: {exc}"
+        ) from exc
     if native is not None:
+        if not native:
+            raise MemoryObjSerializationError(
+                "LMCache-native MemoryObj serialization returned empty bytes"
+            )
         return native
     if not config.allow_pickle_fallback:
         raise MemoryObjSerializationError(

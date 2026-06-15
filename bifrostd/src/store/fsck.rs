@@ -105,6 +105,7 @@ pub fn run_fsck(store: &Store, mode: FsckMode) -> StoreResult<FsckResult> {
     let locations = catalog.list_object_locations()?;
     let manifests = catalog.list_manifests(&ManifestListFilter::default())?;
     let manifest_members = catalog.list_all_manifest_members()?;
+    let opaque_key_entries = catalog.list_all_opaque_key_index_entries()?;
     drop(catalog);
 
     let records_by_id = records
@@ -165,6 +166,7 @@ pub fn run_fsck(store: &Store, mode: FsckMode) -> StoreResult<FsckResult> {
         &records_by_id,
         &mut result,
     )?;
+    check_opaque_key_index(store, mode, opaque_key_entries, &records_by_id, &mut result)?;
 
     result.counts_by_severity = count_severities(&result.findings);
     result.status = if mode == FsckMode::Quarantine && !result.mutations_applied.is_empty() {
@@ -177,6 +179,43 @@ pub fn run_fsck(store: &Store, mode: FsckMode) -> StoreResult<FsckResult> {
         FsckStatus::Dirty
     };
     Ok(result)
+}
+
+fn check_opaque_key_index(
+    store: &Store,
+    _mode: FsckMode,
+    entries: Vec<crate::store::OpaqueKeyRecord>,
+    records_by_id: &BTreeMap<String, ObjectRecord>,
+    result: &mut FsckResult,
+) -> StoreResult<()> {
+    for entry in entries {
+        let Some(_record) = records_by_id.get(&entry.object_id) else {
+            finding(
+                result,
+                "opaque_key_index_object_missing",
+                FsckSeverity::Error,
+                Some(&entry.object_id),
+                None,
+                None,
+                "opaque key index references a missing catalog object",
+                "repair should rebuild or remove stale opaque key index rows",
+            );
+            continue;
+        };
+        if store.inspect_object(&entry.object_id).is_err() {
+            finding(
+                result,
+                "opaque_key_index_object_uninspectable",
+                FsckSeverity::Error,
+                Some(&entry.object_id),
+                None,
+                None,
+                "opaque key index points at an object whose files or descriptor cannot be inspected",
+                "repair or quarantine should prevent this row from satisfying cache hits",
+            );
+        }
+    }
+    Ok(())
 }
 
 fn check_catalog_object(

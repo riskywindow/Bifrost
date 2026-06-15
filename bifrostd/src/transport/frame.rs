@@ -58,6 +58,10 @@ pub enum FrameType {
     ManifestResult,
     FsckRequest,
     FsckResult,
+    OpaqueKeyQueryRequest,
+    OpaqueKeyQueryResult,
+    OpaqueKeyListRequest,
+    OpaqueKeyListResult,
     Ping,
     Pong,
     Error,
@@ -246,7 +250,11 @@ impl FrameHeader {
             FrameType::TtlRequest | FrameType::LifecycleRequest => {
                 require_object_id(self)?;
             }
-            FrameType::EvictRequest | FrameType::ManifestRequest | FrameType::FsckRequest => {}
+            FrameType::EvictRequest
+            | FrameType::ManifestRequest
+            | FrameType::FsckRequest
+            | FrameType::OpaqueKeyQueryRequest
+            | FrameType::OpaqueKeyListRequest => {}
             FrameType::ListResult
             | FrameType::InspectResult
             | FrameType::QueryResult
@@ -257,7 +265,9 @@ impl FrameHeader {
             | FrameType::LifecycleResult
             | FrameType::EvictResult
             | FrameType::ManifestResult
-            | FrameType::FsckResult => {
+            | FrameType::FsckResult
+            | FrameType::OpaqueKeyQueryResult
+            | FrameType::OpaqueKeyListResult => {
                 require_non_empty(self.status.as_deref(), "status", self.frame_type)?;
                 let status = self.status.as_deref().unwrap_or_default();
                 if status != "ok"

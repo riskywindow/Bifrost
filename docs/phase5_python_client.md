@@ -154,6 +154,8 @@ The implemented public error taxonomy is:
 ```text
 BifrostClientError
 BifrostConnectionError
+BifrostTimeoutError
+BifrostClosedError
 BifrostProtocolError
 BifrostValidationError
 BifrostNotFoundError

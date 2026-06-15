@@ -1,0 +1,40 @@
+# Generated BIFROST Phase 6 LMCache configuration.
+# Version-sensitive: LMCache custom remote storage field names vary by release.
+# Verify this shape against the installed LMCache version before a real run.
+# BIFROST stores LMCache-owned opaque_engine_blob payloads only.
+
+mode: lmcache_mp
+object_type: opaque_engine_blob
+chunk_size: 262144
+local_cpu: false
+enable_multiprocess: true
+
+remote_storage_plugins:
+  - bifrost
+
+remote_storage_plugin:
+  bifrost:
+    module_path: lmcache_bifrost.adapter
+    class_name: BifrostConnectorAdapter
+    extra_config:
+      endpoint: 127.0.0.1:7744
+      chunk_size: 262144
+      timeout_seconds: 5.0
+      strict_validation: true
+      allow_pickle_fallback: false
+      engine_name: lmcache
+      integration_name: lmcache_bifrost_remote_storage
+      object_type: opaque_engine_blob
+      metrics_jsonl_path: ./bifrost_lmcache_connector_metrics.jsonl
+
+remote_url: bifrost://127.0.0.1:7744
+
+# Some LMCache releases route custom storage through plugin:// URLs instead:
+# remote_url: plugin://bifrost
+# When using that form, keep endpoint in remote_storage_plugin.bifrost.extra_config.
+
+multiprocess:
+  enabled: true
+  host: 127.0.0.1
+  port: 9000
+  config_file: bifrost_lmcache_mp.yaml

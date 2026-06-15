@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 
 import lmcache_bifrost
@@ -28,6 +30,9 @@ from tests.fakes import (
     FakeLMCacheMetadata,
     FakeMemoryObj,
 )
+
+
+RUN_REAL_LMCACHE_ENV = "BIFROST_RUN_REAL_LMCACHE_TESTS"
 
 
 def test_importing_package_does_not_require_lmcache() -> None:
@@ -103,12 +108,20 @@ def test_native_bytes_method_is_detected_and_used() -> None:
     assert serialize_with_lmcache_native(memory_obj) == b"native-payload"
 
 
+@pytest.mark.skipif(
+    os.environ.get(RUN_REAL_LMCACHE_ENV) != "1",
+    reason=f"set {RUN_REAL_LMCACHE_ENV}=1 to run real LMCache tests",
+)
 @pytest.mark.skipif(not has_lmcache(), reason="LMCache is not installed")
 def test_real_lmcache_import_smoke_when_installed() -> None:
     assert has_lmcache() is True
     assert lmcache_version() is None or isinstance(lmcache_version(), str)
 
 
+@pytest.mark.skipif(
+    os.environ.get(RUN_REAL_LMCACHE_ENV) != "1",
+    reason=f"set {RUN_REAL_LMCACHE_ENV}=1 to run real LMCache tests",
+)
 @pytest.mark.skipif(not has_lmcache(), reason="LMCache is not installed")
 def test_real_lmcache_class_probe_when_installed() -> None:
     probed = (
