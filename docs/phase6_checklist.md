@@ -57,9 +57,9 @@ Last verified: 2026-06-15
 
 ## Benchmark runner
 
-- [ ] Run baselines separately.
+- [x] Run baselines separately.
 - [x] Preserve raw metrics for each baseline.
-- [ ] Refuse to compare missing or incompatible baselines as speedups.
+- [x] Refuse to compare missing or incompatible baselines as speedups.
 - [ ] Support warmup and measured request phases.
 - [x] Record request count, concurrency, max output tokens, and timeout.
 - [x] Capture request failures and timeouts.
@@ -67,12 +67,12 @@ Last verified: 2026-06-15
 
 ## Metrics collectors
 
-- [ ] Ingest `vllm bench serve` JSON when available.
+- [x] Ingest `vllm bench serve` JSON when available.
 - [x] Capture HTTP request start, response end, status code, and error fields
   for fake OpenAI-compatible serving requests.
-- [ ] Capture real serving TTFT.
+- [x] Capture real serving TTFT when exposed by `vllm bench serve` JSON.
 - [x] Capture p50 and p95 end-to-end latency.
-- [ ] Capture output token latency.
+- [x] Capture output token latency when exposed by `vllm bench serve` JSON.
 - [x] Capture requests per second.
 - [x] Capture error rate.
 - [ ] Capture BIFROST connector `put`, `get`, `exists`, and `list` counts.
@@ -84,18 +84,18 @@ Last verified: 2026-06-15
 
 ## Report generator
 
-- [ ] Include commit, dirty-tree status, and repository path.
+- [x] Include commit, dirty-tree status, and repository path.
 - [ ] Include Python, torch, vLLM, LMCache, connector, bifrostd, CUDA, and
   driver versions when available.
-- [ ] Include hardware and GPU details when available.
+- [x] Include hardware and GPU details when available.
 - [ ] Include model path or identifier and local-asset statement.
-- [ ] Include workload definition and request counts.
+- [x] Include workload definition and request counts.
 - [ ] Include all generated configs.
-- [ ] Include raw metrics file paths.
-- [ ] Include baseline comparison tables.
-- [ ] Include failures and skipped components.
-- [ ] Include environment readiness level.
-- [ ] Avoid speedup claims unless measured.
+- [x] Include raw metrics file paths.
+- [x] Include baseline comparison tables.
+- [x] Include failures and skipped components.
+- [x] Include environment readiness level.
+- [x] Avoid speedup claims unless measured.
 
 ## Fake CI workload
 
@@ -119,14 +119,14 @@ Last verified: 2026-06-15
 
 - [x] Require explicit opt-in.
 - [x] Require local model path.
-- [ ] Skip when vLLM is unavailable.
+- [x] Skip when vLLM bench CLI is unavailable.
 - [ ] Skip when LMCache is unavailable.
 - [ ] Skip when required GPU serving resources are unavailable.
 - [ ] Run vLLM-only baseline.
 - [ ] Run vLLM plus LMCache local or CPU storage baseline.
 - [ ] Run vLLM plus LMCache plus BIFROST variant.
 - [ ] Capture LMCache and BIFROST observations.
-- [ ] Report all skip and failure reasons.
+- [x] Report all skip and failure reasons.
 
 ## Optional two-instance cache-sharing experiment
 
@@ -145,7 +145,7 @@ Last verified: 2026-06-15
 - [x] Run report generation tests.
 - [x] Run config generation tests without importing vLLM or LMCache.
 - [ ] Keep real LMCache tests skipped unless explicitly enabled.
-- [ ] Keep real vLLM tests skipped unless explicitly enabled.
+- [x] Keep real vLLM tests skipped unless explicitly enabled.
 - [ ] Keep GPU tests skipped unless explicitly enabled.
 - [ ] Require no Hugging Face tokens, model downloads, Docker, root, internet,
   or external services.
@@ -160,14 +160,14 @@ Last verified: 2026-06-15
 - [ ] Environment doctor reports readiness levels and skip reasons.
 - [ ] Config generator covers all three baseline variants.
 - [ ] Fake serving workload runs in CI and emits a report.
-- [ ] Benchmark runner captures raw metrics and baseline separation.
+- [x] Benchmark runner captures raw metrics and baseline separation.
 - [ ] Metrics collectors include vLLM JSON, LMCache metrics when available,
   BIFROST connector counters, store stats, bytes, and fsck.
 - [ ] Correctness checks are strict when deterministic and advisory or skipped
   with reasons when not.
-- [ ] Report generator includes environment details, failures, skipped
+- [x] Report generator includes environment details, failures, skipped
   components, raw metrics, configs, and store health.
-- [ ] Optional real vLLM plus LMCache plus BIFROST run is documented, opt-in,
+- [x] Optional real vLLM plus LMCache plus BIFROST run is documented, opt-in,
   and skipped by default.
 - [ ] Optional two-instance cache-sharing experiment is opt-in and clearly
   labeled.

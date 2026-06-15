@@ -246,5 +246,130 @@ Dry run mode writes `orchestrator_manifest.json` with the exact commands that
 would be used and starts nothing. Non-dry-run mode also writes
 `orchestrator_final_status.json` after cleanup.
 
-Warmup/measured phase splitting and `vllm bench serve` JSON ingestion remain
-separate Phase 6 work items.
+Warmup/measured phase splitting remains a separate Phase 6 work item.
+
+## Optional `vllm bench serve` runner
+
+Phase 6 includes an optional wrapper around the upstream vLLM benchmark client:
+
+```bash
+python tools/bifrost_run_vllm_bench_serve.py \
+  --base-url http://127.0.0.1:8000 \
+  --endpoint /v1/completions \
+  --backend openai \
+  --result-dir runs/phase6-serving/vllm-bench \
+  --num-prompts 32 \
+  --request-rate 4 \
+  --max-concurrency 8 \
+  --metadata mode=vllm-only \
+  --dry-run \
+  --json
+```
+
+The wrapper lives in `bifrost_py/bifrost_serving/vllm_bench.py`. It detects:
+
+1. Whether the `vllm` CLI is on `PATH`.
+2. Whether `vllm bench serve --help` runs successfully.
+3. The vLLM CLI version when `vllm --version` reports one.
+4. The option names exposed by the installed `vllm bench serve` help text.
+
+Real execution is refused unless `--allow-real-vllm-bench` is passed or
+`BIFROST_RUN_VLLM_BENCH=1` is set. Dry runs and unavailable vLLM environments
+do not start a server, import vLLM, use GPU, download models, contact Hugging
+Face, or require LMCache.
+
+The command builder is help-text aware. It adds options such as `--backend`,
+`--base-url`, `--endpoint`, `--dataset-path`, `--dataset-name`,
+`--num-prompts`, `--request-rate`, `--max-concurrency`, `--save-result`,
+`--save-detailed`, `--result-dir`, `--result-filename`, and `--metadata` only
+when the installed vLLM help text advertises those flags. Unsupported options
+are recorded as warnings in `bifrost_vllm_bench_command.json`.
+
+Dataset handling is version-sensitive:
+
+1. If `--dataset-path` is provided and supported, the wrapper passes it through.
+2. If no dataset path is provided and the help text advertises a `random`
+   dataset, the wrapper uses `--dataset-name random`.
+3. If random datasets are not advertised but `--dataset-path` is supported,
+   the wrapper writes a small local synthetic ShareGPT-shaped dataset under the
+   result directory and passes that path.
+4. If no compatible dataset option is detected, the command is still recorded
+   with a warning so the run can be inspected instead of silently inventing an
+   unsupported invocation.
+
+Artifacts:
+
+1. `bifrost_vllm_bench_command.json`: availability, detected options, command,
+   warnings, expected result path, and synthetic dataset path when generated.
+2. `bifrost_vllm_bench_summary.json`: dry-run, skipped, completed, or failed
+   status plus parsed vLLM result data when available.
+3. The raw vLLM bench JSON file, usually the configured
+   `--result-filename`, is left in the result directory.
+
+This wrapper is a benchmark client integration only. It does not implement raw
+vLLM KVTransfer, does not start vLLM serving, and does not bypass LMCache for
+BIFROST-backed Phase 6 runs.
+
+## Baseline comparison runner
+
+The baseline comparison runner lives in `bifrost_py/bifrost_serving/compare.py`
+and is available through:
+
+```bash
+python tools/bifrost_compare_serving_baselines.py \
+  --workload-jsonl runs/workload.jsonl \
+  --output-dir runs/phase6-serving/compare \
+  --modes fake_no_cache \
+  --modes fake_with_cache \
+  --concurrency 4 \
+  --json
+```
+
+Supported mode labels are:
+
+1. `fake_no_cache`
+2. `fake_with_cache`
+3. `vllm_only`
+4. `vllm_lmcache_local`
+5. `vllm_lmcache_bifrost`
+
+The fake modes start isolated local fake OpenAI-compatible servers, run the
+existing serving benchmark runner against them, stop the servers, and preserve
+one run directory per mode. `fake_with_cache` enables repeated-prefix cache
+simulation; `fake_no_cache` does not.
+
+The real vLLM modes are opt-in. Unless `--allow-real-vllm` is passed, they are
+recorded as skipped in the comparison summary instead of failed. With
+`--allow-real-vllm`, the comparison runner assumes a compatible real serving
+endpoint is already reachable at `http://127.0.0.1:8000`; use the orchestrator
+or an equivalent manual setup to start the real stack before running the
+comparison. The `vllm_lmcache_bifrost` mode may collect BIFROST daemon stats
+when `--bifrost-endpoint HOST:PORT` is supplied.
+
+CLI inputs:
+
+1. `--workload-jsonl PATH`
+2. `--output-dir PATH`
+3. `--modes MODE`, repeatable
+4. `--concurrency N`
+5. `--request-rate N`, optional
+6. `--bifrost-endpoint HOST:PORT`, optional
+7. `--model MODEL_OR_PATH`, required only for opted-in real vLLM modes
+8. `--allow-real-vllm`
+9. `--json`
+
+Artifacts written:
+
+1. `comparison_summary.json`: machine-readable mode results, skipped reasons,
+   comparison deltas, cache-activity observations, notes, and artifact paths.
+2. `comparison_summary.md`: basic Markdown summary for quick inspection.
+3. `<mode>/summary.json`, `<mode>/raw_requests.jsonl`, `<mode>/config.json`,
+   and `<mode>/workload.jsonl` for completed modes.
+4. `<mode>/mode_result.json` for every requested mode, including skipped real
+   modes.
+
+The comparison uses the first completed mode as the baseline and compares every
+requested mode against it. Missing, skipped, failed, or incomplete modes do not
+become speedup evidence. The summary reports p50 latency deltas, p50 TTFT
+deltas when available, error-rate deltas, BIFROST stats deltas, whether cache
+activity was observed, notes, and skipped reasons.

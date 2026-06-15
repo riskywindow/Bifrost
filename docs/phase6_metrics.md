@@ -111,7 +111,13 @@ BIFROST connector observations as lower-level evidence.
 When `vllm bench serve` JSON is available, ingest it as raw input and preserve
 the original file in the run directory.
 
-The parser should extract:
+The optional integration lives in `bifrost_py/bifrost_serving/vllm_bench.py`
+and is exposed through `tools/bifrost_run_vllm_bench_serve.py`. It is defensive
+because vLLM benchmark JSON field names vary by version. The parser extracts
+fields by matching known metric name fragments and leaves absent fields as
+missing instead of inventing values.
+
+The parser extracts:
 
 1. TTFT fields.
 2. End-to-end latency fields.
@@ -123,6 +129,25 @@ The parser should extract:
 
 If a field is absent in the installed vLLM version, the derived report should
 mark it missing instead of inventing a value.
+
+The current ingestion summary schema is `bifrost.vllm_bench_serve_ingest.v1`
+and contains:
+
+1. `raw_result_path`
+2. `request_count`
+3. `throughput_rps`
+4. `token_throughput`
+5. `ttft`
+6. `latency`
+7. `output_token_latency`
+8. `error_count`
+9. `benchmark_args`
+10. `raw_top_level_keys`
+
+The optional run summary schema is `bifrost.vllm_bench_serve_run.v1`. It records
+availability, the exact command, return code, stdout and stderr tails, result
+ingestion status, and whether the run was `dry_run`, `skipped`, `completed`, or
+`failed`.
 
 ## Store health and fsck
 
@@ -174,3 +199,72 @@ operation counters such as `put_count`, `get_count`, `exists_count`, and
 `list_count` are included when a metrics source exposes those names; otherwise
 the field remains `null` and the report must say that connector metrics were
 unavailable.
+
+## Baseline comparison summary schema
+
+The Phase 6 comparison runner writes `comparison_summary.json` with schema
+version `bifrost.serving_baseline_comparison.v1`. The summary preserves:
+
+1. `mode_results`: one record per requested mode, with `completed`, `skipped`,
+   or `failed` status.
+2. `summary_path` and artifact paths for completed mode runs.
+3. `skip_reason` for skipped real vLLM modes or missing real-mode inputs.
+4. `comparisons`: derived comparisons against the first completed mode.
+5. `notes`: advisory statements about skipped, failed, or fake-only results.
+
+Each comparison includes:
+
+1. `baseline_mode`
+2. `candidate_mode`
+3. `latency_delta_ms` and `latency_delta_pct` from p50 end-to-end latency
+4. `ttft_delta_ms` and `ttft_delta_pct` from p50 TTFT when available
+5. `error_rate_delta`
+6. `bifrost_stats_delta` copied from the candidate run summary
+7. `cache_activity_observed`
+8. `notes`
+9. `skipped_reason`
+
+`cache_activity_observed` is true when a supported metrics source shows
+positive cache-shaped activity, such as fake backend cache hits or misses,
+connector operation counters, connector bytes, or BIFROST store/operation
+deltas. These observations are evidence that cache-related paths were
+exercised, not proof of an LMCache hit rate unless LMCache metrics are present.
+
+Skipped, failed, or missing modes are included in the JSON and Markdown output,
+but their deltas remain `null` and they must not be described as measured
+speedups.
+
+## Serving report artifacts
+
+The Phase 6 report generator reads a completed serving run directory and, when
+available, a baseline comparison directory:
+
+```text
+tools/bifrost_report_serving_benchmark.py \
+  --run-dir runs/phase6-serving/fake_with_cache \
+  --comparison-dir runs/phase6-serving-comparison \
+  --out runs/phase6-serving-report \
+  --format all
+```
+
+If `--out` is omitted, artifacts are written under
+`<run-dir>/serving_report/` so the runner's source `summary.json` is not
+overwritten. `--format` may be `markdown`, `json`, `csv`, or `all`.
+
+The generated artifacts are:
+
+1. `report.md`: human-readable report with environment, scenario, workload,
+   mode, latency, BIFROST activity, correctness, skipped component, and
+   limitation sections.
+2. `summary.json`: machine-readable report summary with schema version
+   `bifrost.serving_report.v1`.
+3. `per_request.csv`: flattened request metrics from `raw_requests.jsonl`.
+4. `comparison.csv`: flattened comparison deltas when
+   `comparison_summary.json` exists in `--comparison-dir`.
+
+The report generator is an artifact transformer. It does not start vLLM,
+LMCache, BIFROST, download models, inspect the network, or require GPU
+hardware. Missing TTFT, missing BIFROST stats, skipped real vLLM modes, and
+missing comparison inputs are rendered explicitly as unavailable, skipped, or
+not provided. It does not infer speedups unless comparison records contain both
+baseline and candidate metrics.
