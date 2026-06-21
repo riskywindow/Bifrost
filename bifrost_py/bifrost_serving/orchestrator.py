@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
 
+from .baseline_matrix import BaselineMode
 from .processes import (
     ManagedProcess,
     ProcessReadinessTimeout,
@@ -19,8 +20,16 @@ from .processes import (
     tcp_ready_check,
 )
 
-SCENARIOS = {"fake", "vllm-lmcache-bifrost", "vllm-only", "lmcache-local"}
-REAL_VLLM_SCENARIOS = {"vllm-lmcache-bifrost", "vllm-only", "lmcache-local"}
+SCENARIOS = {
+    "fake",
+    "vllm-lmcache-bifrost",
+    "vllm-only",
+    "lmcache-local",
+    BaselineMode.VLLM_ONLY.value,
+    BaselineMode.VLLM_LMCACHE_LOCAL_CPU.value,
+    BaselineMode.VLLM_LMCACHE_BIFROST.value,
+}
+REAL_VLLM_SCENARIOS = SCENARIOS - {"fake"}
 
 
 class OrchestratorError(RuntimeError):
@@ -125,9 +134,10 @@ def build_processes(config: OrchestratorConfig) -> list[ManagedProcess]:
     cwd = config.cwd or repo_root
     if config.scenario == "fake":
         return [_fake_openai_server(config, cwd)]
-    if config.scenario == "vllm-only":
+    scenario = _normalized_scenario(config.scenario)
+    if scenario == BaselineMode.VLLM_ONLY.value:
         return [_vllm_server(config, cwd, role="vllm_server", lmcache_mode=None)]
-    if config.scenario == "lmcache-local":
+    if scenario == BaselineMode.VLLM_LMCACHE_LOCAL_CPU.value:
         return [
             _vllm_server(
                 config,
@@ -136,7 +146,7 @@ def build_processes(config: OrchestratorConfig) -> list[ManagedProcess]:
                 lmcache_mode="local",
             )
         ]
-    if config.scenario == "vllm-lmcache-bifrost":
+    if scenario == BaselineMode.VLLM_LMCACHE_BIFROST.value:
         return [
             _bifrost_daemon(config, cwd),
             _lmcache_server(config, cwd),
@@ -305,9 +315,8 @@ def _vllm_server(
         "127.0.0.1",
         "--port",
         str(config.vllm_port),
+        "--no-enable-prefix-caching",
     ]
-    if lmcache_mode is not None:
-        command.append("--enable-prefix-caching")
     return ManagedProcess(
         name=role,
         command=command,
@@ -336,10 +345,24 @@ def _child_env(
     if config.model is not None:
         env["BIFROST_VLLM_MODEL"] = config.model
     if lmcache_mode == "bifrost":
-        env["LMCACHE_CONFIG_FILE"] = str(config.output_dir / "bifrost_lmcache_inprocess.yaml")
+        env["LMCACHE_CONFIG_FILE"] = str(
+            config.output_dir / BaselineMode.VLLM_LMCACHE_BIFROST.value / "lmcache_config.yaml"
+        )
     elif lmcache_mode == "local":
-        env["BIFROST_LMCACHE_MODE"] = "local"
+        env["LMCACHE_CONFIG_FILE"] = str(
+            config.output_dir / BaselineMode.VLLM_LMCACHE_LOCAL_CPU.value / "lmcache_config.yaml"
+        )
+        env["BIFROST_LMCACHE_MODE"] = "local_cpu"
     return env
+
+
+def _normalized_scenario(scenario: str) -> str:
+    aliases = {
+        "vllm-only": BaselineMode.VLLM_ONLY.value,
+        "lmcache-local": BaselineMode.VLLM_LMCACHE_LOCAL_CPU.value,
+        "vllm-lmcache-bifrost": BaselineMode.VLLM_LMCACHE_BIFROST.value,
+    }
+    return aliases.get(scenario, scenario)
 
 
 def _write_manifest(path: Path, data: dict[str, Any]) -> None:

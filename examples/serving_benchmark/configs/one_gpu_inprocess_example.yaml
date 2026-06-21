@@ -1,0 +1,54 @@
+# BIFROST Phase 6 optional real-serving example.
+# Mode: one GPU, vLLM with LMCache in-process, BIFROST remote storage backend.
+# Version-sensitive: verify LMCache and vLLM field names against installed packages.
+
+demo:
+  mode: one_gpu_inprocess
+  route: vLLM -> LMCache -> BIFROST remote storage connector -> bifrostd
+  raw_vllm_kvtransfer: false
+  opt_in_required:
+    cli_flag: --allow-real-vllm
+    environment: BIFROST_RUN_REAL_VLLM=1
+
+serving:
+  host: 127.0.0.1
+  vllm_port: 8000
+  model: /path/to/local/model
+  tensor_parallel_size: 1
+  gpu_memory_utilization: 0.80
+  max_model_len: 4096
+  allow_model_downloads: false
+
+bifrost:
+  endpoint: 127.0.0.1:7420
+  object_type: opaque_engine_blob
+  strict_validation: true
+  allow_pickle_fallback: false
+  metrics_jsonl_path: bifrost_lmcache_connector_metrics.jsonl
+
+lmcache:
+  mode: lmcache_inprocess
+  local_cpu: true
+  remote_storage_plugins:
+    - bifrost
+  remote_storage_plugin:
+    bifrost:
+      module_path: lmcache_bifrost.adapter
+      class_name: BifrostConnectorAdapter
+      extra_config:
+        endpoint: 127.0.0.1:7420
+        timeout_seconds: 5.0
+        strict_validation: true
+        allow_pickle_fallback: false
+        engine_name: lmcache
+        integration_name: lmcache_bifrost_remote_storage
+        object_type: opaque_engine_blob
+        metrics_jsonl_path: bifrost_lmcache_connector_metrics.jsonl
+  remote_url: bifrost://127.0.0.1:7420
+
+workload:
+  name: repeated_system_prompt
+  request_count: 8
+  prefix_repeat_groups: 2
+  max_tokens: 16
+  concurrency: 1

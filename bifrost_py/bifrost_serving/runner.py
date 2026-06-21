@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import json
 import shutil
 import sys
@@ -16,9 +15,20 @@ from pathlib import Path
 from typing import Any, Sequence
 from urllib.parse import urljoin
 
+from .collectors import BifrostMetricsCollector
 from .env_doctor import EnvDoctorConfig, run_doctor
 from .http_client import DEFAULT_COMPLETIONS_ENDPOINT, OpenAIClientConfig, OpenAICompatibleClient
-from .metrics import RequestMetricInput, output_token_count, stats_delta, summarize_request_metrics
+from .metrics import output_token_count, stats_delta, summarize_request_metrics
+from .phases import (
+    DEFAULT_PHASE_ORDER,
+    BenchmarkPhase,
+    PhaseResult,
+    build_phase_plans,
+    metric_input_from_row,
+    parse_phase_order,
+    phase_metrics,
+    validate_measured_aggregate,
+)
 from .request_schema import ServingRequest, read_jsonl
 from .workloads import summarize_workload
 
@@ -39,6 +49,14 @@ class ServingBenchmarkConfig:
     headers: dict[str, str] = field(default_factory=dict)
     bifrost_endpoint: str | None = None
     collect_bifrost_stats: bool = False
+    collect_bifrost_fsck: bool = False
+    bifrost_fsck_command: tuple[str, ...] = ()
+    connector_metrics_jsonl_path: Path | None = None
+    engine_warmup_requests: int = 0
+    population_requests_per_prefix: int = 0
+    measured_requests_per_prefix: int | None = None
+    phase_timeout_seconds: float | None = None
+    phase_order: tuple[BenchmarkPhase, ...] = DEFAULT_PHASE_ORDER
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,44 +89,95 @@ def run_serving_benchmark(config: ServingBenchmarkConfig) -> ServingBenchmarkRes
         )
     ).to_dict()
 
-    bifrost_before = collect_bifrost_stats(config)
-    backend_before = collect_backend_metrics(config)
-
     started_unix_s = time.time()
-    raw_results = _send_requests(config, requests)
+    plans = build_phase_plans(
+        requests,
+        engine_warmup_requests=config.engine_warmup_requests,
+        population_requests_per_prefix=config.population_requests_per_prefix,
+        measured_requests_per_prefix=config.measured_requests_per_prefix,
+        phase_timeout_seconds=config.phase_timeout_seconds,
+        phase_order=config.phase_order,
+    )
+    phase_results: list[PhaseResult] = []
+    raw_results: list[dict[str, Any]] = []
+    initial_bifrost = collect_bifrost_stats(config)
+    initial_backend = collect_backend_metrics(config)
+    final_bifrost = initial_bifrost
+    final_backend = initial_backend
+    for plan in plans:
+        phase_bifrost_before = collect_bifrost_stats(config)
+        phase_backend_before = collect_backend_metrics(config)
+        phase_started = time.time()
+        phase_rows = _send_requests(
+            config,
+            list(plan.requests),
+            phase=plan.phase,
+            timeout_seconds=plan.timeout_seconds,
+        )
+        phase_ended = time.time()
+        phase_bifrost_after = collect_bifrost_stats(config)
+        phase_backend_after = collect_backend_metrics(config)
+        final_bifrost = phase_bifrost_after
+        final_backend = phase_backend_after
+        phase_results.append(
+            PhaseResult(
+                phase=plan.phase,
+                requests=tuple(plan.requests),
+                raw_results=tuple(phase_rows),
+                started_unix_s=phase_started,
+                ended_unix_s=phase_ended,
+                metrics=phase_metrics(
+                    plan.phase,
+                    list(plan.requests),
+                    phase_rows,
+                    started_unix_s=phase_started,
+                    ended_unix_s=phase_ended,
+                ),
+                bifrost_stats_before=phase_bifrost_before,
+                bifrost_stats_after=phase_bifrost_after,
+                backend_metrics_before=phase_backend_before,
+                backend_metrics_after=phase_backend_after,
+            )
+        )
+        raw_results.extend(phase_rows)
     ended_unix_s = time.time()
-
-    bifrost_after = collect_bifrost_stats(config)
-    backend_after = collect_backend_metrics(config)
 
     raw_requests_path = output_dir / "raw_requests.jsonl"
     _write_raw_requests(raw_requests_path, raw_results)
 
+    measured_result = _required_phase_result(phase_results, BenchmarkPhase.MEASURED)
+    measured_rows = list(measured_result.raw_results)
+    measured_requests = list(measured_result.requests)
     metric_inputs = [
-        RequestMetricInput(
-            request_id=str(row["request_id"]),
-            status=row["status"],
-            latency_ms=float(row["latency_ms"]),
-            ttft_ms=row["ttft_ms"],
-            output_token_count=row["output_token_count"],
-            error=row["error"],
-        )
-        for row in raw_results
+        metric_input_from_row(row)
+        for row in measured_rows
     ]
     summary_metrics = summarize_request_metrics(
-        requests,
+        measured_requests,
         metric_inputs,
-        started_unix_s=started_unix_s,
-        ended_unix_s=ended_unix_s,
-        bifrost_stats_before=_stats_values(bifrost_before),
-        bifrost_stats_after=_stats_values(bifrost_after),
+        started_unix_s=measured_result.started_unix_s,
+        ended_unix_s=measured_result.ended_unix_s,
+        bifrost_stats_before=_stats_values(initial_bifrost),
+        bifrost_stats_after=_stats_values(final_bifrost),
+        connector_metrics_before=_connector_stats(initial_bifrost),
+        connector_metrics_after=_connector_stats(final_bifrost),
     )
+    summary_metrics["phase"] = BenchmarkPhase.MEASURED.value
+    validate_measured_aggregate(raw_results, summary_metrics)
     workload_summary = summarize_workload(requests)
     workload_summary["max_tokens_values"] = sorted({request.max_tokens for request in requests})
     summary: dict[str, Any] = {
         **summary_metrics,
         "label": config.label,
         "backend": config.backend,
+        "connector_metrics_source": _snapshot_value(
+            final_backend,
+            "connector_metrics_source",
+        ),
+        "performance_metrics_source": _snapshot_value(
+            final_backend,
+            "performance_metrics_source",
+        ),
         "base_url": config.base_url,
         "endpoint": config.endpoint,
         "started_unix_s": started_unix_s,
@@ -118,15 +187,27 @@ def run_serving_benchmark(config: ServingBenchmarkConfig) -> ServingBenchmarkRes
         "raw_requests_path": str(raw_requests_path),
         "environment_doctor": doctor_report,
         "workload_summary": workload_summary,
+        "phase_order": [phase.value for phase in config.phase_order],
+        "phase_timeout_seconds": config.phase_timeout_seconds,
+        "phase_sections": {
+            result.phase.value: _phase_summary(result)
+            for result in phase_results
+        },
+        "phase_validation": {
+            "status": "ok",
+            "top_level_metrics_source": BenchmarkPhase.MEASURED.value,
+            "non_measured_raw_request_count": len(raw_results) - len(measured_rows),
+            "measured_raw_request_count": len(measured_rows),
+        },
         "bifrost_stats": {
-            "before": bifrost_before,
-            "after": bifrost_after,
+            "before": initial_bifrost,
+            "after": final_bifrost,
             "delta": summary_metrics["bifrost_stats_delta"],
         },
         "backend_metrics": {
-            "before": backend_before,
-            "after": backend_after,
-            "delta": stats_delta(_stats_values(backend_before), _stats_values(backend_after)),
+            "before": initial_backend,
+            "after": final_backend,
+            "delta": stats_delta(_stats_values(initial_backend), _stats_values(final_backend)),
         },
     }
 
@@ -147,30 +228,13 @@ def collect_bifrost_stats(config: ServingBenchmarkConfig) -> dict[str, Any]:
         return {"status": "skipped", "reason": "collect_bifrost_stats is false"}
     if not config.bifrost_endpoint:
         return {"status": "skipped", "reason": "bifrost_endpoint was not provided"}
-    try:
-        from bifrost_client import BifrostClient, BifrostClientConfig
-
-        client = BifrostClient(
-            config=BifrostClientConfig(
-                endpoint=config.bifrost_endpoint,
-                timeout_seconds=min(config.timeout_seconds, 5.0),
-            )
-        )
-        try:
-            client.connect()
-            return {
-                "status": "ok",
-                "endpoint": config.bifrost_endpoint,
-                "stats": dataclasses.asdict(client.stats()),
-            }
-        finally:
-            client.close()
-    except Exception as exc:
-        return {
-            "status": "error",
-            "endpoint": config.bifrost_endpoint,
-            "reason": str(exc),
-        }
+    return BifrostMetricsCollector(
+        endpoint=config.bifrost_endpoint,
+        timeout_seconds=min(config.timeout_seconds, 5.0),
+        collect_fsck=config.collect_bifrost_fsck,
+        fsck_command=list(config.bifrost_fsck_command) if config.bifrost_fsck_command else None,
+        connector_metrics_jsonl_path=config.connector_metrics_jsonl_path,
+    ).snapshot()
 
 
 def collect_backend_metrics(config: ServingBenchmarkConfig) -> dict[str, Any]:
@@ -206,6 +270,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         choices=("true", "false"),
         default="false",
     )
+    parser.add_argument(
+        "--collect-bifrost-fsck",
+        choices=("true", "false"),
+        default="false",
+    )
+    parser.add_argument("--bifrost-fsck-command", action="append", default=[])
+    parser.add_argument("--connector-metrics-jsonl-path", type=Path, default=None)
+    parser.add_argument("--engine-warmup-requests", type=int, default=0)
+    parser.add_argument("--population-requests-per-prefix", type=int, default=0)
+    parser.add_argument("--measured-requests-per-prefix", type=int, default=None)
+    parser.add_argument("--phase-timeout-seconds", type=float, default=None)
+    parser.add_argument(
+        "--phase-order",
+        default="engine_warmup,cache_population,measured",
+    )
     parser.add_argument("--json", action="store_true")
     try:
         args = parser.parse_args(argv)
@@ -222,6 +301,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             headers=_parse_headers(args.headers),
             bifrost_endpoint=args.bifrost_endpoint,
             collect_bifrost_stats=args.collect_bifrost_stats == "true",
+            collect_bifrost_fsck=args.collect_bifrost_fsck == "true",
+            bifrost_fsck_command=tuple(args.bifrost_fsck_command),
+            connector_metrics_jsonl_path=args.connector_metrics_jsonl_path,
+            engine_warmup_requests=args.engine_warmup_requests,
+            population_requests_per_prefix=args.population_requests_per_prefix,
+            measured_requests_per_prefix=args.measured_requests_per_prefix,
+            phase_timeout_seconds=args.phase_timeout_seconds,
+            phase_order=parse_phase_order(args.phase_order),
         )
         result = run_serving_benchmark(config)
         if args.json:
@@ -242,12 +329,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _send_requests(
     config: ServingBenchmarkConfig,
     requests: list[ServingRequest],
+    *,
+    phase: BenchmarkPhase,
+    timeout_seconds: float | None = None,
 ) -> list[dict[str, Any]]:
+    if not requests:
+        return []
     client = OpenAICompatibleClient(
         OpenAIClientConfig(
             base_url=config.base_url,
             endpoint=config.endpoint,
-            timeout_s=config.timeout_seconds,
+            timeout_s=timeout_seconds or config.timeout_seconds,
             concurrency=config.concurrency,
             headers=config.headers,
         )
@@ -255,10 +347,13 @@ def _send_requests(
     results: list[dict[str, Any] | None] = [None] * len(requests)
     with ThreadPoolExecutor(max_workers=config.concurrency) as executor:
         future_to_index: dict[Future[Any], int] = {}
+        future_started_at: dict[Future[Any], float] = {}
         for index, request in enumerate(requests):
             if config.request_rate is not None and index > 0:
                 time.sleep(1.0 / config.request_rate)
-            future_to_index[executor.submit(client.send, request)] = index
+            future = executor.submit(client.send, request)
+            future_to_index[future] = index
+            future_started_at[future] = time.perf_counter()
         for future in as_completed(future_to_index):
             index = future_to_index[future]
             request = requests[index]
@@ -267,11 +362,21 @@ def _send_requests(
             except Exception as exc:
                 now = time.perf_counter()
                 response = None
-                row = _request_error_row(request, str(exc), now)
+                row = _request_error_row(
+                    request,
+                    str(exc),
+                    started_at=future_started_at.get(future, now),
+                    ended_at=now,
+                    phase=phase,
+                )
             else:
                 row = {
                     "request_id": request.request_id,
+                    "phase": phase.value,
                     "metadata": request.metadata.to_dict(),
+                    "prefix_id": request.metadata.prefix_id,
+                    "repeat_group": request.metadata.repeat_group,
+                    "expected_cache_reuse": request.metadata.expected_cache_reuse,
                     "status": response.status_code,
                     "latency_ms": response.latency_s * 1000.0,
                     "ttft_ms": response.ttft_s * 1000.0 if response.ttft_s is not None else None,
@@ -297,14 +402,20 @@ def _send_requests(
 def _request_error_row(
     request: ServingRequest,
     error: str,
-    now: float,
+    *,
+    started_at: float,
+    ended_at: float,
+    phase: BenchmarkPhase = BenchmarkPhase.MEASURED,
 ) -> dict[str, Any]:
-    del now
     return {
         "request_id": request.request_id,
+        "phase": phase.value,
         "metadata": request.metadata.to_dict(),
+        "prefix_id": request.metadata.prefix_id,
+        "repeat_group": request.metadata.repeat_group,
+        "expected_cache_reuse": request.metadata.expected_cache_reuse,
         "status": None,
-        "latency_ms": 0.0,
+        "latency_ms": max(0.0, (ended_at - started_at) * 1000.0),
         "ttft_ms": None,
         "output_token_count": None,
         "error": error,
@@ -318,6 +429,29 @@ def _write_raw_requests(path: Path, rows: list[dict[str, Any]]) -> None:
         for row in rows:
             handle.write(json.dumps(row, sort_keys=True, separators=(",", ":")))
             handle.write("\n")
+
+
+def _required_phase_result(
+    phase_results: list[PhaseResult],
+    phase: BenchmarkPhase,
+) -> PhaseResult:
+    for result in phase_results:
+        if result.phase == phase:
+            return result
+    raise ValueError(f"benchmark phase did not run: {phase.value}")
+
+
+def _phase_summary(result: PhaseResult) -> dict[str, Any]:
+    summary = result.to_summary_dict()
+    summary["bifrost_stats"]["delta"] = stats_delta(
+        _stats_values(result.bifrost_stats_before),
+        _stats_values(result.bifrost_stats_after),
+    )
+    summary["backend_metrics"]["delta"] = stats_delta(
+        _stats_values(result.backend_metrics_before),
+        _stats_values(result.backend_metrics_after),
+    )
+    return summary
 
 
 def _write_json(path: Path, value: dict[str, Any]) -> None:
@@ -337,9 +471,21 @@ def _config_snapshot(config: ServingBenchmarkConfig) -> dict[str, Any]:
         "timeout_seconds": config.timeout_seconds,
         "output_dir": str(config.output_dir),
         "label": config.label,
-        "headers": dict(config.headers),
+        "headers": _redact_headers(config.headers),
         "bifrost_endpoint": config.bifrost_endpoint,
         "collect_bifrost_stats": config.collect_bifrost_stats,
+        "collect_bifrost_fsck": config.collect_bifrost_fsck,
+        "bifrost_fsck_command": list(config.bifrost_fsck_command),
+        "connector_metrics_jsonl_path": (
+            str(config.connector_metrics_jsonl_path)
+            if config.connector_metrics_jsonl_path
+            else None
+        ),
+        "engine_warmup_requests": config.engine_warmup_requests,
+        "population_requests_per_prefix": config.population_requests_per_prefix,
+        "measured_requests_per_prefix": config.measured_requests_per_prefix,
+        "phase_timeout_seconds": config.phase_timeout_seconds,
+        "phase_order": [phase.value for phase in config.phase_order],
     }
 
 
@@ -347,6 +493,25 @@ def _stats_values(snapshot: dict[str, Any] | None) -> dict[str, Any] | None:
     if not snapshot or snapshot.get("status") != "ok":
         return None
     stats = snapshot.get("stats")
+    return stats if isinstance(stats, dict) else None
+
+
+def _snapshot_value(snapshot: dict[str, Any] | None, key: str) -> Any:
+    if not isinstance(snapshot, dict):
+        return None
+    stats = snapshot.get("stats")
+    if isinstance(stats, dict) and key in stats:
+        return stats[key]
+    return snapshot.get(key)
+
+
+def _connector_stats(snapshot: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(snapshot, dict) or snapshot.get("status") != "ok":
+        return None
+    connector = snapshot.get("connector_metrics")
+    if not isinstance(connector, dict) or connector.get("status") != "ok":
+        return None
+    stats = connector.get("stats")
     return stats if isinstance(stats, dict) else None
 
 
@@ -362,6 +527,18 @@ def _parse_headers(values: list[str]) -> dict[str, str]:
     return headers
 
 
+def _redact_headers(headers: dict[str, str]) -> dict[str, str]:
+    sensitive_fragments = ("authorization", "token", "api-key", "apikey", "secret", "cookie")
+    redacted: dict[str, str] = {}
+    for key, value in headers.items():
+        lowered = key.lower()
+        if any(fragment in lowered for fragment in sensitive_fragments):
+            redacted[key] = "<redacted>"
+        else:
+            redacted[key] = value
+    return redacted
+
+
 def _validate_config(config: ServingBenchmarkConfig) -> None:
     if config.backend not in BACKENDS:
         raise ValueError(f"unsupported backend: {config.backend}")
@@ -373,6 +550,15 @@ def _validate_config(config: ServingBenchmarkConfig) -> None:
         raise ValueError("request_rate must be positive when provided")
     if not config.workload_jsonl.exists():
         raise ValueError(f"workload JSONL does not exist: {config.workload_jsonl}")
+    if config.engine_warmup_requests < 0:
+        raise ValueError("engine_warmup_requests must be non-negative")
+    if config.population_requests_per_prefix < 0:
+        raise ValueError("population_requests_per_prefix must be non-negative")
+    if config.measured_requests_per_prefix is not None and config.measured_requests_per_prefix <= 0:
+        raise ValueError("measured_requests_per_prefix must be positive when provided")
+    if config.phase_timeout_seconds is not None and config.phase_timeout_seconds <= 0:
+        raise ValueError("phase_timeout_seconds must be positive when provided")
+    parse_phase_order(config.phase_order)
 
 
 __all__ = [
@@ -381,5 +567,6 @@ __all__ = [
     "collect_backend_metrics",
     "collect_bifrost_stats",
     "main",
+    "parse_phase_order",
     "run_serving_benchmark",
 ]

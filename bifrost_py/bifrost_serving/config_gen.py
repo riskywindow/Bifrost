@@ -14,6 +14,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
+from .baseline_matrix import (
+    BaselineMatrix,
+    GeneratedConfigBundle,
+    generate_baseline_matrix_configs,
+)
+
 SUPPORTED_MODES = {
     "fake",
     "lmcache_inprocess",
@@ -53,6 +59,16 @@ class GeneratedServingConfig:
     output_dir: Path
     files: dict[str, Path] = field(default_factory=dict)
     warnings: tuple[str, ...] = ()
+
+
+def generate_phase6_baseline_matrix(
+    matrix: BaselineMatrix,
+    *,
+    dry_run: bool = False,
+) -> GeneratedConfigBundle:
+    """Generate the first-class Phase 6 three-baseline serving matrix."""
+
+    return generate_baseline_matrix_configs(matrix, dry_run=dry_run)
 
 
 def normalize_mode(mode: str) -> str:

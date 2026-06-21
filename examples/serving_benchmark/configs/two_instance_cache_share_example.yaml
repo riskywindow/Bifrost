@@ -1,0 +1,88 @@
+# BIFROST Phase 6 optional real-serving example.
+# Mode: two sequential vLLM instances sharing LMCache remote storage through BIFROST.
+# Version-sensitive: verify LMCache and vLLM field names against installed packages.
+
+demo:
+  mode: two_instance_cache_share
+  route: vLLM -> LMCache -> BIFROST remote storage connector -> bifrostd
+  raw_vllm_kvtransfer: false
+  phase6_hard_requirement: false
+  opt_in_required:
+    cli_flag: --allow-real-vllm
+    environment: BIFROST_RUN_REAL_VLLM=1
+
+serving:
+  host: 127.0.0.1
+  model: /path/to/local/model
+  allow_model_downloads: false
+  multi_gpu_required: false
+  execution_order:
+    - instance_a_populate
+    - instance_b_probe
+  instance_a:
+    vllm_port: 8010
+    lmcache_port: 9010
+    role: populate_repeated_prefix_cache
+  instance_b:
+    vllm_port: 8011
+    lmcache_port: 9011
+    role: probe_shared_remote_cache
+
+bifrost:
+  endpoint: 127.0.0.1:7420
+  shared_for_instances:
+    - instance_a
+    - instance_b
+  object_type: opaque_engine_blob
+  strict_validation: true
+  allow_pickle_fallback: false
+  collect_stats:
+    - before_instance_a
+    - after_instance_a
+    - before_instance_b
+    - after_instance_b
+
+lmcache:
+  mode: lmcache_inprocess_or_version_supported_mp
+  local_cpu: true
+  remote_storage_plugins:
+    - bifrost
+  remote_storage_plugin:
+    bifrost:
+      module_path: lmcache_bifrost.adapter
+      class_name: BifrostConnectorAdapter
+      extra_config:
+        endpoint: 127.0.0.1:7420
+        timeout_seconds: 5.0
+        strict_validation: true
+        allow_pickle_fallback: false
+        engine_name: lmcache
+        integration_name: lmcache_bifrost_remote_storage
+        object_type: opaque_engine_blob
+        metrics_jsonl_path: bifrost_lmcache_connector_metrics.jsonl
+  remote_url: bifrost://127.0.0.1:7420
+
+workload:
+  instance_a:
+    name: repeated_system_prompt
+    request_count: 8
+    prefix_repeat_groups: 2
+    max_tokens: 16
+    concurrency: 1
+  instance_b:
+    name: repeated_system_prompt
+    relationship_to_instance_a: same_repeated_prefixes
+    request_count: 8
+    prefix_repeat_groups: 2
+    max_tokens: 16
+    concurrency: 1
+
+comparison:
+  measured:
+    - bifrost_object_count_delta_after_instance_a
+    - bifrost_get_activity_during_instance_b
+    - instance_b_minus_instance_a_latency_when_measurable
+  interpretation:
+    speedup_claims_require_same_report: true
+    missing_get_activity_is_not_a_correctness_failure: true
+    inconclusive_results_must_be_reported_directly: true
