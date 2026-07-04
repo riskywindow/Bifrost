@@ -38,6 +38,7 @@ usage: vllm bench serve
   --dataset-name {sharegpt,random}
   --dataset-path DATASET_PATH
   --num-prompts NUM_PROMPTS
+  --num-warmups NUM_WARMUPS
   --request-rate REQUEST_RATE
   --max-concurrency MAX_CONCURRENCY
   --save-result
@@ -58,6 +59,7 @@ def test_dry_run_builds_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
             result_dir=tmp_path,
             backend="openai-chat",
             num_prompts=12,
+            num_warmups=3,
             request_rate=2.5,
             max_concurrency=4,
             metadata={"mode": "vllm-only", "run": "test"},
@@ -72,6 +74,7 @@ def test_dry_run_builds_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert _arg_value(command, "--endpoint") == "/v1/chat/completions"
     assert _arg_value(command, "--dataset-name") == "random"
     assert _arg_value(command, "--num-prompts") == "12"
+    assert _arg_value(command, "--num-warmups") == "3"
     assert _arg_value(command, "--request-rate") == "2.5"
     assert _arg_value(command, "--max-concurrency") == "4"
     assert "--save-result" in command

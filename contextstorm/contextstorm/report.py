@@ -12,6 +12,10 @@ def write_report(run_dir: Path) -> tuple[Path, Path]:
     if not run_path.exists():
         raise FileNotFoundError(f"missing run artifact: {run_path}")
     run = json.loads(run_path.read_text())
+    if run.get("benchmark_kind") == "serving":
+        from .serve_report import write_serving_report
+
+        return write_serving_report(run_dir)
     if run.get("benchmark_kind") == "lmcache":
         from .lmcache_report import write_lmcache_report
 

@@ -14,6 +14,7 @@ for source_path in (
     if text not in sys.path:
         sys.path.insert(0, text)
 
+import bifrost_serving.runner as serving_runner
 from bifrost_serving.fake_server import FakeOpenAIServerConfig, create_server
 from bifrost_serving.metrics import RequestMetricInput, summarize_request_metrics
 from bifrost_serving.request_schema import RequestMetadata, ServingRequest, read_jsonl, write_jsonl
@@ -78,6 +79,10 @@ def test_runner_works_against_fake_server_and_writes_artifacts(tmp_path: Path) -
         )
         assert raw_first["request_id"] == workload.requests[0].request_id
         assert raw_first["metadata"]["prefix_id"] == workload.requests[0].metadata.prefix_id
+        assert (
+            raw_first["response_json"]["bifrost_fake"]["prefix_id"]
+            == workload.requests[0].metadata.prefix_id
+        )
         assert raw_first["output_token_count"] == 3
     finally:
         server.shutdown()
@@ -159,6 +164,76 @@ def test_bifrost_stats_collection_skips_or_errors_cleanly(tmp_path: Path) -> Non
         assert absent["request_count"] == 1
     finally:
         server.shutdown()
+
+
+def test_runner_redacts_sensitive_headers_in_config(tmp_path: Path) -> None:
+    server = create_server(FakeOpenAIServerConfig(port=0))
+    server.start_in_thread()
+    try:
+        workload = generate_workload(WorkloadConfig(request_count=1, seed=15))
+        workload_path = tmp_path / "workload.jsonl"
+        write_workload(workload, out=workload_path)
+
+        result = run_serving_benchmark(
+            ServingBenchmarkConfig(
+                workload_jsonl=workload_path,
+                base_url=server.base_url,
+                backend="fake",
+                concurrency=1,
+                timeout_seconds=5,
+                output_dir=tmp_path / "run",
+                label="headers",
+                headers={
+                    "Authorization": "Bearer should-not-be-written",
+                    "X-Test": "visible",
+                },
+            )
+        )
+
+        config = json.loads(result.config_path.read_text(encoding="utf-8"))
+        assert config["headers"]["Authorization"] == "<redacted>"
+        assert config["headers"]["X-Test"] == "visible"
+        assert "should-not-be-written" not in result.config_path.read_text(encoding="utf-8")
+    finally:
+        server.shutdown()
+
+
+def test_runner_records_elapsed_latency_for_unexpected_client_exception(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class RaisingClient:
+        def __init__(self, _config) -> None:
+            pass
+
+        def send(self, _request):
+            raise RuntimeError("synthetic client failure")
+
+    monkeypatch.setattr(serving_runner, "OpenAICompatibleClient", RaisingClient)
+    workload = generate_workload(WorkloadConfig(request_count=1, seed=16))
+    workload_path = tmp_path / "workload.jsonl"
+    write_workload(workload, out=workload_path)
+
+    result = run_serving_benchmark(
+        ServingBenchmarkConfig(
+            workload_jsonl=workload_path,
+            base_url="http://127.0.0.1:1",
+            backend="fake",
+            concurrency=1,
+            timeout_seconds=1,
+            output_dir=tmp_path / "run",
+            label="client-exception",
+        )
+    )
+
+    rows = [
+        json.loads(line)
+        for line in result.raw_requests_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert result.summary["error_count"] == 1
+    assert rows[0]["status"] is None
+    assert rows[0]["latency_ms"] >= 0
+    assert "synthetic client failure" in rows[0]["error"]
 
 
 def test_summary_metrics_are_correct_for_known_values() -> None:

@@ -11,6 +11,9 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+from .cache_backend import CacheBackend
+from .fake_cache_backends import LocalMemoryCacheBackend, NoCacheBackend, fake_memory_obj_payload
+
 
 @dataclass(slots=True)
 class FakeOpenAIServerConfig:
@@ -21,6 +24,7 @@ class FakeOpenAIServerConfig:
     cache_hit_delay_ms: float = 0.0
     per_token_delay_ms: float = 0.0
     model: str = "bifrost-fake-model"
+    cache_backend: CacheBackend | None = None
 
 
 @dataclass(slots=True)
@@ -52,6 +56,12 @@ class FakeOpenAIServer:
     def __init__(self, config: FakeOpenAIServerConfig) -> None:
         self.config = config
         self.metrics = FakeOpenAIMetrics()
+        if config.cache_backend is not None:
+            self.cache_backend = config.cache_backend
+        elif config.simulate_cache:
+            self.cache_backend = LocalMemoryCacheBackend()
+        else:
+            self.cache_backend = NoCacheBackend()
         self.lock = threading.Lock()
         handler = _make_handler(self)
         self.httpd = ThreadingHTTPServer((config.host, config.port), handler)
@@ -77,6 +87,10 @@ class FakeOpenAIServer:
         self.thread.start()
 
     def shutdown(self) -> None:
+        try:
+            _run_async(self.cache_backend.close())
+        except Exception:
+            pass
         self.httpd.shutdown()
         self.httpd.server_close()
         if self.thread is not None:
@@ -125,6 +139,16 @@ def _make_handler(server: FakeOpenAIServer) -> type[BaseHTTPRequestHandler]:
             if self.path == "/metrics":
                 with server.lock:
                     metrics = server.metrics.to_dict()
+                backend = server.cache_backend.metrics_snapshot()
+                metrics["cache_backend"] = backend.get("cache_backend")
+                metrics["connector_metrics_source"] = backend.get("connector_metrics_source")
+                metrics["performance_metrics_source"] = backend.get("performance_metrics_source")
+                metrics["backend_metrics"] = backend
+                stats = backend.get("stats")
+                if isinstance(stats, dict):
+                    for key, value in stats.items():
+                        if isinstance(value, (int, float)) and not isinstance(value, bool):
+                            metrics.setdefault(key, value)
                 self._write_json(HTTPStatus.OK, metrics)
                 return
             self._write_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
@@ -142,13 +166,37 @@ def _make_handler(server: FakeOpenAIServer) -> type[BaseHTTPRequestHandler]:
                 prefix_id = _prefix_id(payload)
                 max_tokens = max(1, int(payload.get("max_tokens", 16)))
                 is_chat = self.path == "/v1/chat/completions"
-                cache_hit = self._record_request(prefix_id, is_chat=is_chat)
+                cached = _run_async(server.cache_backend.lookup(prefix_id))
+                cache_hit = cached is not None
+                expected_cache_payload = _fake_memory_payload(prefix_id)
+                cache_payload = fake_memory_obj_payload(cached) if cached is not None else None
+                cache_payload_matches = (
+                    cache_payload == expected_cache_payload if cached is not None else None
+                )
+                if not cache_hit:
+                    _run_async(
+                        server.cache_backend.store(
+                            prefix_id,
+                            expected_cache_payload,
+                        )
+                    )
+                backend_metrics = server.cache_backend.metrics_snapshot()
+                connector_metrics_source = backend_metrics.get("connector_metrics_source")
+                cache_hit = self._record_request(prefix_id, is_chat=is_chat, cache_hit=cache_hit)
                 _sleep_for_request(server.config, cache_hit=cache_hit, max_tokens=max_tokens)
                 text = _deterministic_text(payload, prefix_id=prefix_id, max_tokens=max_tokens)
                 with server.lock:
                     server.metrics.output_tokens += max_tokens
                 if is_chat:
-                    body = _chat_response(server.config.model, text, max_tokens, cache_hit, prefix_id)
+                    body = _chat_response(
+                        server.config.model,
+                        text,
+                        max_tokens,
+                        cache_hit,
+                        prefix_id,
+                        cache_payload_matches,
+                        connector_metrics_source,
+                    )
                 else:
                     body = _completion_response(
                         server.config.model,
@@ -156,6 +204,8 @@ def _make_handler(server: FakeOpenAIServer) -> type[BaseHTTPRequestHandler]:
                         max_tokens,
                         cache_hit,
                         prefix_id,
+                        cache_payload_matches,
+                        connector_metrics_source,
                     )
                 self._write_json(HTTPStatus.OK, body)
             except Exception as exc:  # deterministic fake failure path for tests.
@@ -184,7 +234,7 @@ def _make_handler(server: FakeOpenAIServer) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(encoded)
 
-        def _record_request(self, prefix_id: str, *, is_chat: bool) -> bool:
+        def _record_request(self, prefix_id: str, *, is_chat: bool, cache_hit: bool) -> bool:
             with server.lock:
                 metrics = server.metrics
                 metrics.requests += 1
@@ -192,13 +242,13 @@ def _make_handler(server: FakeOpenAIServer) -> type[BaseHTTPRequestHandler]:
                     metrics.chat_completions += 1
                 else:
                     metrics.completions += 1
-                cache_hit = server.config.simulate_cache and prefix_id in metrics.seen_prefixes
-                if server.config.simulate_cache:
+                backend_name = server.cache_backend.metrics_snapshot().get("cache_backend")
+                if backend_name != "none":
                     if cache_hit:
                         metrics.cache_hits += 1
                     else:
                         metrics.cache_misses += 1
-                        metrics.seen_prefixes.add(prefix_id)
+                metrics.seen_prefixes.add(prefix_id)
                 return cache_hit
 
         def _record_error(self) -> None:
@@ -243,6 +293,16 @@ def _sleep_for_request(
         time.sleep(delay_ms / 1000.0)
 
 
+def _fake_memory_payload(prefix_id: str) -> bytes:
+    return f"phase6-fake-memory-obj:{prefix_id}".encode("utf-8")
+
+
+def _run_async(awaitable: Any) -> Any:
+    import asyncio
+
+    return asyncio.run(awaitable)
+
+
 def _deterministic_text(payload: dict[str, Any], *, prefix_id: str, max_tokens: int) -> str:
     source = payload.get("prompt")
     if not isinstance(source, str):
@@ -262,6 +322,8 @@ def _completion_response(
     max_tokens: int,
     cache_hit: bool,
     prefix_id: str,
+    cache_payload_matches: bool | None,
+    connector_metrics_source: object,
 ) -> dict[str, Any]:
     return {
         "id": f"cmpl-bifrost-fake-{prefix_id}",
@@ -270,7 +332,13 @@ def _completion_response(
         "model": model,
         "choices": [{"index": 0, "text": text, "finish_reason": "length"}],
         "usage": {"prompt_tokens": 0, "completion_tokens": max_tokens, "total_tokens": max_tokens},
-        "bifrost_fake": {"cache_hit": cache_hit, "prefix_id": prefix_id},
+        "bifrost_fake": {
+            "cache_hit": cache_hit,
+            "prefix_id": prefix_id,
+            "cache_payload_matches": cache_payload_matches,
+            "connector_metrics_source": connector_metrics_source,
+            "performance_metrics_source": "synthetic_fake_server",
+        },
     }
 
 
@@ -280,6 +348,8 @@ def _chat_response(
     max_tokens: int,
     cache_hit: bool,
     prefix_id: str,
+    cache_payload_matches: bool | None,
+    connector_metrics_source: object,
 ) -> dict[str, Any]:
     return {
         "id": f"chatcmpl-bifrost-fake-{prefix_id}",
@@ -294,7 +364,13 @@ def _chat_response(
             }
         ],
         "usage": {"prompt_tokens": 0, "completion_tokens": max_tokens, "total_tokens": max_tokens},
-        "bifrost_fake": {"cache_hit": cache_hit, "prefix_id": prefix_id},
+        "bifrost_fake": {
+            "cache_hit": cache_hit,
+            "prefix_id": prefix_id,
+            "cache_payload_matches": cache_payload_matches,
+            "connector_metrics_source": connector_metrics_source,
+            "performance_metrics_source": "synthetic_fake_server",
+        },
     }
 
 

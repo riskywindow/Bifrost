@@ -1,0 +1,46 @@
+{
+  "bifrost_enabled": false,
+  "command": [
+    "vllm",
+    "serve",
+    "./local-model",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "8000",
+    "--served-model-name",
+    "bifrost-phase6-local",
+    "--dtype",
+    "auto",
+    "--max-model-len",
+    "4096",
+    "--tensor-parallel-size",
+    "1",
+    "--gpu-memory-utilization",
+    "0.9",
+    "--no-enable-chunked-prefill",
+    "--no-enable-prefix-caching"
+  ],
+  "env": {
+    "BIFROST_PHASE6_BASELINE_MODE": "vllm_only",
+    "BIFROST_VLLM_MODEL": "./local-model",
+    "BIFROST_VLLM_PORT": "8000"
+  },
+  "lmcache_enabled": false,
+  "mode": "vllm_only",
+  "notes": [
+    "Optional real-serving command; do not run unless explicitly opted in.",
+    "Model must be available locally; this command must not trigger downloads by default."
+  ],
+  "schema_version": "bifrost.phase6_vllm_command.v1",
+  "vllm_core_flags": {
+    "dtype": "auto",
+    "enable_chunked_prefill": false,
+    "enable_prefix_caching": false,
+    "gpu_memory_utilization": 0.9,
+    "max_model_len": 4096,
+    "model": "./local-model",
+    "served_model_name": "bifrost-phase6-local",
+    "tensor_parallel_size": 1
+  }
+}

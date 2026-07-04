@@ -101,14 +101,12 @@ The important fields are:
 ```yaml
 remote_storage_plugins:
   - bifrost
-remote_storage_plugin:
-  bifrost:
-    module_path: lmcache_bifrost.adapter
-    class_name: BifrostConnectorAdapter
-    extra_config:
-      endpoint: 127.0.0.1:7744
-      allow_pickle_fallback: false
 remote_url: bifrost://127.0.0.1:7744
+extra_config:
+  remote_storage_plugin.bifrost.module_path: lmcache_bifrost.adapter
+  remote_storage_plugin.bifrost.class_name: BifrostConnectorAdapter
+  endpoint: 127.0.0.1:7744
+  allow_pickle_fallback: false
 ```
 
 LMCache configuration keys vary by release, so verify the exact shape against

@@ -14,6 +14,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
+from .baseline_matrix import (
+    BaselineMatrix,
+    GeneratedConfigBundle,
+    generate_baseline_matrix_configs,
+)
+
 SUPPORTED_MODES = {
     "fake",
     "lmcache_inprocess",
@@ -53,6 +59,16 @@ class GeneratedServingConfig:
     output_dir: Path
     files: dict[str, Path] = field(default_factory=dict)
     warnings: tuple[str, ...] = ()
+
+
+def generate_phase6_baseline_matrix(
+    matrix: BaselineMatrix,
+    *,
+    dry_run: bool = False,
+) -> GeneratedConfigBundle:
+    """Generate the first-class Phase 6 three-baseline serving matrix."""
+
+    return generate_baseline_matrix_configs(matrix, dry_run=dry_run)
 
 
 def normalize_mode(mode: str) -> str:
@@ -141,7 +157,7 @@ def _split_endpoint(endpoint: str) -> tuple[str, int]:
 
 def _warnings(request: ServingConfigRequest, mode: str) -> tuple[str, ...]:
     warnings = [
-        "LMCache plugin field names vary by release; verify remote_storage_plugin and remote_url against the installed LMCache version.",
+        "LMCache plugin field names vary by release; verify remote_storage_plugins, extra_config, and remote_url against the installed LMCache version.",
         "vLLM LMCache enablement flags vary by release; verify the generated vLLM command before an opt-in real run.",
         "Real serving may require GPU hardware, CUDA, local model assets, and compatible vLLM plus LMCache packages.",
     ]
@@ -166,30 +182,33 @@ object_type: opaque_engine_blob
 chunk_size: {request.chunk_size}
 local_cpu: {local_cpu}
 enable_multiprocess: {multiprocess}
+lookup_timeout_ms: 60000
+blocking_timeout_secs: 60
 
 remote_storage_plugins:
   - bifrost
 
-remote_storage_plugin:
-  bifrost:
-    module_path: lmcache_bifrost.adapter
-    class_name: BifrostConnectorAdapter
-    extra_config:
-      endpoint: {request.endpoint}
-      chunk_size: {request.chunk_size}
-      timeout_seconds: 5.0
-      strict_validation: true
-      allow_pickle_fallback: {allow_pickle}
-      engine_name: lmcache
-      integration_name: lmcache_bifrost_remote_storage
-      object_type: opaque_engine_blob
-      metrics_jsonl_path: ./bifrost_lmcache_connector_metrics.jsonl
-
 remote_url: bifrost://{request.endpoint}
 
-# Some LMCache releases route custom storage through plugin:// URLs instead:
-# remote_url: plugin://bifrost
-# When using that form, keep endpoint in remote_storage_plugin.bifrost.extra_config.
+extra_config:
+  remote_storage_plugin.bifrost.module_path: lmcache_bifrost.adapter
+  remote_storage_plugin.bifrost.class_name: BifrostConnectorAdapter
+  endpoint: {request.endpoint}
+  chunk_size: {request.chunk_size}
+  timeout_seconds: 30.0
+  ping_timeout: 120.0
+  ping_interval: 300.0
+  get_blocking_failed_threshold: 100000
+  waiting_time_for_recovery: 5.0
+  strict_validation: true
+  allow_pickle_fallback: {allow_pickle}
+  engine_name: lmcache
+  integration_name: lmcache_bifrost_remote_storage
+  object_type: opaque_engine_blob
+  metrics_jsonl_path: ./bifrost_lmcache_connector_metrics.jsonl
+
+# LMCache 0.3.x loads custom adapters from top-level extra_config keys named
+# remote_storage_plugin.<plugin>.module_path/class_name.
 
 multiprocess:
   enabled: {multiprocess}

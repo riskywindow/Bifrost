@@ -39,16 +39,91 @@ Raw vLLM KVTransfer integration remains out of scope for Phase 6.
 ## Baselines
 
 Every real-serving report should compare three variants under the same
-hardware, model, workload, request count, concurrency, and runtime settings:
+hardware, model, workload, request count, concurrency, sampling settings, and
+vLLM core runtime settings:
 
-1. `vLLM only`: no LMCache and no BIFROST remote storage.
-2. `vLLM + LMCache local or CPU storage`: LMCache enabled without BIFROST.
-3. `vLLM + LMCache + BIFROST`: LMCache remote storage configured to use the
-   BIFROST connector and a local `bifrostd`.
+1. `vllm_only`: no LMCache and no BIFROST remote storage.
+2. `vllm_lmcache_local_cpu`: LMCache enabled with local CPU storage and no
+   BIFROST remote backend.
+3. `vllm_lmcache_bifrost`: LMCache remote storage configured to use the
+   BIFROST connector and a local `bifrostd`, with local CPU storage disabled
+   for the primary isolation experiment.
+
+The matrix generator writes these variants together and validates that common
+fields match. For the primary isolation matrix, vLLM automatic prefix caching
+is explicitly disabled in every mode with the equivalent of
+`--no-enable-prefix-caching`.
 
 The report must not claim a speedup unless all compared variants ran
 successfully and the metrics show it. Missing, failed, skipped, or
 configuration-incompatible baselines must be reported as such.
+
+## Guarded Real Matrix Executor
+
+The guarded real-serving matrix executor lives in
+`bifrost_py/bifrost_serving/real_matrix.py` and is available through:
+
+```bash
+python tools/bifrost_run_phase6_real_matrix.py \
+  --config examples/serving_benchmark/phase6_real_matrix.yaml \
+  --dry-run \
+  --json
+```
+
+Dry-run mode expands the three real-serving modes, repetitions, rotated order,
+ports, generated vLLM commands, LMCache configs, BIFROST connector configs,
+workload hash, and artifact directories without importing or starting vLLM,
+LMCache, GPU code, or model assets. Dry-run output is deliberately not a PASS:
+the machine-readable completion gate has `passed: false` because no measured
+real samples, correctness evidence, LMCache activity, BIFROST activity, or fsck
+result exists.
+
+Real execution is refused unless `--allow-real-vllm` is passed or
+`BIFROST_RUN_REAL_VLLM=1` is set. Real execution is also refused in CI. Before
+starting a server, the executor requires:
+
+1. A visible GPU through `torch.cuda`.
+2. Importable vLLM.
+3. Importable LMCache.
+4. Importable `lmcache_bifrost` and adapter.
+5. A `bifrost-daemon` executable.
+6. A local model path, unless model downloads are explicitly allowed.
+7. Sufficient disk space.
+8. All planned vLLM and BIFROST ports free.
+
+The executor runs the same fairness matrix for every repetition:
+
+1. `vllm_only`
+2. `vllm_lmcache_local_cpu`
+3. `vllm_lmcache_bifrost`
+
+All modes share the same GPU selector, model, served model name, dtype,
+maximum model length, sampling settings, output token count, concurrency,
+request rate, workload bytes and SHA-256, vLLM prefix-caching setting, and core
+vLLM flags. The LMCache local CPU and BIFROST modes use the same LMCache
+connector mode.
+
+For every mode and repetition, the executor writes a separate directory and
+uses fresh process state, LMCache config state, BIFROST store root, metrics
+files, and ports. It runs engine warmup, cache population, and measured phases
+through the serving benchmark runner, then stops all processes and writes logs,
+configs, raw requests, metrics snapshots, and an artifact manifest.
+
+The root output includes:
+
+1. `artifact_manifest.json`
+2. `summary.json`
+3. `comparison_report.json`
+4. `sanitized_evidence_bundle.json`
+5. `completion_gate.json`
+6. One `rep_XX/<mode>/` directory per mode and repetition
+
+The final gate passes only when every requested real mode completes, measured
+phases have nonzero samples, required configs are captured, correctness
+checking executes, LMCache local mode reports actual store and retrieve
+activity, BIFROST mode reports actual connector or store activity, and BIFROST
+fsck is clean. Skips and failures make the top-level status incomplete or
+failed; fake or dry-run evidence can never satisfy the real-serving gate.
 
 ## Out of scope
 
@@ -194,6 +269,10 @@ Artifacts written:
 3. `config.json`: effective runner configuration.
 4. `workload.jsonl`: copied workload input.
 
+`config.json` preserves header names for reproducibility but redacts likely
+secret values such as authorization, token, API key, secret, and cookie
+headers.
+
 When `--collect-bifrost-stats true` is used, the runner reads daemon store
 stats through the existing Python BIFROST client before and after the request
 phase. Missing endpoints or unreachable daemons are recorded as skipped or
@@ -246,7 +325,98 @@ Dry run mode writes `orchestrator_manifest.json` with the exact commands that
 would be used and starts nothing. Non-dry-run mode also writes
 `orchestrator_final_status.json` after cleanup.
 
-Warmup/measured phase splitting remains a separate Phase 6 work item.
+Warmup, cache population, and measured phase splitting is implemented in the
+serving benchmark runner and is used by the guarded real matrix executor.
+
+## Optional Two-Instance Cache-Sharing Experiment
+
+The optional two-instance scaffold lives in
+`examples/serving_benchmark/two_instance_cache_share_demo.py`. It is designed
+to show whether two serving instances can share LMCache remote storage through
+the same BIFROST daemon when a local real-serving environment supports it:
+
+```text
+instance A: vLLM -> LMCache -> BIFROST remote storage connector -> bifrostd
+instance B: vLLM -> LMCache -> BIFROST remote storage connector -> same bifrostd
+```
+
+This experiment is not a Phase 6 hard requirement. It remains optional,
+exploratory, and skipped by default. It does not implement or use a raw vLLM
+KVTransfer connector.
+
+CI-safe dry-run:
+
+```bash
+python examples/serving_benchmark/two_instance_cache_share_demo.py \
+  --mode dry-run \
+  --output-dir runs/phase6-serving/two-instance \
+  --model /path/to/local/model \
+  --json
+```
+
+Dry-run starts no services and prints the planned commands for instance A and
+instance B, expected vLLM and LMCache ports, the BIFROST endpoint, workload
+paths, and output paths. Readiness mode also starts nothing:
+
+```bash
+python examples/serving_benchmark/two_instance_cache_share_demo.py \
+  --mode readiness \
+  --output-dir runs/phase6-serving/two-instance \
+  --model /path/to/local/model \
+  --json
+```
+
+Run mode refuses to continue unless `--allow-real-vllm` is passed or
+`BIFROST_RUN_REAL_VLLM=1` is set. It also refuses real execution in CI, and it
+requires a local model path unless model downloads are explicitly allowed by
+the operator.
+
+The planned real experiment is sequential so it does not require multi-GPU:
+
+1. Start a shared `bifrostd`.
+2. Start instance A with LMCache configured for BIFROST remote storage.
+3. Send repeated-prefix requests to instance A to populate remote cache state.
+4. Collect BIFROST store stats after instance A.
+5. Stop instance A serving processes while keeping the shared `bifrostd`.
+6. Start instance B with LMCache configured for the same BIFROST endpoint.
+7. Send the same repeated-prefix workload to instance B.
+8. Collect BIFROST store stats after instance B.
+
+The summary compares BIFROST object count after instance A, BIFROST GET
+activity during instance B, and p50 latency difference when the serving client
+can measure it. Positive BIFROST GET activity during instance B is evidence
+that LMCache attempted remote reuse. Missing GET activity, failed readiness,
+or inconclusive latency must be reported directly and must not be presented as
+a speedup.
+
+The checked-in example config is
+`examples/serving_benchmark/configs/two_instance_cache_share_example.yaml`.
+It documents the shared BIFROST endpoint, separate serving ports, LMCache
+remote storage plugin shape, repeated-prefix workloads, and advisory
+comparison fields.
+
+## One-command fake serving demo
+
+The CI-safe fake serving demo lives in
+`examples/serving_benchmark/fake_serving_demo.py`:
+
+```bash
+python examples/serving_benchmark/fake_serving_demo.py \
+  --output-dir runs/phase6-serving/fake-demo \
+  --request-count 8 \
+  --concurrency 2
+```
+
+Use `--json` to print a machine-readable summary. The demo generates a small
+repeated-prefix workload, runs the fake no-cache baseline, runs the fake
+cache-simulating candidate, compares their metrics, writes a Phase 6 report,
+and prints PASS or FAIL with run directories, p50 and p95 latency, simulated
+cache-hit effect, correctness status, and report path.
+
+This demo is a harness test only. It proves that fake CI can exercise workload
+generation, local OpenAI-compatible serving, benchmark execution, baseline
+comparison, report generation, and advisory correctness reporting. It does not
+prove real vLLM, LMCache, or BIFROST serving speedup.
 
 ## Optional `vllm bench serve` runner
 
@@ -310,6 +480,56 @@ This wrapper is a benchmark client integration only. It does not implement raw
 vLLM KVTransfer, does not start vLLM serving, and does not bypass LMCache for
 BIFROST-backed Phase 6 runs.
 
+## Optional real vLLM + LMCache + BIFROST demo
+
+An opt-in real-serving demo scaffold lives in
+`examples/serving_benchmark/vllm_lmcache_bifrost_demo.py` with usage notes in
+`examples/serving_benchmark/vllm_lmcache_bifrost_README.md`.
+
+Safe dry-run mode:
+
+```bash
+python examples/serving_benchmark/vllm_lmcache_bifrost_demo.py \
+  --mode dry-run \
+  --output-dir runs/phase6-serving/real-demo \
+  --model /path/to/local/model
+```
+
+Readiness-only mode:
+
+```bash
+python examples/serving_benchmark/vllm_lmcache_bifrost_demo.py \
+  --mode readiness \
+  --output-dir runs/phase6-serving/real-demo \
+  --model /path/to/local/model \
+  --json
+```
+
+Real run mode is refused unless `--allow-real-vllm` is passed or
+`BIFROST_RUN_REAL_VLLM=1` is set. It is also refused in CI. The readiness
+report checks vLLM import or CLI availability, LMCache import,
+`lmcache_bifrost` import, BIFROST daemon reachability, GPU availability, local
+model path status, required ports, and Hugging Face token presence as advisory
+only.
+
+When run, the demo generates a repeated-prefix workload, writes effective
+LMCache/BIFROST configs, starts the BIFROST-backed serving stack, runs the
+serving benchmark, captures BIFROST stats before and after, writes comparison
+and report artifacts, prints latency fields, reports BIFROST object-count
+delta, and lists skipped baselines. The vLLM-only baseline is run only when
+`--include-vllm-only-baseline` is requested. The LMCache local/CPU baseline is
+reported as skipped by this single-stack demo.
+
+Checked-in example configuration files live under
+`examples/serving_benchmark/configs/`:
+
+1. `one_gpu_inprocess_example.yaml`
+2. `mp_mode_example.yaml`
+
+These files are examples only. LMCache and vLLM configuration names are
+version-sensitive and must be verified against the installed packages before a
+real run.
+
 ## Baseline comparison runner
 
 The baseline comparison runner lives in `bifrost_py/bifrost_serving/compare.py`
@@ -330,7 +550,7 @@ Supported mode labels are:
 1. `fake_no_cache`
 2. `fake_with_cache`
 3. `vllm_only`
-4. `vllm_lmcache_local`
+4. `vllm_lmcache_local_cpu`
 5. `vllm_lmcache_bifrost`
 
 The fake modes start isolated local fake OpenAI-compatible servers, run the

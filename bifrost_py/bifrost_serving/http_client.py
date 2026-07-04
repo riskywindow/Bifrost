@@ -149,6 +149,7 @@ def build_request_json(
         "temperature": request.temperature,
         "top_p": request.top_p,
         "stream": stream,
+        "ignore_eos": True,
     }
     if request.stop is not None:
         payload["stop"] = list(request.stop)

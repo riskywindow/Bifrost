@@ -9,17 +9,17 @@ from tests.fakes import FakeCacheEngineKey, FakeMemoryObj
 from tests.test_connector_fake import FakeBifrostClient, _connector
 
 
-def test_fake_connector_ping_returns_true_when_daemon_is_alive() -> None:
+def test_fake_connector_ping_returns_zero_when_daemon_is_alive() -> None:
     async def run() -> None:
         connector = _connector(FakeBifrostClient())
 
         assert connector.support_ping() is True
-        assert await connector.ping() is True
+        assert await connector.ping() == 0
 
     asyncio.run(run())
 
 
-def test_fake_connector_batched_contains_returns_expected_booleans() -> None:
+def test_fake_connector_batched_contains_returns_prefix_hit_count() -> None:
     async def run() -> None:
         connector = _connector(FakeBifrostClient())
         first = FakeCacheEngineKey("tiny", "first", (1, 2, 3))
@@ -30,11 +30,8 @@ def test_fake_connector_batched_contains_returns_expected_booleans() -> None:
         await connector.put(second, FakeMemoryObj(b"second"))
 
         assert connector.support_batched_contains() is True
-        assert await connector.batched_contains([first, missing, second]) == [
-            True,
-            False,
-            True,
-        ]
+        assert connector.batched_contains([first, missing, second]) == 1
+        assert connector.batched_contains([first, second]) == 2
 
     asyncio.run(run())
 
@@ -71,6 +68,7 @@ def test_fake_connector_batched_put_stores_multiple_objects() -> None:
 
         assert connector.support_batched_put() is True
         await connector.batched_put([(first, first_obj), (second, second_obj)])
+        await connector.batched_put([first, second], [first_obj, second_obj])
 
         assert await connector.get(first) == first_obj
         assert await connector.get(second) == second_obj

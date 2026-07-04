@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+runs/
+*.tmp
+*.temp
+generated_*_config.json
+generated_*_config.yaml
+generated_*_command.json

@@ -263,6 +263,7 @@ def _request(
             repeat_group=group,
             expected_cache_reuse=expected_reuse,
             prompt_token_estimate=_estimate_tokens(prompt),
+            phase="measured",
         ),
     )
 

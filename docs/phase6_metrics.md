@@ -1,6 +1,6 @@
 # Phase 6 Metrics
 
-Last verified: 2026-06-15
+Last verified: 2026-06-20
 
 ## Purpose
 
@@ -9,6 +9,12 @@ be preserved, derived metrics should be reproducible, and reports must clearly
 separate real serving measurements from fake CI measurements.
 
 ## Serving metrics
+
+All top-level performance metrics in `summary.json` are measured-phase metrics
+only. `engine_warmup` and `cache_population` samples are preserved as raw
+records and phase sections, but they must not contribute to top-level latency,
+TTFT, throughput, output-token, cache-expected, or error aggregates. Runner
+validation fails if non-measured rows leak into the measured aggregate.
 
 ### TTFT
 
@@ -79,6 +85,74 @@ bytes_get
 Exact names may follow the connector implementation, but the report should map
 them to stable Phase 6 names.
 
+The default fake CI candidate uses `BifrostLMCacheBackend`, which instantiates
+the actual Phase 5 `BifrostRemoteConnector`. Its summary must include:
+
+1. `connector_metrics_source: actual_bifrost_remote_connector`
+2. `performance_metrics_source: synthetic_fake_server`
+3. Actual connector `put_count`, `exists_count`, and `get_count`
+4. Actual connector `bytes_put` and `bytes_get`
+5. BIFROST store object-count delta
+6. fsck status from the local daemon store
+
+The fake server may expose cache-hit timing for harness tests, but it must not
+fabricate connector counters. When connector metrics are unavailable, the
+report must say unavailable instead of projecting fake cache hits into
+connector operations.
+
+## Phase 6 collectors
+
+The dependency-light collectors live in
+`bifrost_py/bifrost_serving/collectors.py`. Each collector supports:
+
+```python
+snapshot_before()
+snapshot_after()
+delta()
+```
+
+Snapshots preserve the raw source payload under `raw` when data is available.
+Unavailable optional sources return a structured `status: "unavailable"` or
+`status: "error"` snapshot instead of failing the benchmark.
+
+`BifrostMetricsCollector` uses the Python BIFROST client to collect daemon store
+stats, object count, total logical bytes as `bytes_stored`, committed
+LMCache-shaped opaque object count when object listing is available, optional
+fsck output, and optional connector metrics from a JSONL log or endpoint. The
+collector does not reinterpret LMCache payloads; it only counts
+`opaque_engine_blob` records exposed by the store API.
+
+`LMCacheMetricsCollector` queries a configured LMCache management or metrics
+endpoint. Version-specific fields are preserved as raw JSON or raw text, and
+known hit, miss, local hit, remote hit, remote put, and eviction counters are
+extracted defensively when their names are recognizable. If no endpoint is
+configured or the endpoint is unreachable, the benchmark continues and the
+snapshot records why LMCache metrics were unavailable.
+
+`VLLMMetricsCollector` queries a configured vLLM metrics endpoint and preserves
+raw JSON or text/Prometheus-style metrics. It extracts a small set of known
+request and cache fields when present, but missing fields remain `null` rather
+than invented.
+
+Every extracted metric carries an authoritative source label where the source
+is known. Supported labels are:
+
+1. `vllm_bench_serve`
+2. `vllm_metrics_endpoint`
+3. `lmcache_prometheus`
+4. `lmcache_internal_api`
+5. `bifrost_connector_metrics`
+6. `bifrost_connector_jsonl`
+7. `bifrost_store_stats`
+8. `synthetic_fake_server`
+9. `unavailable`
+
+Synthetic fake-server timing and cache-shape counters must never be collapsed
+into real BIFROST connector counters. Aggregation keeps same-name metrics as
+multiple source-tagged records instead of overwriting one source with another.
+Missing optional metrics are represented as unavailable or `null`, never as
+zero.
+
 ## BIFROST bytes stored and loaded
 
 Report:
@@ -106,6 +180,64 @@ When available, report LMCache:
 If LMCache metrics are unavailable, the report should say so and fall back to
 BIFROST connector observations as lower-level evidence.
 
+The LMCache parser recognizes these exact metrics from Prometheus text or JSON
+internal API payloads:
+
+```text
+lmcache:num_retrieve_requests
+lmcache:num_store_requests
+lmcache:num_lookup_requests
+lmcache:num_requested_tokens
+lmcache:num_hit_tokens
+lmcache:num_stored_tokens
+lmcache:num_lookup_tokens
+lmcache:num_lookup_hits
+lmcache:retrieve_hit_rate
+lmcache:lookup_hit_rate
+lmcache:time_to_retrieve
+lmcache:time_to_store
+lmcache:time_to_lookup
+```
+
+Unknown `lmcache:*` numeric fields are preserved under raw/unknown metrics for
+later inspection. A missing field remains unavailable and must not be displayed
+as `0`.
+
+## Reproducibility bundle
+
+Each mode directory should contain the complete provenance bundle:
+
+```text
+resolved_run_config.yaml
+generated_vllm_command.json
+generated_lmcache_config.yaml              # LMCache modes
+generated_bifrost_connector_config.json    # BIFROST mode
+workload.jsonl
+phase_plan.json
+environment_doctor.json
+versions.json
+command_manifest.json
+metrics_before.json
+metrics_after_population.json
+metrics_after_measured.json
+raw_requests.jsonl
+stdout.log
+stderr.log
+artifact_manifest.json
+```
+
+`artifact_manifest.json` uses schema
+`bifrost.phase6_artifact_manifest.v1` and records each artifact's relative
+path, SHA-256, byte size, and artifact type. The report lists generated config
+artifacts and hashes when a manifest is present, verifies artifact hashes, and
+shows missing required artifacts directly.
+
+`versions.json` captures Python, OS, CUDA/GPU when available, vLLM, LMCache,
+`lmcache_bifrost`, torch, bifrostd path/version, model local/remote status,
+workload hash, git commit, and dirty worktree status. Environment values are
+redacted for API keys, Hugging Face tokens, authorization headers, tokens, and
+secrets before being written.
+
 ## vLLM bench serve JSON ingestion
 
 When `vllm bench serve` JSON is available, ingest it as raw input and preserve
@@ -129,6 +261,12 @@ The parser extracts:
 
 If a field is absent in the installed vLLM version, the derived report should
 mark it missing instead of inventing a value.
+
+When the installed `vllm bench serve` exposes `--num-warmups`, the BIFROST
+command builder passes configured ordinary server warmups through that option.
+Those vLLM warmups are not a replacement for BIFROST cache population: cache
+population remains the explicit Phase 6 `cache_population` phase and is
+reported separately.
 
 The current ingestion summary schema is `bifrost.vllm_bench_serve_ingest.v1`
 and contains:
@@ -162,6 +300,10 @@ Every BIFROST-backed report should include:
 A failed fsck does not become a cache hit. It is a benchmark failure or health
 finding that must be shown in the report.
 
+Reports summarize the current environment doctor readiness keys:
+`fake_ci_ready`, `gpu_serving_ready`, and `full_benchmark_ready`. Missing
+optional serving readiness remains a skip or limitation, not a fake-CI failure.
+
 ## Runner summary schema
 
 The Phase 6 serving runner writes `summary.json` with schema version
@@ -184,6 +326,21 @@ The Phase 6 serving runner writes `summary.json` with schema version
 15. `bifrost_stats_delta`
 16. `connector_metrics_delta`
 
+The summary also includes:
+
+1. `phase` with value `measured` for the top-level aggregate.
+2. `phase_order` and `phase_timeout_seconds`.
+3. `phase_sections`, keyed by `engine_warmup`, `cache_population`, and
+   `measured` when those phases ran.
+4. `phase_validation`, including measured and non-measured raw row counts.
+
+Each raw request record includes `phase`, `prefix_id`, `repeat_group`, and
+`expected_cache_reuse` in addition to the full metadata object. Population
+phase sections include BIFROST and backend metric snapshots immediately before
+and after population, with numeric deltas when available. Missing connector,
+LMCache, or BIFROST counters remain skipped, unavailable, or error snapshots;
+the runner does not synthesize connector counters.
+
 For non-streaming OpenAI-compatible responses, TTFT is usually unavailable and
 the TTFT fields are `null` with `ttft_available_count` set to zero.
 
@@ -199,6 +356,11 @@ operation counters such as `put_count`, `get_count`, `exists_count`, and
 `list_count` are included when a metrics source exposes those names; otherwise
 the field remains `null` and the report must say that connector metrics were
 unavailable.
+
+For `fake_bifrost_lmcache`, connector metrics are collected from the connector
+JSONL emitted by the real connector and from the backend's `/metrics` snapshot.
+The report treats timing as fake-serving performance only, even when the
+connector and BIFROST store counters are real.
 
 ## Baseline comparison summary schema
 

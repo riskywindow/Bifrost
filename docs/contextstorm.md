@@ -3,8 +3,9 @@
 Last verified: 2026-06-15
 
 ContextStorm is the Phase 2 synthetic KV benchmark harness, Phase 3 local store
-benchmark harness, Phase 4 tiny-transformer KV correctness workload runner, and
-Phase 5 LMCache connector workload runner.
+benchmark harness, Phase 4 tiny-transformer KV correctness workload runner,
+Phase 5 LMCache connector workload runner, and Phase 6 serving benchmark
+scenario runner.
 It exercises local BIFROST transport and store behavior with deterministic
 Phase 1-style KV objects, and it can run CPU-only tiny-model KV roundtrips that
 extract, store, retrieve, rehydrate, and compare real harness KV state.
@@ -12,10 +13,11 @@ extract, store, retrieve, rehydrate, and compare real harness KV state.
 ContextStorm is not a production model benchmark. Its Phase 4 model workloads
 use only the local deterministic tiny transformer. Its default Phase 5 LMCache
 workloads use fake LMCache-shaped objects and the BIFROST remote storage
-connector. It does not allocate GPU KV cache, require real LMCache, call vLLM,
-download models or tokenizers, emulate QUIC, compress payloads, or use
-root-required network mutation unless an operator explicitly passes the local
-fault opt-in flag for non-model transport scenarios.
+connector. Its default Phase 6 serving workload uses a local fake
+OpenAI-compatible server and repeated-prefix requests. It does not allocate GPU
+KV cache, require real LMCache, call vLLM, download models or tokenizers,
+emulate QUIC, compress payloads, or use root-required network mutation unless
+an operator explicitly opts into a scenario that requires those resources.
 
 ## Commands
 
@@ -104,6 +106,25 @@ PYTHONPATH=. python -m contextstorm.cli report /tmp/contextstorm-runs/phase5-lmc
 and requires `bifrost-daemon` and `bifrost-store`. It does not require real
 LMCache, vLLM, GPU hardware, internet access, Hugging Face assets, model
 downloads, Docker, Kubernetes, CUDA, cloud credentials, or root privileges.
+
+Phase 6 serving scenarios wrap the Phase 6 workload generator, fake
+OpenAI-compatible server, baseline comparison runner, and report generator:
+
+```text
+PYTHONPATH=. python -m contextstorm.cli run scenarios/serve_fake_small_ci.yaml \
+  --runs-root /tmp/contextstorm-runs \
+  --run-id phase6-serve-fake-small
+PYTHONPATH=. python -m contextstorm.cli report /tmp/contextstorm-runs/phase6-serve-fake-small
+```
+
+`serve_fake_small_ci.yaml` starts only local fake serving baselines. It uses a
+repeated-prefix workload, does not import vLLM or LMCache, does not use GPU,
+does not require internet access, and does not download models or tokenizers.
+The optional real scenarios `serve_vllm_lmcache_bifrost_opt_in.yaml` and
+`serve_two_instance_cache_share_opt_in.yaml` skip by default. They require
+`BIFROST_RUN_REAL_VLLM=1` or `BIFROST_RUN_TWO_INSTANCE_CACHE_SHARE=1`,
+respectively, and are intended only for explicitly prepared local real-serving
+environments.
 
 ## Scenario Format
 
@@ -283,6 +304,46 @@ The optional real-LMCache and vLLM scenarios skip by default. They are markers
 for explicitly enabled local smoke work and do not implement a raw vLLM
 KVTransfer connector.
 
+Phase 6 serving scenarios use `workload: serve`:
+
+```yaml
+name: serve_fake_small_ci
+workload: serve
+generator: fake-ci-small
+operations:
+  - fake_serving_baseline_comparison
+modes:
+  - fake_no_cache
+  - fake_with_cache
+request_count: 8
+prefix_repeat_groups: 2
+max_tokens: 8
+seed: 1234
+prefix_size: small
+concurrency: 2
+timeout_seconds: 10
+collect_bifrost_stats: false
+generate_config: false
+```
+
+Supported serving operations:
+
+1. `fake_serving_baseline_comparison`: generate repeated-prefix requests,
+   start isolated fake OpenAI-compatible serving baselines, run the Phase 6
+   serving benchmark, compare `fake_no_cache` and `fake_with_cache`, and write
+   raw Phase 6 report artifacts.
+2. `real_vllm_lmcache_bifrost`: optional real-serving comparison for
+   `vllm_only`, `vllm_lmcache_local_cpu`, and `vllm_lmcache_bifrost`; skipped
+   unless the configured opt-in environment variable is `1`.
+3. `two_instance_cache_share`: optional two-instance cache-sharing experiment
+   marker through LMCache remote storage and BIFROST; skipped unless explicitly
+   opted in and a compatible local environment is prepared.
+
+Serving metrics include p50/p95 latency, TTFT when available, throughput,
+error rate, repeated-prefix group count, BIFROST stats delta when collected,
+correctness status, skipped components, and links to raw Phase 6 comparison
+and serving report artifacts.
+
 The built-in scenarios are:
 
 1. `small_ci.yaml`: 1 MiB, one daemon, PUT/HAS/GET once.
@@ -312,6 +373,16 @@ The built-in scenarios are:
    with repeated get and batched operations.
 16. `lmcache_real_opt_in.yaml`: real LMCache and vLLM smoke markers skipped by
    default.
+17. `serve_workload_small_ci.yaml`: deterministic Phase 6 serving request
+   JSONL generation only.
+18. `serve_fake_small_ci.yaml`: fake OpenAI-compatible serving baseline
+   comparison for CI.
+19. `serve_repeated_prefix_fake.yaml`: larger local fake repeated-prefix
+   serving comparison.
+20. `serve_vllm_lmcache_bifrost_opt_in.yaml`: real vLLM plus LMCache plus
+   BIFROST remote storage scenario skipped by default.
+21. `serve_two_instance_cache_share_opt_in.yaml`: optional two-instance
+   cache-sharing scenario skipped by default.
 
 ## Workload Classes
 
@@ -382,6 +453,13 @@ table, correctness status, page count and payload bytes, timing breakdown,
 failure details, and normalized per-operation metrics. A successful model run
 requires matching greedy continuation and logits within the Phase 4 `float32`
 tolerance.
+
+For serving workloads, `summary.json` and `summary.md` include serving latency
+and throughput metrics, repeated-prefix group count, BIFROST stats delta when
+available, correctness status, skipped components, and raw Phase 6 artifact
+paths. Phase 6 artifacts are written under `phase6/`, including comparison
+summaries, per-mode raw request JSONL files, generated config files for
+opt-in scenarios, and serving report summaries.
 
 Fault-enabled runs also write:
 

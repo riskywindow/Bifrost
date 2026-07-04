@@ -1,0 +1,18 @@
+name: serve_repeated_prefix_fake
+workload: serve
+generator: repeated-system-prompt
+operations:
+  - fake_serving_baseline_comparison
+modes:
+  - fake_no_cache
+  - fake_with_cache
+request_count: 24
+prefix_repeat_groups: 4
+max_tokens: 16
+seed: 2026
+prefix_size: medium
+concurrency: 4
+timeout_seconds: 20
+collect_bifrost_stats: false
+generate_config: false
+notes: "Larger local fake serving repeated-prefix scenario for harness and report checks only."

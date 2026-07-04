@@ -1,0 +1,64 @@
+schema_version: "bifrost.phase6_baseline_matrix_run_plan.v1"
+matrix: "primary_isolation"
+common_fields:
+  model: "./local-model"
+  served_model_name: "bifrost-phase6-local"
+  dtype: "auto"
+  max_model_len: 4096
+  tensor_parallel_size: 1
+  gpu_memory_utilization: 0.9
+  enable_chunked_prefill: false
+  enable_prefix_caching: false
+  output_len: 64
+  sampling_settings:
+    temperature: 0.0
+    top_p: 1.0
+  workload_path: "runs/phase6-serving/workload.jsonl"
+  concurrency: 2
+  request_rate: 1.0
+runs:
+  -
+    mode: "vllm_only"
+    port: 8000
+    lmcache_enabled: false
+    lmcache_connector_mode: null
+    lmcache_chunk_size: 256
+    local_cpu: false
+    max_local_cpu_size: 8
+    bifrost_enabled: false
+    bifrost_endpoint: null
+    connector_metrics_path: null
+    vllm_command_json: "examples/serving_configs/vllm_only/vllm_command.json"
+    lmcache_config_yaml: null
+  -
+    mode: "vllm_lmcache_local_cpu"
+    port: 8001
+    lmcache_enabled: true
+    lmcache_connector_mode: "inprocess"
+    lmcache_chunk_size: 256
+    local_cpu: true
+    max_local_cpu_size: 8
+    bifrost_enabled: false
+    bifrost_endpoint: null
+    connector_metrics_path: null
+    vllm_command_json: "examples/serving_configs/vllm_lmcache_local_cpu/vllm_command.json"
+    lmcache_config_yaml: "examples/serving_configs/vllm_lmcache_local_cpu/lmcache_config.yaml"
+  -
+    mode: "vllm_lmcache_bifrost"
+    port: 8002
+    lmcache_enabled: true
+    lmcache_connector_mode: "inprocess"
+    lmcache_chunk_size: 256
+    local_cpu: false
+    max_local_cpu_size: 8
+    bifrost_enabled: true
+    bifrost_endpoint: "127.0.0.1:7744"
+    connector_metrics_path: "examples/serving_configs/vllm_lmcache_bifrost/bifrost_lmcache_connector_metrics.jsonl"
+    vllm_command_json: "examples/serving_configs/vllm_lmcache_bifrost/vllm_command.json"
+    lmcache_config_yaml: "examples/serving_configs/vllm_lmcache_bifrost/lmcache_config.yaml"
+comparison_manifest_json: "examples/serving_configs/comparison_manifest.json"
+warnings:
+  - "Real serving is opt-in and may require GPU hardware, CUDA, vLLM, LMCache, lmcache_bifrost, and local model assets."
+  - "vLLM and LMCache flag names are version-sensitive; verify generated commands against installed releases before running."
+  - "The primary isolation matrix explicitly emits --no-enable-prefix-caching for every mode."
+  - "The model value does not resolve to a local path; real-run scripts must refuse downloads unless explicitly allowed."

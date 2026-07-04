@@ -25,7 +25,13 @@ testpaths = ["tests"]
 pythonpath = ["."]
 
 [tool.setuptools.packages.find]
-include = ["bifrost_client*", "bifrost_kv*", "bifrost_model*", "bifrost_serving*"]
+include = [
+  "bifrost_client*",
+  "bifrost_kv*",
+  "bifrost_model*",
+  "bifrost_serving*",
+  "bifrost_vllm*",
+]
 
 [build-system]
 requires = ["setuptools>=68"]

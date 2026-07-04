@@ -15,8 +15,23 @@ for the installed versions.
 
 ## Generated config files
 
-The current generator lives in `bifrost_py/bifrost_serving/config_gen.py` with
-the CLI wrapper `tools/bifrost_generate_serving_config.py`.
+The legacy single-variant generator lives in
+`bifrost_py/bifrost_serving/config_gen.py` with the CLI wrapper
+`tools/bifrost_generate_serving_config.py`.
+
+The first-class three-baseline matrix generator lives in
+`bifrost_py/bifrost_serving/baseline_matrix.py` and is available through:
+
+```bash
+python tools/bifrost_generate_phase6_matrix.py \
+  --model /path/to/already-local-model \
+  --served-model-name bifrost-phase6-local \
+  --output-dir runs/phase6-matrix \
+  --bifrost-endpoint 127.0.0.1:7744 \
+  --lmcache-connector-mode inprocess \
+  --lmcache-chunk-size 256 \
+  --max-local-cpu-size 8
+```
 
 Example:
 
@@ -31,7 +46,45 @@ python tools/bifrost_generate_serving_config.py \
   --chunk-size 262144
 ```
 
-Supported modes are:
+The matrix generator always emits the primary isolation matrix:
+
+1. `vllm_only`: LMCache disabled and BIFROST disabled.
+2. `vllm_lmcache_local_cpu`: LMCache enabled with the same connector mode as
+   the BIFROST candidate, local CPU storage enabled, and no BIFROST remote
+   backend.
+3. `vllm_lmcache_bifrost`: LMCache enabled with the same connector mode, local
+   CPU storage disabled, and the Phase 5 BIFROST remote storage plugin enabled.
+
+For the primary isolation matrix, every generated vLLM command explicitly
+passes `--no-enable-prefix-caching`. The generator does not rely on vLLM
+defaults for prefix caching.
+
+The matrix generator writes:
+
+```text
+phase6_matrix.yaml
+comparison_manifest.json
+vllm_only/vllm_command.json
+vllm_lmcache_local_cpu/vllm_command.json
+vllm_lmcache_local_cpu/lmcache_config.yaml
+vllm_lmcache_bifrost/vllm_command.json
+vllm_lmcache_bifrost/lmcache_config.yaml
+vllm_lmcache_bifrost/bifrost_connector_config.json
+```
+
+The comparison manifest records common fields and mode-specific fields. It
+fails generation if the model, served model name, dtype, max model length,
+tensor parallel size, GPU memory utilization, chunked-prefill setting,
+prefix-caching setting, output length, sampling settings, workload path,
+concurrency, request rate, or vLLM core flags drift across modes outside an
+explicit allowlist. It also fails if the LMCache local CPU and BIFROST modes
+use different connector modes unless that mismatch is explicitly allowed by
+the caller.
+
+Checked-in example artifacts live under `examples/serving_configs/`, with the
+run plan at `examples/serving_configs/phase6_matrix.yaml`.
+
+The legacy generator supports these modes:
 
 1. `fake`, for CI-safe artifact generation.
 2. `lmcache-inprocess`, for a vLLM process using LMCache in-process.
@@ -54,15 +107,26 @@ vllm_bench_serve_bifrost_lmcache.sh
 
 Checked-in examples live under `examples/serving_configs/`.
 
+Additional optional real-demo examples live under
+`examples/serving_benchmark/configs/`:
+
+1. `one_gpu_inprocess_example.yaml`, for a one-GPU in-process LMCache shape.
+2. `mp_mode_example.yaml`, for a multiprocess LMCache scaffold.
+
+These examples are intentionally guarded documentation artifacts. They do not
+start vLLM, import LMCache, contact Hugging Face, or download model assets in
+tests. Treat their LMCache keys as version-sensitive and verify them against
+the locally installed LMCache release.
+
 A benchmark run should record at least:
 
 ```text
 environment.json
 workload.json
 vllm_only.env
-vllm_lmcache_local.env
+vllm_lmcache_local_cpu.env
 vllm_lmcache_bifrost.env
-lmcache_local.yaml
+lmcache_local_cpu.yaml
 lmcache_bifrost.yaml
 bifrost_daemon.json
 benchmark_plan.json
@@ -71,22 +135,27 @@ benchmark_plan.json
 The exact filenames may evolve, but the report must retain the effective
 configuration for each baseline.
 
-The current generator focuses on the BIFROST-backed LMCache remote storage
-variant plus guarded command scaffolds. vLLM-only and LMCache-local baseline
-artifact generation remain tracked separately in the Phase 6 checklist.
+The legacy generator remains for compatibility with the earlier guarded
+BIFROST-backed command scaffolds. New Phase 6 baseline work should use the
+matrix generator so all three variants are generated and validated together.
 
 ## In-process LMCache mode
 
 In-process LMCache mode is the simplest real-serving path when supported by the
 installed LMCache and vLLM versions.
 
-The generated config should define:
+The generated local CPU baseline config defines:
 
-1. How vLLM enables LMCache.
-2. LMCache local or CPU storage settings for the non-BIFROST baseline.
-3. LMCache remote storage plugin settings for the BIFROST variant.
-4. Cache size and eviction settings when exposed by LMCache.
-5. Logging and metrics settings that do not alter cache semantics.
+1. `chunk_size: 256` by default.
+2. `local_cpu: true`.
+3. `max_local_cpu_size`, configurable by `--max-local-cpu-size`.
+4. Empty remote storage plugin fields.
+5. `allow_pickle_fallback: false`.
+
+The BIFROST candidate config uses the same LMCache connector mode, sets
+`local_cpu: false`, points at the requested BIFROST endpoint, uses the Phase 5
+`lmcache_bifrost.adapter` and `BifrostConnectorAdapter` plugin shape, and
+writes a per-run connector metrics JSONL path.
 
 The benchmark should prefer in-process mode for initial real runs because it
 reduces process orchestration complexity.
@@ -151,6 +220,13 @@ The comments in each script state that GPU/CUDA, vLLM, LMCache, connector
 installation, and exact command-line flags are version-sensitive optional
 requirements. Tests execute only the refusal paths and do not start vLLM,
 LMCache, or `bifrostd`.
+
+The optional real demo
+`examples/serving_benchmark/vllm_lmcache_bifrost_demo.py` has the same safety
+contract. `--mode dry-run` and `--mode readiness` are CI-safe and start no
+services. `--mode run` refuses to continue unless `--allow-real-vllm` is
+passed or `BIFROST_RUN_REAL_VLLM=1` is set, and it refuses real execution in
+CI.
 
 ## Version-sensitive warnings
 

@@ -1,9 +1,10 @@
-"""Derived metrics for Phase 6 serving benchmark runs."""
+"""Derived metrics and provenance helpers for Phase 6 serving benchmark runs."""
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, Iterable
 
 from .request_schema import ServingRequest
@@ -21,6 +22,75 @@ class RequestMetricInput:
     @property
     def success(self) -> bool:
         return self.error is None and self.status is not None and 200 <= self.status < 300
+
+
+class MetricSource(StrEnum):
+    VLLM_BENCH_SERVE = "vllm_bench_serve"
+    VLLM_METRICS_ENDPOINT = "vllm_metrics_endpoint"
+    LMCACHE_PROMETHEUS = "lmcache_prometheus"
+    LMCACHE_INTERNAL_API = "lmcache_internal_api"
+    BIFROST_CONNECTOR_METRICS = "bifrost_connector_metrics"
+    BIFROST_CONNECTOR_JSONL = "bifrost_connector_jsonl"
+    BIFROST_STORE_STATS = "bifrost_store_stats"
+    SYNTHETIC_FAKE_SERVER = "synthetic_fake_server"
+    UNAVAILABLE = "unavailable"
+
+
+AUTHORITATIVE_METRIC_SOURCES = tuple(source.value for source in MetricSource)
+
+
+@dataclass(frozen=True, slots=True)
+class ProvenancedMetric:
+    name: str
+    value: int | float | None
+    source: MetricSource
+    status: str = "available"
+    raw_name: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "value": self.value,
+            "source": self.source.value,
+            "status": self.status,
+            "raw_name": self.raw_name,
+        }
+
+
+def metric_value(
+    name: str,
+    value: int | float | None,
+    source: MetricSource | str,
+    *,
+    raw_name: str | None = None,
+) -> dict[str, Any]:
+    metric_source = source if isinstance(source, MetricSource) else MetricSource(str(source))
+    status = "available" if value is not None else "unavailable"
+    return ProvenancedMetric(
+        name=name,
+        value=value,
+        source=metric_source if value is not None else MetricSource.UNAVAILABLE,
+        status=status,
+        raw_name=raw_name,
+    ).to_dict()
+
+
+def source_delta(
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+    *,
+    source: MetricSource | str,
+) -> dict[str, Any]:
+    delta = stats_delta(before, after) or {}
+    source_value = source.value if isinstance(source, MetricSource) else str(source)
+    return {
+        key: {
+            "value": value,
+            "source": source_value,
+            "status": "available",
+        }
+        for key, value in delta.items()
+    }
 
 
 def summarize_request_metrics(
@@ -122,6 +192,52 @@ def stats_delta(
     return delta
 
 
+def merge_metric_maps_preserving_source(*maps: dict[str, Any] | None) -> dict[str, list[dict[str, Any]]]:
+    """Group metric entries by name without collapsing sources.
+
+    Phase 6 reports may compare synthetic timing counters beside real connector
+    counters. This helper intentionally returns a list for every metric name so
+    a synthetic value cannot overwrite an authoritative connector/store value.
+    """
+    merged: dict[str, list[dict[str, Any]]] = {}
+    for mapping in maps:
+        if not isinstance(mapping, dict):
+            continue
+        for name, value in mapping.items():
+            if isinstance(value, dict) and "source" in value:
+                entry = dict(value)
+                entry.setdefault("name", name)
+            else:
+                entry = {
+                    "name": name,
+                    "value": value,
+                    "source": MetricSource.UNAVAILABLE.value,
+                    "status": "unavailable" if value is None else "available",
+                }
+            merged.setdefault(name, []).append(entry)
+    return merged
+
+
+def nested_stats_delta(
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+    *,
+    stats_key: str = "stats",
+) -> dict[str, Any] | None:
+    """Diff the numeric stats payload from two collector snapshots."""
+    return stats_delta(_collector_stats(before, stats_key), _collector_stats(after, stats_key))
+
+
+def _collector_stats(
+    snapshot: dict[str, Any] | None,
+    stats_key: str,
+) -> dict[str, Any] | None:
+    if not snapshot or snapshot.get("status") != "ok":
+        return None
+    stats = snapshot.get(stats_key)
+    return stats if isinstance(stats, dict) else None
+
+
 def output_token_count(response_json: dict[str, Any] | None, output_text: str) -> int | None:
     if isinstance(response_json, dict):
         usage = response_json.get("usage")
@@ -139,9 +255,16 @@ def output_token_count(response_json: dict[str, Any] | None, output_text: str) -
 
 __all__ = [
     "RequestMetricInput",
+    "AUTHORITATIVE_METRIC_SOURCES",
+    "MetricSource",
+    "ProvenancedMetric",
     "mean",
+    "merge_metric_maps_preserving_source",
+    "metric_value",
     "output_token_count",
     "percentile",
+    "nested_stats_delta",
+    "source_delta",
     "stats_delta",
     "summarize_request_metrics",
 ]

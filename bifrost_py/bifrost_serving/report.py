@@ -11,6 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
+from .artifacts import CONFIG_ARTIFACTS, artifact_entry, verify_artifact_manifest
+from .metrics import MetricSource
+
 REPORT_FORMATS = {"markdown", "json", "csv", "all"}
 
 
@@ -106,9 +109,12 @@ def build_report_summary(
                 str(comparison_dir / "comparison_summary.json") if comparison_dir else None
             ),
         },
+        "artifact_bundle": _artifact_bundle_summary(run_dir, comparison_summary),
         "environment": _environment_summary(run_summary),
-        "scenario": _scenario_summary(run_summary),
+        "scenario": _scenario_summary(run_summary, comparison_summary),
         "workload": _workload_summary(run_summary),
+        "metric_sources": _metric_sources_summary(run_summary, comparison_summary),
+        "phase_counts": _phase_counts(run_summary),
         "mode_summary": _mode_summary(run_summary, comparison_summary),
         "latency": _latency_summary(run_summary),
         "bifrost_activity": _bifrost_activity_summary(run_summary),
@@ -140,10 +146,12 @@ def render_markdown(summary: dict[str, Any]) -> str:
             f"- Torch: {_fmt(env.get('torch_version'))}",
             f"- CUDA available: {_fmt(env.get('cuda_available'))}",
             f"- CUDA version: {_fmt(env.get('cuda_version'))}",
+            f"- Driver version: {_fmt(env.get('driver_version'))}",
             f"- GPU: {_fmt(env.get('gpu'))}",
             f"- vLLM: {_fmt(env.get('vllm_version'))}",
             f"- LMCache: {_fmt(env.get('lmcache_version'))}",
             f"- BIFROST connector: {_fmt(env.get('connector_version'))}",
+            f"- bifrostd: {_fmt(env.get('bifrostd'))}",
             f"- Environment readiness: {_fmt(env.get('readiness'))}",
             "",
             "## Scenario Summary",
@@ -157,8 +165,77 @@ def render_markdown(summary: dict[str, Any]) -> str:
             f"- Backend: {_fmt(scenario.get('backend'))}",
             f"- Base URL: {_fmt(scenario.get('base_url'))}",
             f"- Endpoint: {_fmt(scenario.get('endpoint'))}",
+            f"- Model: {_fmt(scenario.get('model'))}",
+            f"- Local model asset status: {_fmt(scenario.get('model_local_asset_statement'))}",
             f"- Run duration seconds: {_fmt_num(scenario.get('run_duration_s'))}",
             f"- Real vLLM: {_fmt(scenario.get('real_vllm_status'))}",
+            "",
+            "## Reproducibility Bundle",
+            "",
+        ]
+    )
+    bundle = summary["artifact_bundle"]
+    lines.extend(
+        [
+            f"- Artifact manifest: {_fmt(bundle.get('manifest_path'))}",
+            f"- Artifact verification: {_fmt(bundle.get('verification_status'))}",
+            f"- Missing required artifacts: {_fmt(', '.join(bundle.get('missing_required_artifacts') or []))}",
+            f"- Common config equality: {_fmt(bundle.get('common_config_equality'))}",
+            "",
+            "| Config | SHA-256 | Bytes |",
+            "| --- | --- | ---: |",
+        ]
+    )
+    configs = bundle.get("configs") if isinstance(bundle.get("configs"), list) else []
+    if configs:
+        for item in configs:
+            lines.append(
+                "| {path} | {sha} | {size} |".format(
+                    path=_md_code(item.get("relative_path")),
+                    sha=_md_code(item.get("sha256")),
+                    size=_fmt_num(item.get("byte_size")),
+                )
+            )
+    else:
+        lines.append("| unavailable | unavailable | unavailable |")
+    lines.extend(
+        [
+            "",
+            "## Metric Sources",
+            "",
+            "| Metric group | Source | Status | Note |",
+            "| --- | --- | --- | --- |",
+        ]
+    )
+    for row in summary["metric_sources"]:
+        lines.append(
+            "| {group} | {source} | {status} | {note} |".format(
+                group=_md_code(row.get("group")),
+                source=_md_code(row.get("source")),
+                status=_md_code(row.get("status")),
+                note=_escape_pipes(_fmt(row.get("note"))),
+            )
+        )
+    lines.extend(
+        [
+            "",
+            "## Phase Counts",
+            "",
+            "| Phase | Requests | Successes | Errors |",
+            "| --- | ---: | ---: | ---: |",
+        ]
+    )
+    for row in summary["phase_counts"]:
+        lines.append(
+            "| {phase} | {requests} | {successes} | {errors} |".format(
+                phase=_md_code(row.get("phase")),
+                requests=_fmt_num(row.get("request_count")),
+                successes=_fmt_num(row.get("success_count")),
+                errors=_fmt_num(row.get("error_count")),
+            )
+        )
+    lines.extend(
+        [
             "",
             "## Workload Summary",
             "",
@@ -241,6 +318,8 @@ def render_markdown(summary: dict[str, Any]) -> str:
     )
     if activity.get("status") != "available":
         lines.extend(["", f"BIFROST stats are {activity['status']}: {activity['note']}"])
+    if activity.get("synthetic_label"):
+        lines.extend(["", "Synthetic fake-server timing metrics are labeled separately and are not connector metrics."])
     lines.extend(
         [
             "",
@@ -321,6 +400,114 @@ def write_comparison_csv(path: Path, comparison_summary: dict[str, Any]) -> None
             )
 
 
+def _artifact_bundle_summary(
+    run_dir: Path,
+    comparison_summary: dict[str, Any] | None,
+) -> dict[str, Any]:
+    manifest_path = run_dir / "artifact_manifest.json"
+    manifest: dict[str, Any] | None = None
+    verification = {"status": "unavailable", "failure_count": None, "failures": []}
+    if manifest_path.exists():
+        manifest = _read_json(manifest_path)
+        verification = verify_artifact_manifest(run_dir, manifest)
+    artifacts = manifest.get("artifacts", []) if isinstance(manifest, dict) else []
+    configs = [
+        item
+        for item in artifacts
+        if isinstance(item, dict)
+        and (
+            item.get("artifact_type") == "config"
+            or item.get("relative_path") in CONFIG_ARTIFACTS
+        )
+    ]
+    if not configs:
+        configs = _legacy_config_entries(run_dir)
+    return {
+        "manifest_path": str(manifest_path) if manifest_path.exists() else None,
+        "verification_status": verification.get("status"),
+        "verification_failures": verification.get("failures", []),
+        "missing_required_artifacts": (
+            manifest.get("missing_required_artifacts", []) if isinstance(manifest, dict) else []
+        ),
+        "configs": configs,
+        "common_config_equality": _common_config_equality(run_dir, comparison_summary),
+    }
+
+
+def _metric_sources_summary(
+    run_summary: dict[str, Any],
+    comparison_summary: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    performance_source = run_summary.get("performance_metrics_source")
+    connector_source = run_summary.get("connector_metrics_source")
+    rows.append(
+        _source_row(
+            "performance",
+            performance_source,
+            "synthetic fake metrics" if performance_source == MetricSource.SYNTHETIC_FAKE_SERVER.value else "",
+        )
+    )
+    rows.append(_source_row("bifrost_connector", connector_source, "connector counters"))
+    bifrost_stats = run_summary.get("bifrost_stats") if isinstance(run_summary.get("bifrost_stats"), dict) else {}
+    after = bifrost_stats.get("after") if isinstance(bifrost_stats.get("after"), dict) else {}
+    rows.append(
+        _source_row(
+            "bifrost_store",
+            MetricSource.BIFROST_STORE_STATS.value if after.get("status") == "ok" else None,
+            after.get("reason") or "store stats before/after",
+        )
+    )
+    backend_metrics = run_summary.get("backend_metrics") if isinstance(run_summary.get("backend_metrics"), dict) else {}
+    backend_after = backend_metrics.get("after") if isinstance(backend_metrics.get("after"), dict) else {}
+    rows.append(
+        _source_row(
+            "synthetic_fake_server",
+            MetricSource.SYNTHETIC_FAKE_SERVER.value if backend_after.get("status") == "ok" else None,
+            "fake server counters are not connector counters",
+        )
+    )
+    if comparison_summary is not None:
+        for item in comparison_summary.get("mode_results", []):
+            if not isinstance(item, dict):
+                continue
+            summary = item.get("summary") if isinstance(item.get("summary"), dict) else {}
+            rows.append(
+                _source_row(
+                    f"mode:{item.get('mode')}",
+                    summary.get("performance_metrics_source") or item.get("performance_metrics_source"),
+                    item.get("status"),
+                )
+            )
+    return rows
+
+
+def _phase_counts(run_summary: dict[str, Any]) -> list[dict[str, Any]]:
+    sections = run_summary.get("phase_sections")
+    if not isinstance(sections, dict):
+        return [
+            {
+                "phase": run_summary.get("phase") or "measured",
+                "request_count": run_summary.get("request_count"),
+                "success_count": run_summary.get("success_count"),
+                "error_count": run_summary.get("error_count"),
+            }
+        ]
+    rows = []
+    for phase, section in sections.items():
+        if not isinstance(section, dict):
+            continue
+        rows.append(
+            {
+                "phase": phase,
+                "request_count": section.get("request_count"),
+                "success_count": section.get("success_count"),
+                "error_count": section.get("error_count"),
+            }
+        )
+    return rows
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate a Phase 6 serving benchmark report")
     parser.add_argument("--run-dir", required=True, type=Path)
@@ -361,8 +548,11 @@ def _environment_summary(run_summary: dict[str, Any]) -> dict[str, Any]:
     vllm = _details(checks, "vllm")
     lmcache = _details(checks, "lmcache")
     connector = _details(checks, "lmcache_bifrost")
-    real = readiness.get("real_serving_ready") if isinstance(readiness, dict) else None
+    bifrostd = _details(checks, "bifrostd_binary")
     fake = readiness.get("fake_ci_ready") if isinstance(readiness, dict) else None
+    gpu = readiness.get("gpu_serving_ready") if isinstance(readiness, dict) else None
+    full = readiness.get("full_benchmark_ready") if isinstance(readiness, dict) else None
+    legacy_real = readiness.get("real_serving_ready") if isinstance(readiness, dict) else None
     gpu_names = torch.get("gpu_names") if isinstance(torch.get("gpu_names"), list) else []
     return {
         "repository": git.get("repository"),
@@ -381,23 +571,38 @@ def _environment_summary(run_summary: dict[str, Any]) -> dict[str, Any]:
         "vllm_version": vllm.get("version"),
         "lmcache_version": lmcache.get("version"),
         "connector_version": connector.get("version"),
-        "readiness": _readiness_text(real, fake),
+        "bifrostd": bifrostd.get("version") or bifrostd.get("path"),
+        "driver_version": torch.get("driver_version") or torch.get("cuda_driver_version"),
+        "readiness": _readiness_text(
+            fake=fake,
+            gpu=gpu,
+            full=full,
+            legacy_real=legacy_real,
+        ),
     }
 
 
-def _scenario_summary(run_summary: dict[str, Any]) -> dict[str, Any]:
+def _scenario_summary(
+    run_summary: dict[str, Any],
+    comparison_summary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     backend = run_summary.get("backend")
     label = str(run_summary.get("label") or "")
     real_status = "skipped" if backend == "fake" or label.startswith("fake_") else "attempted"
+    model, local_statement = _model_summary(run_summary, comparison_summary)
     return {
         "label": run_summary.get("label"),
         "backend": backend,
         "base_url": run_summary.get("base_url"),
         "endpoint": run_summary.get("endpoint"),
+        "model": model,
+        "model_local_asset_statement": local_statement,
         "run_duration_s": run_summary.get("run_duration_s"),
         "started_unix_s": run_summary.get("started_unix_s"),
         "ended_unix_s": run_summary.get("ended_unix_s"),
         "real_vllm_status": real_status,
+        "connector_metrics_source": run_summary.get("connector_metrics_source"),
+        "performance_metrics_source": run_summary.get("performance_metrics_source"),
     }
 
 
@@ -500,6 +705,9 @@ def _bifrost_activity_summary(run_summary: dict[str, Any]) -> dict[str, Any]:
         "object_count_delta": object_delta,
         "fsck_status": fsck_status if fsck_status is not None else "unavailable",
         "note": note,
+        "source": _source_from_delta(connector_delta, bifrost_delta),
+        "synthetic_label": run_summary.get("performance_metrics_source")
+        == MetricSource.SYNTHETIC_FAKE_SERVER.value,
     }
 
 
@@ -528,7 +736,7 @@ def _skipped_components(
     comparison_summary: dict[str, Any] | None,
 ) -> list[str]:
     skipped: list[str] = []
-    if _scenario_summary(run_summary)["real_vllm_status"] == "skipped":
+    if _scenario_summary(run_summary, comparison_summary)["real_vllm_status"] == "skipped":
         skipped.append("Real vLLM serving mode was skipped for this fake/backend run.")
     if _latency_summary(run_summary)["ttft_status"] == "unavailable":
         skipped.append("TTFT metrics were unavailable.")
@@ -628,14 +836,53 @@ def _details(checks: dict[str, Any], name: str) -> dict[str, Any]:
     return details if isinstance(details, dict) else {}
 
 
-def _readiness_text(real: Any, fake: Any) -> str:
-    real_status = real.get("status") if isinstance(real, dict) else None
+def _model_summary(
+    run_summary: dict[str, Any],
+    comparison_summary: dict[str, Any] | None,
+) -> tuple[str | None, str]:
+    doctor = run_summary.get("environment_doctor")
+    checks = doctor.get("checks", {}) if isinstance(doctor, dict) else {}
+    model_check = checks.get("model") if isinstance(checks, dict) else None
+    model_details = model_check.get("details") if isinstance(model_check, dict) else {}
+    if not isinstance(model_details, dict):
+        model_details = {}
+    value = model_details.get("value")
+    if value is None and comparison_summary is not None:
+        value = comparison_summary.get("model")
+    model = str(value) if value else None
+    kind = model_details.get("kind")
+    readable = model_details.get("readable")
+    status = model_check.get("status") if isinstance(model_check, dict) else None
+    if kind == "local_path" and readable is True and status == "ready":
+        return model, "configured model resolved to a readable local path"
+    if kind == "local_path" and readable is False:
+        return model, "configured model path was local but not readable"
+    if model:
+        return model, "model value recorded; local asset availability was not verified in this run artifact"
+    return None, "unavailable"
+
+
+def _readiness_text(
+    *,
+    fake: Any,
+    gpu: Any,
+    full: Any,
+    legacy_real: Any,
+) -> str:
+    full_status = full.get("status") if isinstance(full, dict) else None
+    gpu_status = gpu.get("status") if isinstance(gpu, dict) else None
+    legacy_real_status = legacy_real.get("status") if isinstance(legacy_real, dict) else None
     fake_status = fake.get("status") if isinstance(fake, dict) else None
-    if real_status:
-        return f"real_serving_ready={real_status}, fake_ci_ready={fake_status or 'unknown'}"
+    parts: list[str] = []
+    if full_status:
+        parts.append(f"full_benchmark_ready={full_status}")
+    if gpu_status:
+        parts.append(f"gpu_serving_ready={gpu_status}")
+    if legacy_real_status and not parts:
+        parts.append(f"real_serving_ready={legacy_real_status}")
     if fake_status:
-        return f"fake_ci_ready={fake_status}"
-    return "unavailable"
+        parts.append(f"fake_ci_ready={fake_status}")
+    return ", ".join(parts) if parts else "unavailable"
 
 
 def _first_number(*dicts: dict[str, Any], keys: tuple[str, ...]) -> int | float | None:
@@ -667,6 +914,66 @@ def _bifrost_unavailable_note(stats: dict[str, Any]) -> str:
     if status:
         return f"BIFROST stats collection status was {status}."
     return "No BIFROST connector or store deltas were present."
+
+
+def _source_row(group: str, source: Any, note: Any = "") -> dict[str, Any]:
+    source_text = _normalize_metric_source(source)
+    return {
+        "group": group,
+        "source": source_text,
+        "status": "available" if source_text != MetricSource.UNAVAILABLE.value else "unavailable",
+        "note": note,
+    }
+
+
+def _normalize_metric_source(source: Any) -> str:
+    if not source:
+        return MetricSource.UNAVAILABLE.value
+    text = str(source)
+    if text == "actual_bifrost_remote_connector":
+        return MetricSource.BIFROST_CONNECTOR_METRICS.value
+    if text in {item.value for item in MetricSource}:
+        return text
+    return text
+
+
+def _source_from_delta(
+    connector_delta: dict[str, Any],
+    bifrost_delta: dict[str, Any],
+) -> str:
+    if connector_delta:
+        return MetricSource.BIFROST_CONNECTOR_JSONL.value
+    if bifrost_delta:
+        return MetricSource.BIFROST_STORE_STATS.value
+    return MetricSource.UNAVAILABLE.value
+
+
+def _legacy_config_entries(run_dir: Path) -> list[dict[str, Any]]:
+    entries = []
+    for name in ("config.json", "resolved_run_config.yaml", *CONFIG_ARTIFACTS):
+        path = run_dir / name
+        if path.exists() and path.is_file():
+            entries.append(artifact_entry(path, root=run_dir).to_dict())
+    by_path = {entry["relative_path"]: entry for entry in entries}
+    return [by_path[key] for key in sorted(by_path)]
+
+
+def _common_config_equality(
+    run_dir: Path,
+    comparison_summary: dict[str, Any] | None,
+) -> str:
+    manifest_path = run_dir / "comparison_manifest.json"
+    if manifest_path.exists():
+        manifest = _read_json(manifest_path)
+        fairness = manifest.get("fairness") if isinstance(manifest.get("fairness"), dict) else {}
+        status = fairness.get("status")
+        if status:
+            return str(status)
+    if comparison_summary is not None:
+        fairness = comparison_summary.get("fairness")
+        if isinstance(fairness, dict) and fairness.get("status"):
+            return str(fairness["status"])
+    return "unavailable"
 
 
 def _fmt(value: Any) -> str:

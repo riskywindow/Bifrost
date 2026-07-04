@@ -15,6 +15,7 @@ class RequestMetadata:
     repeat_group: int
     expected_cache_reuse: bool
     prompt_token_estimate: int | None = None
+    phase: str = "measured"
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
@@ -22,6 +23,7 @@ class RequestMetadata:
             "prefix_id": self.prefix_id,
             "repeat_group": self.repeat_group,
             "expected_cache_reuse": self.expected_cache_reuse,
+            "phase": self.phase,
         }
         if self.prompt_token_estimate is not None:
             data["prompt_token_estimate"] = self.prompt_token_estimate
@@ -92,6 +94,7 @@ def request_from_dict(data: dict[str, Any]) -> ServingRequest:
                 if metadata_data.get("prompt_token_estimate") is not None
                 else None
             ),
+            phase=str(metadata_data.get("phase", data.get("phase", "measured"))),
         ),
     )
     validate_request(request)
@@ -117,6 +120,8 @@ def validate_request(request: ServingRequest) -> None:
         raise ValueError("metadata.workload_name must be non-empty")
     if not request.metadata.prefix_id:
         raise ValueError("metadata.prefix_id must be non-empty")
+    if request.metadata.phase not in {"engine_warmup", "cache_population", "measured"}:
+        raise ValueError("metadata.phase must be engine_warmup, cache_population, or measured")
     if request.metadata.repeat_group < 0:
         raise ValueError("metadata.repeat_group must be non-negative")
     if (

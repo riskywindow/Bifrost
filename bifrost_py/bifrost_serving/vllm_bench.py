@@ -49,6 +49,7 @@ class VLLMBenchServeConfig:
     backend: str = "openai"
     dataset_path: Path | None = None
     num_prompts: int = 8
+    num_warmups: int = 0
     request_rate: float | None = None
     max_concurrency: int | None = None
     save_result: bool = True
@@ -166,6 +167,8 @@ def build_vllm_bench_serve_command(
     _append_option(command, warnings, supported, "--base-url", config.base_url)
     _append_option(command, warnings, supported, "--endpoint", config.endpoint)
     _append_option(command, warnings, supported, "--num-prompts", str(config.num_prompts))
+    if config.num_warmups > 0:
+        _append_option(command, warnings, supported, "--num-warmups", str(config.num_warmups))
     if config.request_rate is not None:
         _append_option(command, warnings, supported, "--request-rate", str(config.request_rate))
     if config.max_concurrency is not None:
@@ -342,6 +345,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--backend", choices=sorted(SUPPORTED_BACKENDS), default="openai")
     parser.add_argument("--dataset-path", type=Path, default=None)
     parser.add_argument("--num-prompts", type=int, required=True)
+    parser.add_argument("--num-warmups", type=int, default=0)
     parser.add_argument("--request-rate", type=float, default=None)
     parser.add_argument("--max-concurrency", type=int, default=None)
     parser.add_argument("--metadata", action="append", default=[], metavar="KEY=VALUE")
@@ -357,6 +361,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             backend=args.backend,
             dataset_path=args.dataset_path,
             num_prompts=args.num_prompts,
+            num_warmups=args.num_warmups,
             request_rate=args.request_rate,
             max_concurrency=args.max_concurrency,
             metadata=_parse_metadata(args.metadata),
@@ -626,6 +631,8 @@ def _validate_config(config: VLLMBenchServeConfig) -> None:
         raise ValueError("endpoint must be non-empty")
     if config.num_prompts <= 0:
         raise ValueError("num_prompts must be positive")
+    if config.num_warmups < 0:
+        raise ValueError("num_warmups must be non-negative")
     if config.request_rate is not None and config.request_rate <= 0:
         raise ValueError("request_rate must be positive when provided")
     if config.max_concurrency is not None and config.max_concurrency <= 0:

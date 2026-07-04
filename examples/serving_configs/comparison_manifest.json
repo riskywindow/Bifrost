@@ -1,0 +1,76 @@
+{
+  "artifacts": {
+    "bifrost_connector_config_json": "examples/serving_configs/vllm_lmcache_bifrost/bifrost_connector_config.json",
+    "comparison_manifest_json": "examples/serving_configs/comparison_manifest.json",
+    "lmcache_config_vllm_lmcache_bifrost": "examples/serving_configs/vllm_lmcache_bifrost/lmcache_config.yaml",
+    "lmcache_config_vllm_lmcache_local_cpu": "examples/serving_configs/vllm_lmcache_local_cpu/lmcache_config.yaml",
+    "run_plan_yaml": "examples/serving_configs/phase6_matrix.yaml",
+    "vllm_command_vllm_lmcache_bifrost": "examples/serving_configs/vllm_lmcache_bifrost/vllm_command.json",
+    "vllm_command_vllm_lmcache_local_cpu": "examples/serving_configs/vllm_lmcache_local_cpu/vllm_command.json",
+    "vllm_command_vllm_only": "examples/serving_configs/vllm_only/vllm_command.json"
+  },
+  "common_fields": {
+    "concurrency": 2,
+    "dtype": "auto",
+    "enable_chunked_prefill": false,
+    "enable_prefix_caching": false,
+    "gpu_memory_utilization": 0.9,
+    "max_model_len": 4096,
+    "model": "./local-model",
+    "output_len": 64,
+    "request_rate": 1.0,
+    "sampling_settings": {
+      "temperature": 0.0,
+      "top_p": 1.0
+    },
+    "served_model_name": "bifrost-phase6-local",
+    "tensor_parallel_size": 1,
+    "workload_path": "runs/phase6-serving/workload.jsonl"
+  },
+  "fairness": {
+    "connector_mode_mismatch_allowed": false,
+    "prefix_caching": "explicitly_disabled",
+    "status": "validated",
+    "vllm_core_allowlist": []
+  },
+  "matrix": "primary_isolation",
+  "mode_specific_fields": {
+    "vllm_lmcache_bifrost": {
+      "bifrost_enabled": true,
+      "bifrost_endpoint": "127.0.0.1:7744",
+      "connector_metrics_path": "examples/serving_configs/vllm_lmcache_bifrost/bifrost_lmcache_connector_metrics.jsonl",
+      "lmcache_chunk_size": 256,
+      "lmcache_connector_mode": "inprocess",
+      "lmcache_enabled": true,
+      "local_cpu": false,
+      "max_local_cpu_size": 8,
+      "mode": "vllm_lmcache_bifrost",
+      "port": 8002
+    },
+    "vllm_lmcache_local_cpu": {
+      "bifrost_enabled": false,
+      "bifrost_endpoint": null,
+      "connector_metrics_path": null,
+      "lmcache_chunk_size": 256,
+      "lmcache_connector_mode": "inprocess",
+      "lmcache_enabled": true,
+      "local_cpu": true,
+      "max_local_cpu_size": 8,
+      "mode": "vllm_lmcache_local_cpu",
+      "port": 8001
+    },
+    "vllm_only": {
+      "bifrost_enabled": false,
+      "bifrost_endpoint": null,
+      "connector_metrics_path": null,
+      "lmcache_chunk_size": 256,
+      "lmcache_connector_mode": null,
+      "lmcache_enabled": false,
+      "local_cpu": false,
+      "max_local_cpu_size": 8,
+      "mode": "vllm_only",
+      "port": 8000
+    }
+  },
+  "schema_version": "bifrost.phase6_baseline_matrix_manifest.v1"
+}

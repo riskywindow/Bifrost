@@ -57,16 +57,17 @@ class BifrostRemoteConnector(_BaseRemoteConnector):  # type: ignore[misc]
     def support_ping(self) -> bool:
         return True
 
-    async def ping(self) -> bool:
+    async def ping(self) -> int:
         self._ensure_open()
         ping = getattr(self.client, "ping", None)
         stats = getattr(self.client, "stats", None)
         try:
             if callable(ping):
-                return bool(await self._maybe_await(ping()))
+                await self._maybe_await(ping())
+                return 0
             if callable(stats):
                 await self._maybe_await(stats())
-                return True
+                return 0
         except BifrostClientError as exc:
             raise BifrostLMCacheStoreError(f"ping_failed: {exc}") from exc
         except Exception as exc:  # pragma: no cover - defensive wrapper.
@@ -76,8 +77,13 @@ class BifrostRemoteConnector(_BaseRemoteConnector):  # type: ignore[misc]
     def support_batched_contains(self) -> bool:
         return True
 
-    async def batched_contains(self, keys: object) -> list[bool]:
-        return [await self.exists(key) for key in _iter_keys(keys)]
+    def batched_contains(self, keys: object) -> int:
+        hits = 0
+        for key in _iter_keys(keys):
+            if not self.exists_sync(key):
+                break
+            hits += 1
+        return hits
 
     def support_batched_get(self) -> bool:
         return True
@@ -88,8 +94,12 @@ class BifrostRemoteConnector(_BaseRemoteConnector):  # type: ignore[misc]
     def support_batched_put(self) -> bool:
         return True
 
-    async def batched_put(self, items: object) -> None:
-        for index, key, memory_obj in _iter_items(items):
+    async def batched_put(
+        self,
+        keys: object,
+        memory_objs: object | None = None,
+    ) -> None:
+        for index, key, memory_obj in _iter_items(keys, memory_objs):
             try:
                 await self.put(key, memory_obj)
             except (
@@ -113,16 +123,8 @@ class BifrostRemoteConnector(_BaseRemoteConnector):  # type: ignore[misc]
             key_hash = opaque_engine_key_hash(key)
             candidates = await self._query_by_key_hash(key_hash)
             for summary in candidates:
-                if not self._summary_is_servable(summary):
-                    continue
-                try:
-                    stored = await self._get_object(summary.object_id)
-                    self._validate_stored_object(stored, key, key_hash)
+                if await self._candidate_is_valid_hit(summary, key, key_hash):
                     return True
-                except BifrostLMCacheValidationError:
-                    continue
-                except BifrostLMCacheStoreError:
-                    continue
             return False
         except BifrostLMCacheStoreError as exc:
             self._emit_error("exists", key_hash, None, 0, start_ms, exc)
@@ -142,16 +144,8 @@ class BifrostRemoteConnector(_BaseRemoteConnector):  # type: ignore[misc]
             key_hash = opaque_engine_key_hash(key)
             candidates = self._query_by_key_hash_sync(key_hash)
             for summary in candidates:
-                if not self._summary_is_servable(summary):
-                    continue
-                try:
-                    stored = self._get_object_sync(summary.object_id)
-                    self._validate_stored_object(stored, key, key_hash)
+                if self._candidate_is_valid_hit_sync(summary, key, key_hash):
                     return True
-                except BifrostLMCacheValidationError:
-                    continue
-                except BifrostLMCacheStoreError:
-                    continue
             return False
         except BifrostLMCacheStoreError:
             return False
@@ -471,6 +465,42 @@ class BifrostRemoteConnector(_BaseRemoteConnector):  # type: ignore[misc]
             return False
         return str(getattr(summary, "state", "")) in _SERVEABLE_STATES
 
+    async def _candidate_is_valid_hit(
+        self,
+        summary: Any,
+        key: object,
+        key_hash: str,
+    ) -> bool:
+        if not self._summary_is_servable(summary):
+            return False
+        try:
+            stored = await self._get_object(summary.object_id)
+            self._validate_stored_object(stored, key, key_hash)
+        except BifrostLMCacheValidationError:
+            self._metrics.increment("validation_error_count")
+            return False
+        except BifrostLMCacheStoreError:
+            return False
+        return True
+
+    def _candidate_is_valid_hit_sync(
+        self,
+        summary: Any,
+        key: object,
+        key_hash: str,
+    ) -> bool:
+        if not self._summary_is_servable(summary):
+            return False
+        try:
+            stored = self._get_object_sync(summary.object_id)
+            self._validate_stored_object(stored, key, key_hash)
+        except BifrostLMCacheValidationError:
+            self._metrics.increment("validation_error_count")
+            return False
+        except BifrostLMCacheStoreError:
+            return False
+        return True
+
     async def _close_client(self, client: object) -> None:
         close = getattr(client, "close", None)
         if callable(close):
@@ -583,7 +613,28 @@ def _iter_keys(keys: object) -> list[object]:
         raise ConnectorConfigurationError("batched keys must be an iterable of keys") from exc
 
 
-def _iter_items(items: object) -> list[tuple[int, object, object]]:
+def _iter_items(
+    keys_or_items: object,
+    memory_objs: object | None = None,
+) -> list[tuple[int, object, object]]:
+    if memory_objs is not None:
+        keys = _iter_keys(keys_or_items)
+        try:
+            objects = list(memory_objs)  # type: ignore[arg-type]
+        except TypeError as exc:
+            raise ConnectorConfigurationError(
+                "batched put memory objects must be an iterable"
+            ) from exc
+        if len(keys) != len(objects):
+            raise ConnectorConfigurationError(
+                "batched_put_failed:reason=length_mismatch"
+            )
+        return [
+            (index, key, memory_obj)
+            for index, (key, memory_obj) in enumerate(zip(keys, objects, strict=True))
+        ]
+
+    items = keys_or_items
     if isinstance(items, dict):
         return [
             (index, key, memory_obj)

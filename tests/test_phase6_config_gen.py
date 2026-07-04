@@ -106,11 +106,17 @@ def test_generated_yaml_files_parse() -> None:
         EXAMPLES / "bifrost_lmcache_mp.yaml",
     ):
         parsed = _load_yaml(path)
-        plugin = parsed["remote_storage_plugin"]["bifrost"]
         assert parsed["remote_storage_plugins"] == ["bifrost"]
-        assert plugin["module_path"] == "lmcache_bifrost.adapter"
-        assert plugin["class_name"] == "BifrostConnectorAdapter"
-        assert plugin["extra_config"]["object_type"] == "opaque_engine_blob"
+        extra = parsed["extra_config"]
+        assert (
+            extra["remote_storage_plugin.bifrost.module_path"]
+            == "lmcache_bifrost.adapter"
+        )
+        assert (
+            extra["remote_storage_plugin.bifrost.class_name"]
+            == "BifrostConnectorAdapter"
+        )
+        assert extra["object_type"] == "opaque_engine_blob"
 
 
 def test_scripts_are_executable_or_documented() -> None:
@@ -147,7 +153,7 @@ def test_pickle_fallback_defaults_to_false(tmp_path: Path) -> None:
     result = generate_serving_config(ServingConfigRequest(output_dir=tmp_path))
     parsed = _load_yaml(result.files["lmcache_inprocess"])
 
-    extra = parsed["remote_storage_plugin"]["bifrost"]["extra_config"]
+    extra = parsed["extra_config"]
     assert extra["allow_pickle_fallback"] is False
     assert "BIFROST_ALLOW_PICKLE_FALLBACK=0" in result.files["env"].read_text(
         encoding="utf-8"
@@ -166,7 +172,11 @@ def test_non_fake_pickle_fallback_is_rejected(tmp_path: Path) -> None:
 
 
 def test_no_hf_token_is_embedded() -> None:
-    combined = "\n".join(path.read_text(encoding="utf-8") for path in EXAMPLES.iterdir())
+    combined = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in EXAMPLES.rglob("*")
+        if path.is_file()
+    )
 
     assert "HF_TOKEN=" not in combined
     assert "HUGGING_FACE_HUB_TOKEN=" not in combined

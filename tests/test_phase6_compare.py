@@ -96,7 +96,12 @@ def test_skipped_real_modes_are_reported_not_failed(tmp_path: Path) -> None:
         BaselineComparisonConfig(
             workload_jsonl=workload_path,
             output_dir=tmp_path / "compare",
-            modes=("fake_no_cache", "vllm_only", "vllm_lmcache_bifrost"),
+            modes=(
+                "fake_no_cache",
+                "vllm_only",
+                "vllm_lmcache_local_cpu",
+                "vllm_lmcache_bifrost",
+            ),
             concurrency=1,
             timeout_seconds=5,
         )
@@ -105,6 +110,7 @@ def test_skipped_real_modes_are_reported_not_failed(tmp_path: Path) -> None:
     by_mode = {item["mode"]: item for item in result.mode_results}
     assert by_mode["fake_no_cache"]["status"] == "completed"
     assert by_mode["vllm_only"]["status"] == "skipped"
+    assert by_mode["vllm_lmcache_local_cpu"]["status"] == "skipped"
     assert by_mode["vllm_lmcache_bifrost"]["status"] == "skipped"
     assert "allow-real-vllm" in by_mode["vllm_only"]["skip_reason"]
     assert all(item["status"] != "failed" for item in result.mode_results)

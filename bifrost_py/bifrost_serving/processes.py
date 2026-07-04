@@ -91,7 +91,7 @@ class ManagedProcess:
             time.sleep(0.05)
         raise ProcessReadinessTimeout(f"{self.name} readiness timed out after {timeout}s")
 
-    def stop(self, timeout: float = 5.0) -> None:
+    def stop(self, timeout: float = 60.0) -> None:
         if self.process is None:
             self._close_log()
             return
@@ -108,26 +108,31 @@ class ManagedProcess:
         try:
             self.process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
-            self.kill()
+            self.kill(timeout=30.0)
             return
         finally:
             self.stopped_at = time.time()
             self._close_log()
 
-    def kill(self) -> None:
+    def kill(self, timeout: float = 30.0) -> None:
         if self.process is None:
             self._close_log()
             return
-        if self.process.poll() is None:
-            try:
-                os.killpg(self.process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            except OSError:
-                self.process.kill()
-            self.process.wait(timeout=5)
-        self.stopped_at = time.time()
-        self._close_log()
+        try:
+            if self.process.poll() is None:
+                try:
+                    os.killpg(self.process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                except OSError:
+                    self.process.kill()
+                try:
+                    self.process.wait(timeout=timeout)
+                except subprocess.TimeoutExpired:
+                    pass
+        finally:
+            self.stopped_at = time.time()
+            self._close_log()
 
     def status(self) -> dict[str, Any]:
         pid = self.process.pid if self.process is not None else None

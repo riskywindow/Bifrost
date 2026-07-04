@@ -1,0 +1,2336 @@
+{
+  "available_kv_connectors": {
+    "available": true,
+    "connector_classes": [
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.factory",
+        "name": "KVConnectorFactory",
+        "qualname": "KVConnectorFactory",
+        "signature": "()",
+        "signature_parameters": [],
+        "subclass_of_base_v1": false
+      },
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.base",
+        "name": "KVConnectorMetadata",
+        "qualname": "KVConnectorMetadata",
+        "signature": "()",
+        "signature_parameters": [],
+        "subclass_of_base_v1": false
+      },
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.base",
+        "name": "KVConnectorMetadata",
+        "qualname": "KVConnectorMetadata",
+        "signature": "()",
+        "signature_parameters": [],
+        "subclass_of_base_v1": false
+      },
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.base",
+        "name": "KVConnectorMetadata",
+        "qualname": "KVConnectorMetadata",
+        "signature": "()",
+        "signature_parameters": [],
+        "subclass_of_base_v1": false
+      },
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.base",
+        "name": "KVConnectorMetadata",
+        "qualname": "KVConnectorMetadata",
+        "signature": "()",
+        "signature_parameters": [],
+        "subclass_of_base_v1": false
+      },
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.base",
+        "name": "KVConnectorRole",
+        "qualname": "KVConnectorRole",
+        "signature": "(*values)",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "VAR_POSITIONAL",
+            "name": "values",
+            "required": false
+          }
+        ],
+        "subclass_of_base_v1": false
+      },
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.base",
+        "name": "KVConnectorRole",
+        "qualname": "KVConnectorRole",
+        "signature": "(*values)",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "VAR_POSITIONAL",
+            "name": "values",
+            "required": false
+          }
+        ],
+        "subclass_of_base_v1": false
+      },
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.base",
+        "name": "KVConnectorRole",
+        "qualname": "KVConnectorRole",
+        "signature": "(*values)",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "VAR_POSITIONAL",
+            "name": "values",
+            "required": false
+          }
+        ],
+        "subclass_of_base_v1": false
+      },
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.base",
+        "name": "KVConnectorRole",
+        "qualname": "KVConnectorRole",
+        "signature": "(*values)",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "VAR_POSITIONAL",
+            "name": "values",
+            "required": false
+          }
+        ],
+        "subclass_of_base_v1": false
+      },
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.multi_connector",
+        "name": "MultiConnector",
+        "qualname": "MultiConnector",
+        "signature": "(vllm_config: 'VllmConfig', role: vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorRole)",
+        "signature_parameters": [
+          {
+            "annotation": "VllmConfig",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "vllm_config",
+            "required": true
+          },
+          {
+            "annotation": "vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorRole",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "role",
+            "required": true
+          }
+        ],
+        "subclass_of_base_v1": true
+      },
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.multi_connector",
+        "name": "MultiKVConnectorMetadata",
+        "qualname": "MultiKVConnectorMetadata",
+        "signature": "(metadata: tuple[vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorMetadata, ...], extra_async_saves: Optional[dict[str, int]] = None) -> None",
+        "signature_parameters": [
+          {
+            "annotation": "tuple",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "metadata",
+            "required": true
+          },
+          {
+            "annotation": "typing.Optional",
+            "default": "None",
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "extra_async_saves",
+            "required": false
+          }
+        ],
+        "subclass_of_base_v1": false
+      },
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.nixl_connector",
+        "name": "NixlConnector",
+        "qualname": "NixlConnector",
+        "signature": "(vllm_config: vllm.config.VllmConfig, role: vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorRole)",
+        "signature_parameters": [
+          {
+            "annotation": "vllm.config.VllmConfig",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "vllm_config",
+            "required": true
+          },
+          {
+            "annotation": "vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorRole",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "role",
+            "required": true
+          }
+        ],
+        "subclass_of_base_v1": true
+      },
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.nixl_connector",
+        "name": "NixlConnectorMetadata",
+        "qualname": "NixlConnectorMetadata",
+        "signature": "()",
+        "signature_parameters": [],
+        "subclass_of_base_v1": false
+      },
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.nixl_connector",
+        "name": "NixlConnectorScheduler",
+        "qualname": "NixlConnectorScheduler",
+        "signature": "(vllm_config: vllm.config.VllmConfig, engine_id: str)",
+        "signature_parameters": [
+          {
+            "annotation": "vllm.config.VllmConfig",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "vllm_config",
+            "required": true
+          },
+          {
+            "annotation": "str",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "engine_id",
+            "required": true
+          }
+        ],
+        "subclass_of_base_v1": false
+      },
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.nixl_connector",
+        "name": "NixlConnectorWorker",
+        "qualname": "NixlConnectorWorker",
+        "signature": "(vllm_config: vllm.config.VllmConfig, engine_id: str)",
+        "signature_parameters": [
+          {
+            "annotation": "vllm.config.VllmConfig",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "vllm_config",
+            "required": true
+          },
+          {
+            "annotation": "str",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "engine_id",
+            "required": true
+          }
+        ],
+        "subclass_of_base_v1": false
+      },
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.shared_storage_connector",
+        "name": "SharedStorageConnector",
+        "qualname": "SharedStorageConnector",
+        "signature": "(vllm_config: 'VllmConfig', role: vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorRole)",
+        "signature_parameters": [
+          {
+            "annotation": "VllmConfig",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "vllm_config",
+            "required": true
+          },
+          {
+            "annotation": "vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorRole",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "role",
+            "required": true
+          }
+        ],
+        "subclass_of_base_v1": true
+      },
+      {
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.shared_storage_connector",
+        "name": "SharedStorageConnectorMetadata",
+        "qualname": "SharedStorageConnectorMetadata",
+        "signature": "()",
+        "signature_parameters": [],
+        "subclass_of_base_v1": false
+      },
+      {
+        "module": "vllm.v1.outputs",
+        "name": "KVConnectorOutput",
+        "qualname": "KVConnectorOutput",
+        "signature": "(finished_sending: Optional[set[str]] = None, finished_recving: Optional[set[str]] = None) -> None",
+        "signature_parameters": [
+          {
+            "annotation": "typing.Optional",
+            "default": "None",
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "finished_sending",
+            "required": false
+          },
+          {
+            "annotation": "typing.Optional",
+            "default": "None",
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "finished_recving",
+            "required": false
+          }
+        ],
+        "subclass_of_base_v1": false
+      },
+      {
+        "module": "vllm.v1.outputs",
+        "name": "KVConnectorOutput",
+        "qualname": "KVConnectorOutput",
+        "signature": "(finished_sending: Optional[set[str]] = None, finished_recving: Optional[set[str]] = None) -> None",
+        "signature_parameters": [
+          {
+            "annotation": "typing.Optional",
+            "default": "None",
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "finished_sending",
+            "required": false
+          },
+          {
+            "annotation": "typing.Optional",
+            "default": "None",
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "finished_recving",
+            "required": false
+          }
+        ],
+        "subclass_of_base_v1": false
+      }
+    ],
+    "imports": {
+      "vllm.distributed.kv_transfer.kv_connector.v1": {
+        "imported": true,
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1",
+        "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/v1/__init__.py",
+        "version": null
+      },
+      "vllm.distributed.kv_transfer.kv_connector.v1.base": {
+        "imported": true,
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.base",
+        "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/v1/base.py",
+        "version": null
+      },
+      "vllm.distributed.kv_transfer.kv_connector.v1.lmcache_connector": {
+        "error": "ModuleNotFoundError(\"No module named 'lmcache'\")",
+        "error_type": "ModuleNotFoundError",
+        "imported": false,
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.lmcache_connector",
+        "module_path": null,
+        "version": null
+      },
+      "vllm.distributed.kv_transfer.kv_connector.v1.multi_connector": {
+        "imported": true,
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.multi_connector",
+        "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py",
+        "version": null
+      },
+      "vllm.distributed.kv_transfer.kv_connector.v1.nixl_connector": {
+        "imported": true,
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.nixl_connector",
+        "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/v1/nixl_connector.py",
+        "version": null
+      },
+      "vllm.distributed.kv_transfer.kv_connector.v1.p2p": {
+        "imported": true,
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.p2p",
+        "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/v1/p2p/__init__.py",
+        "version": null
+      },
+      "vllm.distributed.kv_transfer.kv_connector.v1.shared_storage_connector": {
+        "imported": true,
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.shared_storage_connector",
+        "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/v1/shared_storage_connector.py",
+        "version": null
+      }
+    },
+    "modules": [
+      {
+        "classes": [
+          "KVConnectorMetadata",
+          "KVConnectorOutput",
+          "KVConnectorRole"
+        ],
+        "imported": true,
+        "is_package": false,
+        "name": "vllm.distributed.kv_transfer.kv_connector.v1.base"
+      },
+      {
+        "classes": [],
+        "error": "ModuleNotFoundError(\"No module named 'lmcache'\")",
+        "imported": false,
+        "is_package": false,
+        "name": "vllm.distributed.kv_transfer.kv_connector.v1.lmcache_connector"
+      },
+      {
+        "classes": [
+          "KVConnectorFactory",
+          "KVConnectorMetadata",
+          "KVConnectorOutput",
+          "KVConnectorRole",
+          "MultiConnector",
+          "MultiKVConnectorMetadata"
+        ],
+        "imported": true,
+        "is_package": false,
+        "name": "vllm.distributed.kv_transfer.kv_connector.v1.multi_connector"
+      },
+      {
+        "classes": [
+          "KVConnectorMetadata",
+          "KVConnectorRole",
+          "NixlConnector",
+          "NixlConnectorMetadata",
+          "NixlConnectorScheduler",
+          "NixlConnectorWorker"
+        ],
+        "imported": true,
+        "is_package": false,
+        "name": "vllm.distributed.kv_transfer.kv_connector.v1.nixl_connector"
+      },
+      {
+        "classes": [],
+        "imported": true,
+        "is_package": true,
+        "name": "vllm.distributed.kv_transfer.kv_connector.v1.p2p"
+      },
+      {
+        "classes": [
+          "KVConnectorMetadata",
+          "KVConnectorRole",
+          "SharedStorageConnector",
+          "SharedStorageConnectorMetadata"
+        ],
+        "imported": true,
+        "is_package": false,
+        "name": "vllm.distributed.kv_transfer.kv_connector.v1.shared_storage_connector"
+      }
+    ],
+    "package": "vllm.distributed.kv_transfer.kv_connector.v1",
+    "unsupported_reasons": [],
+    "warnings": []
+  },
+  "config_fields": {
+    "engine_id": {
+      "annotation": "typing.Optional",
+      "dataclass_field": {
+        "compare": true,
+        "default": "None",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "typing.Optional"
+      },
+      "present": true,
+      "signature_parameter": {
+        "annotation": "typing.Optional",
+        "default": "None",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "engine_id",
+        "required": false
+      },
+      "sources": [
+        "annotations",
+        "dataclass_fields",
+        "signature"
+      ]
+    },
+    "kv_buffer_device": {
+      "annotation": "typing.Optional",
+      "dataclass_field": {
+        "compare": true,
+        "default": "'cuda'",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "typing.Optional"
+      },
+      "present": true,
+      "signature_parameter": {
+        "annotation": "typing.Optional",
+        "default": "'cuda'",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_buffer_device",
+        "required": false
+      },
+      "sources": [
+        "annotations",
+        "dataclass_fields",
+        "signature"
+      ]
+    },
+    "kv_buffer_size": {
+      "annotation": "float",
+      "dataclass_field": {
+        "compare": true,
+        "default": "1000000000.0",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "float"
+      },
+      "present": true,
+      "signature_parameter": {
+        "annotation": "float",
+        "default": "1000000000.0",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_buffer_size",
+        "required": false
+      },
+      "sources": [
+        "annotations",
+        "dataclass_fields",
+        "signature"
+      ]
+    },
+    "kv_connector": {
+      "annotation": "typing.Optional",
+      "dataclass_field": {
+        "compare": true,
+        "default": "None",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "typing.Optional"
+      },
+      "present": true,
+      "signature_parameter": {
+        "annotation": "typing.Optional",
+        "default": "None",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_connector",
+        "required": false
+      },
+      "sources": [
+        "annotations",
+        "dataclass_fields",
+        "signature"
+      ]
+    },
+    "kv_connector_extra_config": {
+      "annotation": "dict",
+      "dataclass_field": {
+        "compare": true,
+        "default": null,
+        "default_factory": "dict",
+        "init": true,
+        "repr": true,
+        "type": "dict"
+      },
+      "present": true,
+      "signature_parameter": {
+        "annotation": "dict",
+        "default": "<factory>",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_connector_extra_config",
+        "required": false
+      },
+      "sources": [
+        "annotations",
+        "dataclass_fields",
+        "signature"
+      ]
+    },
+    "kv_connector_module_path": {
+      "annotation": "typing.Optional",
+      "dataclass_field": {
+        "compare": true,
+        "default": "None",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "typing.Optional"
+      },
+      "present": true,
+      "signature_parameter": {
+        "annotation": "typing.Optional",
+        "default": "None",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_connector_module_path",
+        "required": false
+      },
+      "sources": [
+        "annotations",
+        "dataclass_fields",
+        "signature"
+      ]
+    },
+    "kv_ip": {
+      "annotation": "str",
+      "dataclass_field": {
+        "compare": true,
+        "default": "'127.0.0.1'",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "str"
+      },
+      "present": true,
+      "signature_parameter": {
+        "annotation": "str",
+        "default": "'127.0.0.1'",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_ip",
+        "required": false
+      },
+      "sources": [
+        "annotations",
+        "dataclass_fields",
+        "signature"
+      ]
+    },
+    "kv_load_failure_policy": {
+      "present": false,
+      "sources": []
+    },
+    "kv_parallel_size": {
+      "annotation": "int",
+      "dataclass_field": {
+        "compare": true,
+        "default": "1",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "int"
+      },
+      "present": true,
+      "signature_parameter": {
+        "annotation": "int",
+        "default": "1",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_parallel_size",
+        "required": false
+      },
+      "sources": [
+        "annotations",
+        "dataclass_fields",
+        "signature"
+      ]
+    },
+    "kv_port": {
+      "annotation": "int",
+      "dataclass_field": {
+        "compare": true,
+        "default": "14579",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "int"
+      },
+      "present": true,
+      "signature_parameter": {
+        "annotation": "int",
+        "default": "14579",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_port",
+        "required": false
+      },
+      "sources": [
+        "annotations",
+        "dataclass_fields",
+        "signature"
+      ]
+    },
+    "kv_rank": {
+      "annotation": "typing.Optional",
+      "dataclass_field": {
+        "compare": true,
+        "default": "None",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "typing.Optional"
+      },
+      "present": true,
+      "signature_parameter": {
+        "annotation": "typing.Optional",
+        "default": "None",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_rank",
+        "required": false
+      },
+      "sources": [
+        "annotations",
+        "dataclass_fields",
+        "signature"
+      ]
+    },
+    "kv_role": {
+      "annotation": "typing.Optional",
+      "dataclass_field": {
+        "compare": true,
+        "default": "None",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "typing.Optional"
+      },
+      "present": true,
+      "signature_parameter": {
+        "annotation": "typing.Optional",
+        "default": "None",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_role",
+        "required": false
+      },
+      "sources": [
+        "annotations",
+        "dataclass_fields",
+        "signature"
+      ]
+    }
+  },
+  "connector_base": {
+    "abstract_methods": [
+      "build_connector_meta",
+      "get_num_new_matched_tokens",
+      "save_kv_layer",
+      "start_load_kv",
+      "update_state_after_alloc",
+      "wait_for_layer_load",
+      "wait_for_save"
+    ],
+    "available": true,
+    "class_module": "vllm.distributed.kv_transfer.kv_connector.v1.base",
+    "class_name": "KVConnectorBase_V1",
+    "class_qualname": "KVConnectorBase_V1",
+    "imports": {
+      "vllm.distributed.kv_transfer.kv_connector.v1.base": {
+        "imported": true,
+        "module": "vllm.distributed.kv_transfer.kv_connector.v1.base",
+        "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/v1/base.py",
+        "version": null
+      }
+    },
+    "methods": {
+      "__init__": {
+        "abstract": false,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.__init__",
+        "return_annotation": null,
+        "signature": "(self, vllm_config: 'VllmConfig', role: vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorRole)",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          },
+          {
+            "annotation": "VllmConfig",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "vllm_config",
+            "required": true
+          },
+          {
+            "annotation": "vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorRole",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "role",
+            "required": true
+          }
+        ]
+      },
+      "bind_connector_metadata": {
+        "abstract": false,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.bind_connector_metadata",
+        "return_annotation": "None",
+        "signature": "(self, connector_metadata: vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorMetadata) -> None",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          },
+          {
+            "annotation": "vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorMetadata",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "connector_metadata",
+            "required": true
+          }
+        ]
+      },
+      "build_connector_meta": {
+        "abstract": true,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.build_connector_meta",
+        "return_annotation": "vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorMetadata",
+        "signature": "(self, scheduler_output: vllm.v1.core.sched.output.SchedulerOutput) -> vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorMetadata",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          },
+          {
+            "annotation": "vllm.v1.core.sched.output.SchedulerOutput",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "scheduler_output",
+            "required": true
+          }
+        ]
+      },
+      "clear_connector_metadata": {
+        "abstract": false,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.clear_connector_metadata",
+        "return_annotation": "None",
+        "signature": "(self) -> None",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          }
+        ]
+      },
+      "get_block_ids_with_load_errors": {
+        "abstract": false,
+        "coroutine": false,
+        "present": false,
+        "return_annotation": null,
+        "signature": null,
+        "signature_parameters": []
+      },
+      "get_finished": {
+        "abstract": false,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.get_finished",
+        "return_annotation": "tuple",
+        "signature": "(self, finished_req_ids: set[str]) -> tuple[typing.Optional[set[str]], typing.Optional[set[str]]]",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          },
+          {
+            "annotation": "set",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "finished_req_ids",
+            "required": true
+          }
+        ]
+      },
+      "get_kv_connector_stats": {
+        "abstract": false,
+        "coroutine": false,
+        "present": false,
+        "return_annotation": null,
+        "signature": null,
+        "signature_parameters": []
+      },
+      "get_num_new_matched_tokens": {
+        "abstract": true,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.get_num_new_matched_tokens",
+        "return_annotation": "tuple",
+        "signature": "(self, request: 'Request', num_computed_tokens: int) -> tuple[typing.Optional[int], bool]",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          },
+          {
+            "annotation": "Request",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "request",
+            "required": true
+          },
+          {
+            "annotation": "int",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "num_computed_tokens",
+            "required": true
+          }
+        ]
+      },
+      "get_required_kvcache_layout": {
+        "abstract": false,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.get_required_kvcache_layout",
+        "return_annotation": "typing.Optional",
+        "signature": "(cls, vllm_config: 'VllmConfig') -> Optional[str]",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "cls",
+            "required": true
+          },
+          {
+            "annotation": "VllmConfig",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "vllm_config",
+            "required": true
+          }
+        ]
+      },
+      "register_cross_layers_kv_cache": {
+        "abstract": false,
+        "coroutine": false,
+        "present": false,
+        "return_annotation": null,
+        "signature": null,
+        "signature_parameters": []
+      },
+      "register_kv_caches": {
+        "abstract": false,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.register_kv_caches",
+        "return_annotation": null,
+        "signature": "(self, kv_caches: dict[str, torch.Tensor])",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          },
+          {
+            "annotation": "dict",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "kv_caches",
+            "required": true
+          }
+        ]
+      },
+      "request_finished": {
+        "abstract": false,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.request_finished",
+        "return_annotation": "tuple",
+        "signature": "(self, request: 'Request', block_ids: list[int]) -> tuple[bool, typing.Optional[dict[str, typing.Any]]]",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          },
+          {
+            "annotation": "Request",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "request",
+            "required": true
+          },
+          {
+            "annotation": "list",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "block_ids",
+            "required": true
+          }
+        ]
+      },
+      "save_kv_layer": {
+        "abstract": true,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.save_kv_layer",
+        "return_annotation": "None",
+        "signature": "(self, layer_name: str, kv_layer: torch.Tensor, attn_metadata: 'AttentionMetadata', **kwargs) -> None",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          },
+          {
+            "annotation": "str",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "layer_name",
+            "required": true
+          },
+          {
+            "annotation": "torch.Tensor",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "kv_layer",
+            "required": true
+          },
+          {
+            "annotation": "AttentionMetadata",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "attn_metadata",
+            "required": true
+          },
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "VAR_KEYWORD",
+            "name": "kwargs",
+            "required": false
+          }
+        ]
+      },
+      "set_host_xfer_buffer_ops": {
+        "abstract": false,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.set_host_xfer_buffer_ops",
+        "return_annotation": null,
+        "signature": "(self, copy_operation: Callable[[dict[str, torch.Tensor], dict[str, torch.Tensor], list[int], list[int], Literal['h2d', 'd2h']], NoneType])",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          },
+          {
+            "annotation": "typing.Callable",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "copy_operation",
+            "required": true
+          }
+        ]
+      },
+      "shutdown": {
+        "abstract": false,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.shutdown",
+        "return_annotation": null,
+        "signature": "(self)",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          }
+        ]
+      },
+      "start_load_kv": {
+        "abstract": true,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.start_load_kv",
+        "return_annotation": "None",
+        "signature": "(self, forward_context: 'ForwardContext', **kwargs) -> None",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          },
+          {
+            "annotation": "ForwardContext",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "forward_context",
+            "required": true
+          },
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "VAR_KEYWORD",
+            "name": "kwargs",
+            "required": false
+          }
+        ]
+      },
+      "take_events": {
+        "abstract": false,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.take_events",
+        "return_annotation": "collections.abc.Iterable",
+        "signature": "(self) -> collections.abc.Iterable['KVCacheEvent']",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          }
+        ]
+      },
+      "update_connector_output": {
+        "abstract": false,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.update_connector_output",
+        "return_annotation": null,
+        "signature": "(self, connector_output: vllm.v1.outputs.KVConnectorOutput)",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          },
+          {
+            "annotation": "vllm.v1.outputs.KVConnectorOutput",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "connector_output",
+            "required": true
+          }
+        ]
+      },
+      "update_state_after_alloc": {
+        "abstract": true,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.update_state_after_alloc",
+        "return_annotation": null,
+        "signature": "(self, request: 'Request', blocks: 'KVCacheBlocks', num_external_tokens: int)",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          },
+          {
+            "annotation": "Request",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "request",
+            "required": true
+          },
+          {
+            "annotation": "KVCacheBlocks",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "blocks",
+            "required": true
+          },
+          {
+            "annotation": "int",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "num_external_tokens",
+            "required": true
+          }
+        ]
+      },
+      "wait_for_layer_load": {
+        "abstract": true,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.wait_for_layer_load",
+        "return_annotation": "None",
+        "signature": "(self, layer_name: str) -> None",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          },
+          {
+            "annotation": "str",
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "layer_name",
+            "required": true
+          }
+        ]
+      },
+      "wait_for_save": {
+        "abstract": true,
+        "coroutine": false,
+        "present": true,
+        "qualname": "KVConnectorBase_V1.wait_for_save",
+        "return_annotation": null,
+        "signature": "(self)",
+        "signature_parameters": [
+          {
+            "annotation": null,
+            "default": null,
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "self",
+            "required": true
+          }
+        ]
+      }
+    },
+    "module": "vllm.distributed.kv_transfer.kv_connector.v1.base",
+    "public_method_names": [
+      "__init__",
+      "register_kv_caches",
+      "start_load_kv",
+      "wait_for_layer_load",
+      "save_kv_layer",
+      "wait_for_save",
+      "get_finished",
+      "get_num_new_matched_tokens",
+      "update_state_after_alloc",
+      "build_connector_meta",
+      "request_finished",
+      "shutdown",
+      "bind_connector_metadata",
+      "clear_connector_metadata",
+      "get_required_kvcache_layout",
+      "set_host_xfer_buffer_ops",
+      "take_events",
+      "update_connector_output"
+    ],
+    "unsupported_reasons": [],
+    "warnings": []
+  },
+  "connector_base_methods": {
+    "__init__": {
+      "abstract": false,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.__init__",
+      "return_annotation": null,
+      "signature": "(self, vllm_config: 'VllmConfig', role: vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorRole)",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        },
+        {
+          "annotation": "VllmConfig",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "vllm_config",
+          "required": true
+        },
+        {
+          "annotation": "vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorRole",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "role",
+          "required": true
+        }
+      ]
+    },
+    "bind_connector_metadata": {
+      "abstract": false,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.bind_connector_metadata",
+      "return_annotation": "None",
+      "signature": "(self, connector_metadata: vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorMetadata) -> None",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        },
+        {
+          "annotation": "vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorMetadata",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "connector_metadata",
+          "required": true
+        }
+      ]
+    },
+    "build_connector_meta": {
+      "abstract": true,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.build_connector_meta",
+      "return_annotation": "vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorMetadata",
+      "signature": "(self, scheduler_output: vllm.v1.core.sched.output.SchedulerOutput) -> vllm.distributed.kv_transfer.kv_connector.v1.base.KVConnectorMetadata",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        },
+        {
+          "annotation": "vllm.v1.core.sched.output.SchedulerOutput",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "scheduler_output",
+          "required": true
+        }
+      ]
+    },
+    "clear_connector_metadata": {
+      "abstract": false,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.clear_connector_metadata",
+      "return_annotation": "None",
+      "signature": "(self) -> None",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        }
+      ]
+    },
+    "get_block_ids_with_load_errors": {
+      "abstract": false,
+      "coroutine": false,
+      "present": false,
+      "return_annotation": null,
+      "signature": null,
+      "signature_parameters": []
+    },
+    "get_finished": {
+      "abstract": false,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.get_finished",
+      "return_annotation": "tuple",
+      "signature": "(self, finished_req_ids: set[str]) -> tuple[typing.Optional[set[str]], typing.Optional[set[str]]]",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        },
+        {
+          "annotation": "set",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "finished_req_ids",
+          "required": true
+        }
+      ]
+    },
+    "get_kv_connector_stats": {
+      "abstract": false,
+      "coroutine": false,
+      "present": false,
+      "return_annotation": null,
+      "signature": null,
+      "signature_parameters": []
+    },
+    "get_num_new_matched_tokens": {
+      "abstract": true,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.get_num_new_matched_tokens",
+      "return_annotation": "tuple",
+      "signature": "(self, request: 'Request', num_computed_tokens: int) -> tuple[typing.Optional[int], bool]",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        },
+        {
+          "annotation": "Request",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "request",
+          "required": true
+        },
+        {
+          "annotation": "int",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "num_computed_tokens",
+          "required": true
+        }
+      ]
+    },
+    "get_required_kvcache_layout": {
+      "abstract": false,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.get_required_kvcache_layout",
+      "return_annotation": "typing.Optional",
+      "signature": "(cls, vllm_config: 'VllmConfig') -> Optional[str]",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "cls",
+          "required": true
+        },
+        {
+          "annotation": "VllmConfig",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "vllm_config",
+          "required": true
+        }
+      ]
+    },
+    "register_cross_layers_kv_cache": {
+      "abstract": false,
+      "coroutine": false,
+      "present": false,
+      "return_annotation": null,
+      "signature": null,
+      "signature_parameters": []
+    },
+    "register_kv_caches": {
+      "abstract": false,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.register_kv_caches",
+      "return_annotation": null,
+      "signature": "(self, kv_caches: dict[str, torch.Tensor])",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        },
+        {
+          "annotation": "dict",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "kv_caches",
+          "required": true
+        }
+      ]
+    },
+    "request_finished": {
+      "abstract": false,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.request_finished",
+      "return_annotation": "tuple",
+      "signature": "(self, request: 'Request', block_ids: list[int]) -> tuple[bool, typing.Optional[dict[str, typing.Any]]]",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        },
+        {
+          "annotation": "Request",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "request",
+          "required": true
+        },
+        {
+          "annotation": "list",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "block_ids",
+          "required": true
+        }
+      ]
+    },
+    "save_kv_layer": {
+      "abstract": true,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.save_kv_layer",
+      "return_annotation": "None",
+      "signature": "(self, layer_name: str, kv_layer: torch.Tensor, attn_metadata: 'AttentionMetadata', **kwargs) -> None",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "layer_name",
+          "required": true
+        },
+        {
+          "annotation": "torch.Tensor",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "kv_layer",
+          "required": true
+        },
+        {
+          "annotation": "AttentionMetadata",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "attn_metadata",
+          "required": true
+        },
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "VAR_KEYWORD",
+          "name": "kwargs",
+          "required": false
+        }
+      ]
+    },
+    "set_host_xfer_buffer_ops": {
+      "abstract": false,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.set_host_xfer_buffer_ops",
+      "return_annotation": null,
+      "signature": "(self, copy_operation: Callable[[dict[str, torch.Tensor], dict[str, torch.Tensor], list[int], list[int], Literal['h2d', 'd2h']], NoneType])",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        },
+        {
+          "annotation": "typing.Callable",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "copy_operation",
+          "required": true
+        }
+      ]
+    },
+    "shutdown": {
+      "abstract": false,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.shutdown",
+      "return_annotation": null,
+      "signature": "(self)",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        }
+      ]
+    },
+    "start_load_kv": {
+      "abstract": true,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.start_load_kv",
+      "return_annotation": "None",
+      "signature": "(self, forward_context: 'ForwardContext', **kwargs) -> None",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        },
+        {
+          "annotation": "ForwardContext",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "forward_context",
+          "required": true
+        },
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "VAR_KEYWORD",
+          "name": "kwargs",
+          "required": false
+        }
+      ]
+    },
+    "take_events": {
+      "abstract": false,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.take_events",
+      "return_annotation": "collections.abc.Iterable",
+      "signature": "(self) -> collections.abc.Iterable['KVCacheEvent']",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        }
+      ]
+    },
+    "update_connector_output": {
+      "abstract": false,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.update_connector_output",
+      "return_annotation": null,
+      "signature": "(self, connector_output: vllm.v1.outputs.KVConnectorOutput)",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        },
+        {
+          "annotation": "vllm.v1.outputs.KVConnectorOutput",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "connector_output",
+          "required": true
+        }
+      ]
+    },
+    "update_state_after_alloc": {
+      "abstract": true,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.update_state_after_alloc",
+      "return_annotation": null,
+      "signature": "(self, request: 'Request', blocks: 'KVCacheBlocks', num_external_tokens: int)",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        },
+        {
+          "annotation": "Request",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "request",
+          "required": true
+        },
+        {
+          "annotation": "KVCacheBlocks",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "blocks",
+          "required": true
+        },
+        {
+          "annotation": "int",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "num_external_tokens",
+          "required": true
+        }
+      ]
+    },
+    "wait_for_layer_load": {
+      "abstract": true,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.wait_for_layer_load",
+      "return_annotation": "None",
+      "signature": "(self, layer_name: str) -> None",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "layer_name",
+          "required": true
+        }
+      ]
+    },
+    "wait_for_save": {
+      "abstract": true,
+      "coroutine": false,
+      "present": true,
+      "qualname": "KVConnectorBase_V1.wait_for_save",
+      "return_annotation": null,
+      "signature": "(self)",
+      "signature_parameters": [
+        {
+          "annotation": null,
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "self",
+          "required": true
+        }
+      ]
+    }
+  },
+  "dynamic_connector": {
+    "cli": {
+      "available": true,
+      "checked": true,
+      "flags": [
+        "--calculate-kv-scales",
+        "--disable-hybrid-kv-cache-manager",
+        "--kv-cache-dtype",
+        "--kv-cache-memory-bytes",
+        "--kv-events-config",
+        "--kv-sharing-fast-prefill",
+        "--kv-transfer-config",
+        "--no-calculate-kv-scales",
+        "--no-disable-hybrid-kv-cache-manager",
+        "--no-kv-sharing-fast-prefill"
+      ],
+      "has_kv_transfer_config_flag": true,
+      "path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/bin/vllm",
+      "returncode": 0,
+      "stderr_tail": ""
+    },
+    "imports": {
+      "vllm.config": {
+        "imported": true,
+        "module": "vllm.config",
+        "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/config/__init__.py",
+        "version": null
+      },
+      "vllm.distributed.kv_transfer": {
+        "imported": true,
+        "module": "vllm.distributed.kv_transfer",
+        "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/distributed/kv_transfer/__init__.py",
+        "version": null
+      }
+    },
+    "signals": {
+      "kv_connector_extra_config_field": true,
+      "kv_connector_field": true,
+      "kv_connector_module_path_field": true,
+      "kv_transfer_module_importable": true,
+      "serve_cli_has_kv_transfer_config_flag": true
+    },
+    "supported": true,
+    "unsupported_reasons": [],
+    "warnings": []
+  },
+  "dynamic_connector_supported": true,
+  "imports": {
+    "vllm": {
+      "imported": true,
+      "module": "vllm",
+      "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/__init__.py",
+      "version": "0.10.2"
+    },
+    "vllm.config": {
+      "imported": true,
+      "module": "vllm.config",
+      "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/config/__init__.py",
+      "version": null
+    },
+    "vllm.distributed.kv_transfer": {
+      "imported": true,
+      "module": "vllm.distributed.kv_transfer",
+      "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/distributed/kv_transfer/__init__.py",
+      "version": null
+    },
+    "vllm.distributed.kv_transfer.kv_connector.v1": {
+      "imported": true,
+      "module": "vllm.distributed.kv_transfer.kv_connector.v1",
+      "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/v1/__init__.py",
+      "version": null
+    },
+    "vllm.distributed.kv_transfer.kv_connector.v1.base": {
+      "imported": true,
+      "module": "vllm.distributed.kv_transfer.kv_connector.v1.base",
+      "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/v1/base.py",
+      "version": null
+    },
+    "vllm.distributed.kv_transfer.kv_connector.v1.lmcache_connector": {
+      "error": "ModuleNotFoundError(\"No module named 'lmcache'\")",
+      "error_type": "ModuleNotFoundError",
+      "imported": false,
+      "module": "vllm.distributed.kv_transfer.kv_connector.v1.lmcache_connector",
+      "module_path": null,
+      "version": null
+    },
+    "vllm.distributed.kv_transfer.kv_connector.v1.multi_connector": {
+      "imported": true,
+      "module": "vllm.distributed.kv_transfer.kv_connector.v1.multi_connector",
+      "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py",
+      "version": null
+    },
+    "vllm.distributed.kv_transfer.kv_connector.v1.nixl_connector": {
+      "imported": true,
+      "module": "vllm.distributed.kv_transfer.kv_connector.v1.nixl_connector",
+      "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/v1/nixl_connector.py",
+      "version": null
+    },
+    "vllm.distributed.kv_transfer.kv_connector.v1.p2p": {
+      "imported": true,
+      "module": "vllm.distributed.kv_transfer.kv_connector.v1.p2p",
+      "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/v1/p2p/__init__.py",
+      "version": null
+    },
+    "vllm.distributed.kv_transfer.kv_connector.v1.shared_storage_connector": {
+      "imported": true,
+      "module": "vllm.distributed.kv_transfer.kv_connector.v1.shared_storage_connector",
+      "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/v1/shared_storage_connector.py",
+      "version": null
+    }
+  },
+  "kv_transfer_config": {
+    "annotations": {
+      "engine_id": "typing.Optional",
+      "kv_buffer_device": "typing.Optional",
+      "kv_buffer_size": "float",
+      "kv_connector": "typing.Optional",
+      "kv_connector_extra_config": "dict",
+      "kv_connector_module_path": "typing.Optional",
+      "kv_ip": "str",
+      "kv_parallel_size": "int",
+      "kv_port": "int",
+      "kv_rank": "typing.Optional",
+      "kv_role": "typing.Optional"
+    },
+    "available": true,
+    "class_module": "vllm.config.kv_transfer",
+    "class_name": "KVTransferConfig",
+    "class_qualname": "KVTransferConfig",
+    "dataclass_fields": {
+      "engine_id": {
+        "compare": true,
+        "default": "None",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "typing.Optional"
+      },
+      "kv_buffer_device": {
+        "compare": true,
+        "default": "'cuda'",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "typing.Optional"
+      },
+      "kv_buffer_size": {
+        "compare": true,
+        "default": "1000000000.0",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "float"
+      },
+      "kv_connector": {
+        "compare": true,
+        "default": "None",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "typing.Optional"
+      },
+      "kv_connector_extra_config": {
+        "compare": true,
+        "default": null,
+        "default_factory": "dict",
+        "init": true,
+        "repr": true,
+        "type": "dict"
+      },
+      "kv_connector_module_path": {
+        "compare": true,
+        "default": "None",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "typing.Optional"
+      },
+      "kv_ip": {
+        "compare": true,
+        "default": "'127.0.0.1'",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "str"
+      },
+      "kv_parallel_size": {
+        "compare": true,
+        "default": "1",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "int"
+      },
+      "kv_port": {
+        "compare": true,
+        "default": "14579",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "int"
+      },
+      "kv_rank": {
+        "compare": true,
+        "default": "None",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "typing.Optional"
+      },
+      "kv_role": {
+        "compare": true,
+        "default": "None",
+        "default_factory": null,
+        "init": true,
+        "repr": true,
+        "type": "typing.Optional"
+      }
+    },
+    "expected_fields": {
+      "engine_id": true,
+      "kv_buffer_device": true,
+      "kv_buffer_size": true,
+      "kv_connector": true,
+      "kv_connector_extra_config": true,
+      "kv_connector_module_path": true,
+      "kv_ip": true,
+      "kv_load_failure_policy": false,
+      "kv_parallel_size": true,
+      "kv_port": true,
+      "kv_rank": true,
+      "kv_role": true
+    },
+    "fields": {
+      "engine_id": {
+        "annotation": "typing.Optional",
+        "dataclass_field": {
+          "compare": true,
+          "default": "None",
+          "default_factory": null,
+          "init": true,
+          "repr": true,
+          "type": "typing.Optional"
+        },
+        "present": true,
+        "signature_parameter": {
+          "annotation": "typing.Optional",
+          "default": "None",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "engine_id",
+          "required": false
+        },
+        "sources": [
+          "annotations",
+          "dataclass_fields",
+          "signature"
+        ]
+      },
+      "kv_buffer_device": {
+        "annotation": "typing.Optional",
+        "dataclass_field": {
+          "compare": true,
+          "default": "'cuda'",
+          "default_factory": null,
+          "init": true,
+          "repr": true,
+          "type": "typing.Optional"
+        },
+        "present": true,
+        "signature_parameter": {
+          "annotation": "typing.Optional",
+          "default": "'cuda'",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "kv_buffer_device",
+          "required": false
+        },
+        "sources": [
+          "annotations",
+          "dataclass_fields",
+          "signature"
+        ]
+      },
+      "kv_buffer_size": {
+        "annotation": "float",
+        "dataclass_field": {
+          "compare": true,
+          "default": "1000000000.0",
+          "default_factory": null,
+          "init": true,
+          "repr": true,
+          "type": "float"
+        },
+        "present": true,
+        "signature_parameter": {
+          "annotation": "float",
+          "default": "1000000000.0",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "kv_buffer_size",
+          "required": false
+        },
+        "sources": [
+          "annotations",
+          "dataclass_fields",
+          "signature"
+        ]
+      },
+      "kv_connector": {
+        "annotation": "typing.Optional",
+        "dataclass_field": {
+          "compare": true,
+          "default": "None",
+          "default_factory": null,
+          "init": true,
+          "repr": true,
+          "type": "typing.Optional"
+        },
+        "present": true,
+        "signature_parameter": {
+          "annotation": "typing.Optional",
+          "default": "None",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "kv_connector",
+          "required": false
+        },
+        "sources": [
+          "annotations",
+          "dataclass_fields",
+          "signature"
+        ]
+      },
+      "kv_connector_extra_config": {
+        "annotation": "dict",
+        "dataclass_field": {
+          "compare": true,
+          "default": null,
+          "default_factory": "dict",
+          "init": true,
+          "repr": true,
+          "type": "dict"
+        },
+        "present": true,
+        "signature_parameter": {
+          "annotation": "dict",
+          "default": "<factory>",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "kv_connector_extra_config",
+          "required": false
+        },
+        "sources": [
+          "annotations",
+          "dataclass_fields",
+          "signature"
+        ]
+      },
+      "kv_connector_module_path": {
+        "annotation": "typing.Optional",
+        "dataclass_field": {
+          "compare": true,
+          "default": "None",
+          "default_factory": null,
+          "init": true,
+          "repr": true,
+          "type": "typing.Optional"
+        },
+        "present": true,
+        "signature_parameter": {
+          "annotation": "typing.Optional",
+          "default": "None",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "kv_connector_module_path",
+          "required": false
+        },
+        "sources": [
+          "annotations",
+          "dataclass_fields",
+          "signature"
+        ]
+      },
+      "kv_ip": {
+        "annotation": "str",
+        "dataclass_field": {
+          "compare": true,
+          "default": "'127.0.0.1'",
+          "default_factory": null,
+          "init": true,
+          "repr": true,
+          "type": "str"
+        },
+        "present": true,
+        "signature_parameter": {
+          "annotation": "str",
+          "default": "'127.0.0.1'",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "kv_ip",
+          "required": false
+        },
+        "sources": [
+          "annotations",
+          "dataclass_fields",
+          "signature"
+        ]
+      },
+      "kv_load_failure_policy": {
+        "present": false,
+        "sources": []
+      },
+      "kv_parallel_size": {
+        "annotation": "int",
+        "dataclass_field": {
+          "compare": true,
+          "default": "1",
+          "default_factory": null,
+          "init": true,
+          "repr": true,
+          "type": "int"
+        },
+        "present": true,
+        "signature_parameter": {
+          "annotation": "int",
+          "default": "1",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "kv_parallel_size",
+          "required": false
+        },
+        "sources": [
+          "annotations",
+          "dataclass_fields",
+          "signature"
+        ]
+      },
+      "kv_port": {
+        "annotation": "int",
+        "dataclass_field": {
+          "compare": true,
+          "default": "14579",
+          "default_factory": null,
+          "init": true,
+          "repr": true,
+          "type": "int"
+        },
+        "present": true,
+        "signature_parameter": {
+          "annotation": "int",
+          "default": "14579",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "kv_port",
+          "required": false
+        },
+        "sources": [
+          "annotations",
+          "dataclass_fields",
+          "signature"
+        ]
+      },
+      "kv_rank": {
+        "annotation": "typing.Optional",
+        "dataclass_field": {
+          "compare": true,
+          "default": "None",
+          "default_factory": null,
+          "init": true,
+          "repr": true,
+          "type": "typing.Optional"
+        },
+        "present": true,
+        "signature_parameter": {
+          "annotation": "typing.Optional",
+          "default": "None",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "kv_rank",
+          "required": false
+        },
+        "sources": [
+          "annotations",
+          "dataclass_fields",
+          "signature"
+        ]
+      },
+      "kv_role": {
+        "annotation": "typing.Optional",
+        "dataclass_field": {
+          "compare": true,
+          "default": "None",
+          "default_factory": null,
+          "init": true,
+          "repr": true,
+          "type": "typing.Optional"
+        },
+        "present": true,
+        "signature_parameter": {
+          "annotation": "typing.Optional",
+          "default": "None",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "kv_role",
+          "required": false
+        },
+        "sources": [
+          "annotations",
+          "dataclass_fields",
+          "signature"
+        ]
+      }
+    },
+    "imports": {
+      "vllm.config": {
+        "imported": true,
+        "module": "vllm.config",
+        "module_path": "/tmp/bifrost-phase7-vllm-0-10-2-venv/lib/python3.12/site-packages/vllm/config/__init__.py",
+        "version": null
+      }
+    },
+    "missing_expected_fields": [
+      "kv_load_failure_policy"
+    ],
+    "module": "vllm.config",
+    "return_annotation": "None",
+    "signature": "(kv_connector: Optional[str] = None, engine_id: Optional[str] = None, kv_buffer_device: Optional[str] = 'cuda', kv_buffer_size: float = 1000000000.0, kv_role: Optional[Literal['kv_producer', 'kv_both', 'kv_consumer']] = None, kv_rank: Optional[int] = None, kv_parallel_size: int = 1, kv_ip: str = '127.0.0.1', kv_port: int = 14579, kv_connector_extra_config: dict[str, typing.Any] = <factory>, kv_connector_module_path: Optional[str] = None) -> None",
+    "signature_parameters": [
+      {
+        "annotation": "typing.Optional",
+        "default": "None",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_connector",
+        "required": false
+      },
+      {
+        "annotation": "typing.Optional",
+        "default": "None",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "engine_id",
+        "required": false
+      },
+      {
+        "annotation": "typing.Optional",
+        "default": "'cuda'",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_buffer_device",
+        "required": false
+      },
+      {
+        "annotation": "float",
+        "default": "1000000000.0",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_buffer_size",
+        "required": false
+      },
+      {
+        "annotation": "typing.Optional",
+        "default": "None",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_role",
+        "required": false
+      },
+      {
+        "annotation": "typing.Optional",
+        "default": "None",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_rank",
+        "required": false
+      },
+      {
+        "annotation": "int",
+        "default": "1",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_parallel_size",
+        "required": false
+      },
+      {
+        "annotation": "str",
+        "default": "'127.0.0.1'",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_ip",
+        "required": false
+      },
+      {
+        "annotation": "int",
+        "default": "14579",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_port",
+        "required": false
+      },
+      {
+        "annotation": "dict",
+        "default": "<factory>",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_connector_extra_config",
+        "required": false
+      },
+      {
+        "annotation": "typing.Optional",
+        "default": "None",
+        "kind": "POSITIONAL_OR_KEYWORD",
+        "name": "kv_connector_module_path",
+        "required": false
+      }
+    ],
+    "unsupported_reasons": [],
+    "warnings": []
+  },
+  "python": {
+    "executable": "/tmp/bifrost-phase7-vllm-0-10-2-venv/bin/python",
+    "implementation": "CPython",
+    "platform": "macOS-15.6.1-arm64-arm-64bit",
+    "version": "3.12.7"
+  },
+  "schema_version": "bifrost.vllm_api_surface_inspection.v1",
+  "status": "installed",
+  "unsupported_reasons": [],
+  "vllm_version": "0.10.2",
+  "warnings": [
+    "KVTransferConfig is missing expected fields: kv_load_failure_policy"
+  ]
+}

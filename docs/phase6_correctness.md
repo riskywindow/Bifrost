@@ -28,6 +28,22 @@ prompt serialization: recorded
 The report should record any setting that could affect outputs. If a backend
 does not support a deterministic setting, the report must state that.
 
+The Python helper
+`bifrost_serving.correctness.build_deterministic_request_params()` returns:
+
+```json
+{
+  "temperature": 0,
+  "top_p": 1,
+  "max_tokens": 16
+}
+```
+
+When the caller has verified that the serving backend accepts a seed, pass
+`seed_supported=true` and a fixed seed. The helper then includes `seed`; by
+default it omits `seed` because not every OpenAI-compatible or vLLM path
+accepts that field.
+
 ## Output comparison strategy
 
 Strict output comparison is valid only when all compared variants use the same
@@ -47,6 +63,41 @@ Recommended checks:
 The benchmark should keep raw responses or hashes of raw responses according to
 the selected privacy and artifact policy.
 
+The response comparison utility lives in
+`bifrost_py/bifrost_serving/correctness.py`. It compares saved raw request rows
+by `request_id` and emits a JSON-serializable summary:
+
+```text
+mode
+status: pass, fail, advisory, or skipped
+match_count
+mismatch_count
+missing_count
+compared_count
+examples
+notes
+deterministic_settings
+```
+
+Supported modes:
+
+1. `exact_text`: raw output text must match exactly.
+2. `normalized_text`: output text is stripped and repeated whitespace is
+   collapsed before comparison. Optional lowercase comparison is available.
+3. `token_count_only`: compare output token counts when response text is not
+   the desired correctness signal.
+4. `advisory_only`: record missing or differing responses, but never fail the
+   benchmark.
+5. `skipped`: document that response comparison was intentionally skipped.
+
+Normalization is intentionally simple:
+
+1. Strip leading and trailing whitespace.
+2. Collapse repeated whitespace to one ASCII space.
+3. Optionally lowercase.
+4. Preserve raw reference and candidate text in mismatch examples for
+   debugging.
+
 ## Response equivalence limitations
 
 Serving outputs may differ for reasons unrelated to BIFROST:
@@ -61,6 +112,12 @@ Serving outputs may differ for reasons unrelated to BIFROST:
 
 When these conditions apply, correctness checks should be marked advisory or
 skipped rather than overstated.
+
+If output text is unavailable, strict text modes fail because their required
+signal is missing. `token_count_only` may still pass when counts are available.
+`advisory_only` and `skipped` remain non-failing and must include the reason,
+for example nondeterministic sampling, unavailable streamed text, or a failed
+baseline.
 
 ## Cache correctness
 

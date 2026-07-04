@@ -4,25 +4,22 @@
 # changed configuration keys across releases, so treat version-sensitive fields
 # below as examples to verify against your installed versions.
 
-# Version-sensitive: some LMCache releases use `remote_storage_plugins` plus
-# `remote_storage_plugin`, while others route equivalent settings through a
-# differently named storage backend block.
+# Version-sensitive: LMCache 0.3.x uses `remote_storage_plugins` plus top-level
+# `extra_config` keys for custom remote adapters.
 remote_storage_plugins:
   - bifrost
 
-remote_storage_plugin:
-  bifrost:
-    module_path: lmcache_bifrost.adapter
-    class_name: BifrostConnectorAdapter
-    extra_config:
-      endpoint: 127.0.0.1:7744
-      chunk_size: 262144
-      timeout_seconds: 5.0
-      strict_validation: true
-      allow_pickle_fallback: false
-
 # Preferred BIFROST remote URL shape for the adapter.
 remote_url: bifrost://127.0.0.1:7744
+
+extra_config:
+  remote_storage_plugin.bifrost.module_path: lmcache_bifrost.adapter
+  remote_storage_plugin.bifrost.class_name: BifrostConnectorAdapter
+  endpoint: 127.0.0.1:7744
+  chunk_size: 262144
+  timeout_seconds: 5.0
+  strict_validation: true
+  allow_pickle_fallback: false
 
 # Version-sensitive: vLLM/LMCache integration flags differ by release. Keep the
 # smoke test pointed at this file through LMCACHE_CONFIG_FILE, and pass any

@@ -163,9 +163,9 @@ def test_docs_config_yaml_parses() -> None:
     for path in CONFIGS:
         parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
         assert "remote_storage_plugins" in parsed
-        plugin = parsed["remote_storage_plugin"]["bifrost"]
-        assert plugin["module_path"] == "lmcache_bifrost.adapter"
-        assert plugin["class_name"] == "BifrostConnectorAdapter"
+        extra = parsed["extra_config"]
+        assert extra["remote_storage_plugin.bifrost.module_path"] == "lmcache_bifrost.adapter"
+        assert extra["remote_storage_plugin.bifrost.class_name"] == "BifrostConnectorAdapter"
         assert str(parsed["remote_url"]).startswith(("bifrost://", "plugin://"))
 
 

@@ -1,0 +1,16 @@
+{
+  "allow_pickle_fallback": false,
+  "chunk_size": 256,
+  "class_name": "BifrostConnectorAdapter",
+  "endpoint": "127.0.0.1:7744",
+  "engine_name": "lmcache",
+  "integration_name": "lmcache_bifrost_remote_storage",
+  "metrics_jsonl_path": "examples/serving_configs/vllm_lmcache_bifrost/bifrost_lmcache_connector_metrics.jsonl",
+  "mode": "vllm_lmcache_bifrost",
+  "module_path": "lmcache_bifrost.adapter",
+  "object_type": "opaque_engine_blob",
+  "plugin": "bifrost",
+  "schema_version": "bifrost.phase6_lmcache_connector_config.v1",
+  "strict_validation": true,
+  "timeout_seconds": 5.0
+}

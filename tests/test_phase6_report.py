@@ -41,6 +41,8 @@ def test_report_generates_from_fake_benchmark_run(tmp_path: Path) -> None:
     assert result.report_path.exists()
     assert "BIFROST Phase 6 Serving Benchmark Report" in result.report_path.read_text()
     assert "## BIFROST Activity" in result.report_path.read_text()
+    assert "full_benchmark_ready=not_ready" in result.summary["environment"]["readiness"]
+    assert "gpu_serving_ready=not_ready" in result.summary["environment"]["readiness"]
 
 
 def test_report_handles_missing_ttft(tmp_path: Path) -> None:
@@ -224,7 +226,12 @@ def _write_run(run_dir: Path, *, ttft: bool, bifrost: bool) -> Path:
             },
             "readiness": {
                 "fake_ci_ready": {"status": "ready", "reasons": [], "recommended_fixes": []},
-                "real_serving_ready": {
+                "gpu_serving_ready": {
+                    "status": "not_ready",
+                    "reasons": ["GPU unavailable"],
+                    "recommended_fixes": [],
+                },
+                "full_benchmark_ready": {
                     "status": "not_ready",
                     "reasons": ["vLLM missing"],
                     "recommended_fixes": [],

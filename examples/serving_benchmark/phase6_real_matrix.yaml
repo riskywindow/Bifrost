@@ -1,0 +1,45 @@
+schema_version: bifrost.phase6_real_matrix_config.v1
+
+# Real execution still requires --allow-real-vllm or BIFROST_RUN_REAL_VLLM=1.
+# Use the CLI --dry-run flag for safe planning.
+dry_run: false
+workload_jsonl: runs/phase6-serving/workload.jsonl
+output_dir: runs/phase6-real-matrix
+
+model: ./local-model
+served_model_name: bifrost-phase6-model
+dtype: float16
+max_model_len: 4096
+tensor_parallel_size: 1
+gpu_memory_utilization: 0.9
+gpu_id: "0"
+
+enable_chunked_prefill: false
+enable_prefix_caching: false
+output_len: 64
+sampling_settings:
+  temperature: 0.0
+  top_p: 1.0
+
+concurrency: 1
+request_rate: 1.0
+repetitions: 3
+rotate_mode_order: true
+
+base_port: 8100
+port_stride: 20
+bifrost_base_port: 7744
+
+lmcache_connector_mode: inprocess
+lmcache_chunk_size: 256
+max_local_cpu_size: 8
+
+engine_warmup_requests: 1
+population_requests_per_prefix: 1
+measured_requests_per_prefix: null
+phase_timeout_seconds: null
+phase_order: engine_warmup,cache_population,measured
+
+min_free_disk_bytes: 2147483648
+allow_real_vllm: false
+allow_model_downloads: false

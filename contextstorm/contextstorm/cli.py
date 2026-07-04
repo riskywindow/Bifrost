@@ -25,6 +25,11 @@ MODEL_OPERATIONS = {
     "manifest_kv_roundtrip",
     "kv_teleport",
 }
+SERVE_OPERATIONS = {
+    "fake_serving_baseline_comparison",
+    "real_vllm_lmcache_bifrost",
+    "two_instance_cache_share",
+}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -58,7 +63,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "run":
-            if _is_lmcache_scenario(args.scenario):
+            if _is_serving_scenario(args.scenario):
+                from .serve_runner import run_serving_scenario
+
+                run_dir = run_serving_scenario(
+                    args.scenario,
+                    runs_root=args.runs_root,
+                    run_id=args.run_id,
+                )
+            elif _is_lmcache_scenario(args.scenario):
                 from .lmcache_runner import run_lmcache_scenario
 
                 run_dir = run_lmcache_scenario(
@@ -116,6 +129,12 @@ def _is_lmcache_scenario(path: Path) -> bool:
     data = _load_simple_yaml(path)
     operations = {str(op) for op in data.get("operations", [])}
     return bool(operations & LMCACHE_OPERATIONS) or str(data.get("workload", "")) == "lmcache"
+
+
+def _is_serving_scenario(path: Path) -> bool:
+    data = _load_simple_yaml(path)
+    operations = {str(op) for op in data.get("operations", [])}
+    return bool(operations & SERVE_OPERATIONS) or str(data.get("workload", "")) == "serve"
 
 
 if __name__ == "__main__":

@@ -136,6 +136,7 @@ def run_doctor(config: EnvDoctorConfig | None = None) -> EnvDoctorReport:
         config.min_free_disk_bytes,
     )
     checks["vllm_cli"] = _check_cli("vllm")
+    checks["vllm_kv_transfer"] = _check_vllm_kv_transfer(checks["vllm_cli"])
     checks["vllm_bench_serve"] = _check_vllm_bench_serve(checks["vllm_cli"])
     checks["huggingface_token"] = _check_huggingface_token()
     checks["model"] = _check_model(config.model)
@@ -547,6 +548,77 @@ def _check_vllm_bench_serve(vllm_cli: CheckResult) -> CheckResult:
     )
 
 
+def _check_vllm_kv_transfer(vllm_cli: CheckResult) -> CheckResult:
+    details: dict[str, Any] = {}
+    try:
+        module = importlib.import_module("vllm.distributed.kv_transfer")
+        details["module_path"] = str(getattr(module, "__file__", ""))
+        vllm_module = importlib.import_module("vllm")
+        vllm_root = Path(str(getattr(vllm_module, "__file__", ""))).resolve().parent
+        source_path = vllm_root / "engine" / "arg_utils.py"
+        if source_path.exists():
+            details["source_path"] = str(source_path)
+            details["source_has_kv_transfer_config_flag"] = (
+                "--kv-transfer-config" in source_path.read_text(encoding="utf-8")
+            )
+    except Exception as exc:
+        return CheckResult(
+            "vllm_kv_transfer",
+            NOT_READY,
+            {"import_error": repr(exc)},
+            reason="vLLM KV-transfer package is not importable.",
+            fix=(
+                "Install a vLLM version that supports --kv-transfer-config "
+                "and vLLM V1 KV connectors."
+            ),
+        )
+
+    path = vllm_cli.details.get("path")
+    if vllm_cli.status != READY or not path:
+        return CheckResult(
+            "vllm_kv_transfer",
+            NOT_READY,
+            details,
+            reason="vLLM CLI is unavailable, so --kv-transfer-config cannot be checked.",
+            fix="Install vLLM with the serving CLI available.",
+        )
+    try:
+        result = subprocess.run(
+            [str(path), "serve", "--help"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            check=False,
+        )
+    except Exception as exc:
+        details["help_error"] = repr(exc)
+        details["help_check"] = "error"
+        if details.get("source_has_kv_transfer_config_flag"):
+            return CheckResult("vllm_kv_transfer", READY, details)
+        return CheckResult(
+            "vllm_kv_transfer",
+            NOT_READY,
+            details,
+            reason="`vllm serve --help` could not run for KV-transfer detection.",
+            fix="Install a compatible vLLM serving CLI.",
+        )
+    output = f"{result.stdout}\n{result.stderr}"
+    details["returncode"] = result.returncode
+    details["has_kv_transfer_config_flag"] = "--kv-transfer-config" in output
+    if result.returncode == 0 and details["has_kv_transfer_config_flag"]:
+        return CheckResult("vllm_kv_transfer", READY, details)
+    if details.get("source_has_kv_transfer_config_flag"):
+        return CheckResult("vllm_kv_transfer", READY, details)
+    return CheckResult(
+        "vllm_kv_transfer",
+        NOT_READY,
+        details,
+        reason="vLLM serving CLI does not expose --kv-transfer-config.",
+        fix="Install a vLLM version that supports LMCacheConnectorV1.",
+    )
+
+
 def _check_huggingface_token() -> CheckResult:
     names = ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN")
     present = [name for name in names if os.environ.get(name)]
@@ -641,7 +713,7 @@ def _readiness(checks: dict[str, CheckResult]) -> dict[str, ReadinessLevel]:
         ),
         "vllm_import_ready": _level(
             checks,
-            required=("python", "torch", "vllm", "lmcache"),
+            required=("python", "torch", "vllm", "lmcache", "vllm_kv_transfer"),
         ),
         "gpu_serving_ready": _gpu_serving_level(checks),
         "full_benchmark_ready": _full_benchmark_level(checks),
@@ -667,7 +739,16 @@ def _level(
 def _gpu_serving_level(checks: dict[str, CheckResult]) -> ReadinessLevel:
     base = _level(
         checks,
-        required=("python", "torch", "vllm", "lmcache", "model", "ports", "disk_space"),
+        required=(
+            "python",
+            "torch",
+            "vllm",
+            "lmcache",
+            "vllm_kv_transfer",
+            "model",
+            "ports",
+            "disk_space",
+        ),
     )
     reasons = list(base.reasons)
     fixes = list(base.recommended_fixes)

@@ -1,0 +1,18 @@
+name: serve_fake_small_ci
+workload: serve
+generator: fake-ci-small
+operations:
+  - fake_serving_baseline_comparison
+modes:
+  - fake_no_cache
+  - fake_bifrost_lmcache
+request_count: 8
+prefix_repeat_groups: 2
+max_tokens: 8
+seed: 1234
+prefix_size: small
+concurrency: 2
+timeout_seconds: 10
+collect_bifrost_stats: true
+generate_config: false
+notes: "Fake OpenAI-compatible serving with real BIFROST LMCache connector-backed cache for the candidate; no vLLM, real LMCache import, GPU, internet, model downloads, Docker, root, or external services."

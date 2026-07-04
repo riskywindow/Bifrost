@@ -12,26 +12,23 @@ enable_multiprocess: true
 remote_storage_plugins:
   - bifrost
 
-remote_storage_plugin:
-  bifrost:
-    module_path: lmcache_bifrost.adapter
-    class_name: BifrostConnectorAdapter
-    extra_config:
-      endpoint: 127.0.0.1:7744
-      chunk_size: 262144
-      timeout_seconds: 5.0
-      strict_validation: true
-      allow_pickle_fallback: false
-      engine_name: lmcache
-      integration_name: lmcache_bifrost_remote_storage
-      object_type: opaque_engine_blob
-      metrics_jsonl_path: ./bifrost_lmcache_connector_metrics.jsonl
-
 remote_url: bifrost://127.0.0.1:7744
 
-# Some LMCache releases route custom storage through plugin:// URLs instead:
-# remote_url: plugin://bifrost
-# When using that form, keep endpoint in remote_storage_plugin.bifrost.extra_config.
+extra_config:
+  remote_storage_plugin.bifrost.module_path: lmcache_bifrost.adapter
+  remote_storage_plugin.bifrost.class_name: BifrostConnectorAdapter
+  endpoint: 127.0.0.1:7744
+  chunk_size: 262144
+  timeout_seconds: 5.0
+  strict_validation: true
+  allow_pickle_fallback: false
+  engine_name: lmcache
+  integration_name: lmcache_bifrost_remote_storage
+  object_type: opaque_engine_blob
+  metrics_jsonl_path: ./bifrost_lmcache_connector_metrics.jsonl
+
+# LMCache 0.3.x loads custom adapters from top-level extra_config keys named
+# remote_storage_plugin.<plugin>.module_path/class_name.
 
 multiprocess:
   enabled: true

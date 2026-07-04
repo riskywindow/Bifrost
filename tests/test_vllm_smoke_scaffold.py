@@ -29,10 +29,10 @@ def test_vllm_smoke_config_yaml_parses() -> None:
     parsed = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
 
     assert parsed["remote_storage_plugins"] == ["bifrost"]
-    plugin = parsed["remote_storage_plugin"]["bifrost"]
-    assert plugin["module_path"] == "lmcache_bifrost.adapter"
-    assert plugin["class_name"] == "BifrostConnectorAdapter"
-    assert plugin["extra_config"]["endpoint"] == "127.0.0.1:7744"
+    extra = parsed["extra_config"]
+    assert extra["remote_storage_plugin.bifrost.module_path"] == "lmcache_bifrost.adapter"
+    assert extra["remote_storage_plugin.bifrost.class_name"] == "BifrostConnectorAdapter"
+    assert extra["endpoint"] == "127.0.0.1:7744"
     assert parsed["bifrost_object_type"] == "opaque_engine_blob"
 
 

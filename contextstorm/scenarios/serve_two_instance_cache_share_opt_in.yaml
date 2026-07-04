@@ -1,0 +1,21 @@
+name: serve_two_instance_cache_share_opt_in
+workload: serve
+generator: repeated-code-context
+operations:
+  - two_instance_cache_share
+modes:
+  - vllm_lmcache_bifrost
+request_count: 16
+prefix_repeat_groups: 4
+max_tokens: 32
+seed: 2606
+prefix_size: medium
+concurrency: 2
+timeout_seconds: 60
+collect_bifrost_stats: true
+bifrost_endpoint: 127.0.0.1:7420
+model: ./local-model
+opt_in_env: BIFROST_RUN_TWO_INSTANCE_CACHE_SHARE
+generate_config: true
+config_mode: bifrost_remote_storage
+notes: "Optional two-instance cache-sharing experiment through LMCache remote storage and BIFROST; skipped unless explicitly opted in and the environment supports two local serving instances."

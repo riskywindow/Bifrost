@@ -1,0 +1,23 @@
+name: serve_vllm_lmcache_bifrost_opt_in
+workload: serve
+generator: repeated-document-qa
+operations:
+  - real_vllm_lmcache_bifrost
+modes:
+  - vllm_only
+  - vllm_lmcache_local
+  - vllm_lmcache_bifrost
+request_count: 16
+prefix_repeat_groups: 4
+max_tokens: 32
+seed: 606
+prefix_size: medium
+concurrency: 2
+timeout_seconds: 60
+collect_bifrost_stats: true
+bifrost_endpoint: 127.0.0.1:7420
+model: ./local-model
+opt_in_env: BIFROST_RUN_REAL_VLLM
+generate_config: true
+config_mode: bifrost_remote_storage
+notes: "Optional real vLLM plus LMCache plus BIFROST remote storage scenario; skipped unless BIFROST_RUN_REAL_VLLM=1 and a compatible local real-serving stack is already prepared."
