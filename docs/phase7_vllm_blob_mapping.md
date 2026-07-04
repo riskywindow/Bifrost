@@ -42,11 +42,24 @@ The opaque key hash should be namespaced, deterministic, and versioned:
 
 ```text
 opaque_engine_key_hash = blake3(
-  "bifrost.vllm.kvtransfer.key.v1" || 0x00 || canonical_key_json
+  "bifrost.vllm.kv_blob.v1" || 0x00 || canonical_key_json
 )
 ```
 
 `canonical_key_json` must use sorted object keys and stable scalar types.
+The Phase 7 implementation exposes this through:
+
+1. `stable_vllm_blob_key(...)`: canonical JSON key material.
+2. `vllm_blob_key_hash(...)`: the Phase 1
+   `opaque_engine_profile.engine_key_hash`.
+3. `stable_kv_cache_config_hash(...)`: a stable commitment to vLLM KV-cache
+   configuration material.
+4. `stable_layout_fingerprint(...)`: a compatibility commitment over the
+   layout inputs available to the connector.
+
+The canonical blob key includes `connector_instance_id`, `request_id`,
+`model_fingerprint`, `kv_cache_config_hash`, `layer_name`, `block_ids`,
+`role`, `vllm_version` when available, and `layout_fingerprint`.
 
 ## Engine profile
 
@@ -68,12 +81,14 @@ The `opaque_engine_profile` must include:
 ```text
 engine_key_hash
 engine_payload_type
-engine_key_repr_version: "vllm_kvtransfer_key.v1"
-layout_fingerprint
-request_identity
-layer_identity
-block_identity
+engine_key_repr_version: "vllm_kv_blob_key.v1"
 ```
+
+The Phase 1 schema currently permits only those three
+`opaque_engine_profile` fields. vLLM-specific request, layer, block, layout,
+dtype, shape, and device-origin details are therefore included as canonical
+JSON inside `provenance.notes`, not as extra top-level descriptor fields. This
+keeps generated objects valid through the Phase 1 `validate_object` path.
 
 The `payload_profile` must include:
 
@@ -136,6 +151,19 @@ The serializer must:
 4. Avoid pickle for production-shaped vLLM payloads.
 5. Avoid logging payload bytes.
 
+The tensor payload codec stores dense tensor contents as raw contiguous bytes:
+
+```text
+payload_bytes = tensor_to_payload(tensor, allow_cpu_staging=True)
+tensor = payload_to_tensor(payload_bytes, dtype, shape, device="cpu")
+```
+
+CPU tensors are serialized directly. CUDA tensors are copied to CPU only when
+CPU staging is explicitly allowed; otherwise serialization fails closed. Dtype,
+shape, original device, and the CPU staging format version are recorded in the
+descriptor provenance notes. These fields describe how to hand bytes back to
+vLLM-owned code; BIFROST still does not reinterpret attention semantics.
+
 The deserializer must:
 
 1. Validate BIFROST descriptor, object ID, payload hash, engine profile, opaque
@@ -161,3 +189,23 @@ Before any load is counted as a hit, the connector must verify:
 
 Any uncertainty is a miss, recompute decision, or deterministic connector
 error. It is never a load hit.
+
+## Target profile
+
+The vLLM codec builds an opaque target profile with:
+
+```text
+accepts_object_type: "opaque_engine_blob"
+engine_profile.engine_name: "vllm"
+engine_profile.integration_name: "bifrost_vllm_kv_connector"
+engine_profile.kv_cache_format: "opaque_vllm_kv_blob"
+opaque_requirements.engine_key_hash: vllm_blob_key_hash(...)
+opaque_requirements.engine_payload_type: "opaque_vllm_kv_blob"
+opaque_requirements.engine_key_repr_version: "vllm_kv_blob_key.v1"
+```
+
+Phase 1 opaque compatibility checks compare the engine namespace,
+integration namespace, cache format, and opaque key hash. Because the key hash
+commits to request, layer, block, model, KV-cache config, role, vLLM version,
+and layout fingerprint, a wrong target profile rejects through
+`opaque_wrong_engine_key`.

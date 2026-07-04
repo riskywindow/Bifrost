@@ -42,15 +42,15 @@ Last verified: 2026-07-04
 
 ## Opaque blob codec
 
-- [ ] Generate `opaque_engine_blob` metadata for vLLM-owned blobs.
-- [ ] Use `engine_name: "vllm"`.
-- [ ] Use `integration_name: "bifrost_vllm_kv_connector"`.
-- [ ] Use `kv_cache_format: "opaque_vllm_kv_blob"`.
-- [ ] Compute deterministic `opaque_engine_key_hash`.
-- [ ] Compute and validate `layout_fingerprint`.
-- [ ] Record request, layer, and block identity.
-- [ ] Store payload bytes through CPU staging with `compression: "none"`.
-- [ ] Validate descriptor hash, payload hash, and object ID.
+- [x] Generate `opaque_engine_blob` metadata for vLLM-owned blobs.
+- [x] Use `engine_name: "vllm"`.
+- [x] Use `integration_name: "bifrost_vllm_kv_connector"`.
+- [x] Use `kv_cache_format: "opaque_vllm_kv_blob"`.
+- [x] Compute deterministic `opaque_engine_key_hash`.
+- [x] Compute and validate `layout_fingerprint`.
+- [x] Record request, layer, and block identity.
+- [x] Store payload bytes through CPU staging with `compression: "none"`.
+- [x] Validate descriptor hash, payload hash, and object ID.
 
 ## Save path
 
@@ -73,12 +73,12 @@ Last verified: 2026-07-04
 
 ## Scheduler metadata
 
-- [ ] Define canonical request identity inputs.
-- [ ] Define canonical layer identity inputs.
-- [ ] Define canonical block identity inputs.
-- [ ] Keep mutable process, port, retry, staging, benchmark, and local store
+- [x] Define canonical request identity inputs.
+- [x] Define canonical layer identity inputs.
+- [x] Define canonical block identity inputs.
+- [x] Keep mutable process, port, retry, staging, benchmark, and local store
   state out of immutable object identity.
-- [ ] Add tests for deterministic canonicalization.
+- [x] Add tests for deterministic canonicalization.
 
 ## Failure policy
 
@@ -124,7 +124,7 @@ Last verified: 2026-07-04
 - [x] Run fake vLLM lifecycle tests.
 - [x] Run connector package import tests without real vLLM.
 - [x] Run config parsing tests.
-- [ ] Run opaque blob codec tests.
+- [x] Run opaque blob codec tests.
 - [ ] Run save and load fake tests.
 - [ ] Run failure policy tests.
 - [x] Run metrics and trace tests.
