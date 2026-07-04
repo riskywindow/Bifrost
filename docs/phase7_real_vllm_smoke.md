@@ -71,6 +71,32 @@ BIFROST_RUN_PHASE7_REAL_VLLM=1
 BIFROST_PHASE7_REAL_IMPORT_SMOKE=1
 ```
 
+## Dynamic import config
+
+The Phase 7 connector skeleton is dynamically importable as:
+
+```text
+vllm_bifrost.connector.BifrostKVConnector
+```
+
+For repo-local smoke experiments, the colon-path equivalent is:
+
+```text
+integrations.vllm_bifrost.vllm_bifrost.connector:BifrostKVConnector
+```
+
+The package includes an example KVTransfer config at:
+
+```text
+integrations/vllm_bifrost/examples/kv_transfer_config_bifrost.json
+```
+
+The skeleton supports import, configuration parsing, construction, metrics,
+trace setup, and lifecycle call recording. It does not implement real save or
+load yet. If real vLLM invokes transfer hooks before the save/load phases are
+implemented, the connector raises deterministic `UnsupportedOperationError`
+exceptions instead of claiming a cache hit or successful save.
+
 ## Optional constructor smoke
 
 Constructor smoke builds the BIFROST connector with real vLLM config objects
@@ -99,6 +125,9 @@ If the constructor path touches BIFROST, it also requires
 Save-only smoke registers vLLM-compatible cache metadata, stages a small
 vLLM-owned or vLLM-shaped KV blob through the connector, and verifies that
 BIFROST stores a committed `opaque_engine_blob`.
+
+This smoke remains skipped until the Phase 7 save path is implemented. The
+current connector skeleton must not be treated as save-capable.
 
 It checks:
 

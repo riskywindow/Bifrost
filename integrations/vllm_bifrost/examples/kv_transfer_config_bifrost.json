@@ -1,0 +1,18 @@
+{
+  "kv_connector": "BifrostKVConnector",
+  "kv_connector_module_path": "vllm_bifrost.connector",
+  "kv_role": "kv_both",
+  "kv_connector_extra_config": {
+    "endpoint": "127.0.0.1:7420",
+    "chunk_size": 262144,
+    "timeout_seconds": 10.0,
+    "strict_validation": true,
+    "allow_cpu_staging": true,
+    "save_mode": "sync",
+    "load_mode": "sync",
+    "failure_policy": "fail",
+    "trace_jsonl_path": "runs/phase7-vllm-bifrost-connector.jsonl",
+    "model_fingerprint": null,
+    "layout_fingerprint": null
+  }
+}

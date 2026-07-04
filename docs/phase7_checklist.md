@@ -26,17 +26,17 @@ Last verified: 2026-07-04
 ## Connector package skeleton
 
 - [x] Create an importable BIFROST vLLM connector package.
-- [ ] Expose the dynamic import target expected by vLLM config.
+- [x] Expose the dynamic import target expected by vLLM config.
 - [x] Keep import side effects minimal.
 - [x] Provide package metadata and version reporting.
 - [x] Avoid new production dependencies unless justified in the change.
 
 ## Config parsing
 
-- [ ] Parse BIFROST endpoint, timeout, chunk size, metrics JSONL path, and
+- [x] Parse BIFROST endpoint, timeout, chunk size, metrics JSONL path, and
   strict validation settings.
-- [ ] Parse layout fingerprint inputs and model/config commitments.
-- [ ] Preserve unknown vLLM config fields in diagnostics.
+- [x] Parse layout fingerprint inputs and model/config commitments.
+- [x] Preserve unknown vLLM config fields in diagnostics.
 - [ ] Reject missing required compatibility fields.
 - [ ] Gate real vLLM behavior behind explicit opt-in env vars.
 
@@ -91,13 +91,13 @@ Last verified: 2026-07-04
 
 ## Metrics and traces
 
-- [ ] Add connector-local counters for save, load, hit, miss, recompute,
+- [x] Add connector-local counters for save, load, hit, miss, recompute,
   errors, and bytes.
-- [ ] Add JSONL lifecycle events.
-- [ ] Include reason codes and durations.
-- [ ] Avoid logging raw KV bytes, raw prompt text, tokens, secrets, or
+- [x] Add JSONL lifecycle events.
+- [x] Include reason codes and durations.
+- [x] Avoid logging raw KV bytes, raw prompt text, tokens, secrets, or
   authorization headers.
-- [ ] Provide a metrics snapshot API for tests and reports.
+- [x] Provide a metrics snapshot API for tests and reports.
 
 ## ContextStorm fake connector scenario
 
@@ -121,13 +121,13 @@ Last verified: 2026-07-04
 ## CI
 
 - [x] Run API inspector no-vLLM tests.
-- [ ] Run fake vLLM lifecycle tests.
+- [x] Run fake vLLM lifecycle tests.
 - [x] Run connector package import tests without real vLLM.
-- [ ] Run config parsing tests.
+- [x] Run config parsing tests.
 - [ ] Run opaque blob codec tests.
 - [ ] Run save and load fake tests.
 - [ ] Run failure policy tests.
-- [ ] Run metrics and trace tests.
+- [x] Run metrics and trace tests.
 - [ ] Run ContextStorm fake connector scenario.
 - [ ] Keep real vLLM tests skipped unless explicitly enabled.
 - [ ] Keep GPU tests skipped unless explicitly enabled.
