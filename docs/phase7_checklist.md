@@ -16,20 +16,20 @@ Last verified: 2026-07-04
 
 ## Fake vLLM interfaces
 
-- [ ] Add fake config objects for the inspected vLLM fields.
-- [ ] Add fake KV cache handles with deterministic layout metadata.
-- [ ] Add fake scheduler metadata for request, layer, and block identities.
+- [x] Add fake config objects for the inspected vLLM fields.
+- [x] Add fake KV cache handles with deterministic layout metadata.
+- [x] Add fake scheduler metadata for request, layer, and block identities.
 - [ ] Exercise lifecycle order without importing vLLM, LMCache, torch, CUDA, or
   model assets.
 - [ ] Include fake corruption, missing-object, and incompatible-layout cases.
 
 ## Connector package skeleton
 
-- [ ] Create an importable BIFROST vLLM connector package.
+- [x] Create an importable BIFROST vLLM connector package.
 - [ ] Expose the dynamic import target expected by vLLM config.
-- [ ] Keep import side effects minimal.
-- [ ] Provide package metadata and version reporting.
-- [ ] Avoid new production dependencies unless justified in the change.
+- [x] Keep import side effects minimal.
+- [x] Provide package metadata and version reporting.
+- [x] Avoid new production dependencies unless justified in the change.
 
 ## Config parsing
 
@@ -122,7 +122,7 @@ Last verified: 2026-07-04
 
 - [x] Run API inspector no-vLLM tests.
 - [ ] Run fake vLLM lifecycle tests.
-- [ ] Run connector package import tests without real vLLM.
+- [x] Run connector package import tests without real vLLM.
 - [ ] Run config parsing tests.
 - [ ] Run opaque blob codec tests.
 - [ ] Run save and load fake tests.

@@ -1,0 +1,24 @@
+[project]
+name = "vllm-bifrost"
+version = "0.1.0"
+description = "BIFROST Phase 7 vLLM KVTransfer connector package and CI-safe fakes."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+  # Fake KV buffer tests use CPU tensors. The package root has no torch import side effects.
+  "torch>=2.0.0"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+include = ["vllm_bifrost*"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
