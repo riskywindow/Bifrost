@@ -104,6 +104,7 @@ def test_stub_lifecycle_records_calls_and_returns_safe_defaults(tmp_path: Path) 
             "connector_instance_id": "connector-test",
             "trace_jsonl_path": str(trace_path),
             "failure_policy": "recompute",
+            "save_mode": "disabled",
         }
     )
 

@@ -25,6 +25,7 @@ class ConnectorMetricsSnapshot:
     unsupported_operation_count: int = 0
     lifecycle_error_count: int = 0
     save_success_count: int = 0
+    save_failure_count: int = 0
     load_hit_count: int = 0
     load_miss_count: int = 0
     load_recompute_count: int = 0
@@ -32,10 +33,17 @@ class ConnectorMetricsSnapshot:
     load_skipped_count: int = 0
     save_error_count: int = 0
     load_error_count: int = 0
+    daemon_error_count: int = 0
+    validation_error_count: int = 0
+    serialization_error_count: int = 0
+    scheduler_metadata_error_count: int = 0
+    store_commit_error_count: int = 0
     bytes_saved: int = 0
     bytes_loaded: int = 0
+    objects_saved: int = 0
     total_save_ms: float = 0.0
     total_load_ms: float = 0.0
+    last_error_reason: str | None = None
 
 
 class ConnectorMetrics:
@@ -52,6 +60,10 @@ class ConnectorMetrics:
     def add_duration_ms(self, name: str, duration_ms: float) -> None:
         with self._lock:
             setattr(self._snapshot, name, getattr(self._snapshot, name) + duration_ms)
+
+    def set_last_error_reason(self, reason: str | None) -> None:
+        with self._lock:
+            self._snapshot.last_error_reason = reason
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
@@ -75,6 +87,11 @@ class ConnectorJsonlLogger:
         reason_code: str | None = None,
         bytes_count: int | None = None,
         duration_ms: float | None = None,
+        object_id: str | None = None,
+        blob_key_hash: str | None = None,
+        request_id: str | None = None,
+        layer_name: str | None = None,
+        block_ids: list[int] | tuple[int, ...] | None = None,
     ) -> None:
         if self.path is None:
             return
@@ -93,6 +110,16 @@ class ConnectorJsonlLogger:
             event["bytes"] = bytes_count
         if duration_ms is not None:
             event["duration_ms"] = duration_ms
+        if object_id is not None:
+            event["object_id"] = object_id
+        if blob_key_hash is not None:
+            event["blob_key_hash"] = blob_key_hash
+        if request_id is not None:
+            event["request_id"] = request_id
+        if layer_name is not None:
+            event["layer_name"] = layer_name
+        if block_ids is not None:
+            event["block_ids"] = list(block_ids)
         encoded = json.dumps(event, sort_keys=True, separators=(",", ":"))
         with self._lock:
             self.path.parent.mkdir(parents=True, exist_ok=True)

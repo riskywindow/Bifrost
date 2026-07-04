@@ -54,11 +54,11 @@ Last verified: 2026-07-04
 
 ## Save path
 
-- [ ] Implement `save_kv_layer` against fake vLLM interfaces.
-- [ ] Validate metadata before calling BIFROST PUT.
-- [ ] Count saves only after BIFROST reports stored and verified.
-- [ ] Record save metrics and JSONL trace events.
-- [ ] Fail closed on serialization, validation, daemon, or lifecycle errors.
+- [x] Implement `save_kv_layer` against fake vLLM interfaces.
+- [x] Validate metadata before calling BIFROST PUT.
+- [x] Count saves only after BIFROST reports stored and verified.
+- [x] Record save metrics and JSONL trace events.
+- [x] Fail closed on serialization, validation, daemon, or lifecycle errors.
 
 ## Load path
 
@@ -86,7 +86,7 @@ Last verified: 2026-07-04
 - [ ] Add reason codes for missing, corrupt, incompatible, daemon-unavailable,
   and lifecycle failures.
 - [ ] Ensure corrupt or incompatible blobs never become hits.
-- [ ] Ensure daemon unavailability is not counted as a cache miss.
+- [x] Ensure daemon unavailability is not counted as a cache miss.
 - [ ] Ensure lifecycle misuse raises deterministic errors.
 
 ## Metrics and traces
@@ -148,7 +148,7 @@ Last verified: 2026-07-04
 - [ ] Connector package is dynamically importable by compatible vLLM versions.
 - [ ] Config parsing is version-sensitive and fail-closed.
 - [ ] vLLM-owned KV blobs are stored as `opaque_engine_blob`.
-- [ ] Save path stores only validated and verified BIFROST objects.
+- [x] Save path stores only validated and verified BIFROST objects.
 - [ ] Load path returns only compatible, committed, verified, and payload-valid
   blobs.
 - [ ] Missing, corrupt, incompatible, daemon-unavailable, and lifecycle-error

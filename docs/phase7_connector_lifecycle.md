@@ -42,18 +42,39 @@ key material, serializes payload bytes through CPU staging, creates
 `opaque_engine_blob` metadata, validates the descriptor, and starts or performs
 the BIFROST put.
 
+The Phase 7 sync save implementation derives `request_id`, `layer_name`, and
+`block_ids` from explicit keyword arguments first, then fake attention metadata
+or connector metadata, and finally connector metadata captured from scheduler
+or allocation hooks. It serializes the selected fake KV layer blocks as opaque
+CPU-staged bytes and records only stable compatibility material in the object
+descriptor.
+
+Sync saves call `BifrostClient.put_object()` with the configured `chunk_size`.
+The connector does not manually send payload frames; chunking remains owned by
+the BIFROST client and daemon protocol.
+
 It must not count a save as successful until BIFROST reports the object stored
 and verified. Failed saves do not create hits; vLLM may continue by recomputing
 or by using its local path.
+
+Successful saves record request ID, layer name, block IDs, object ID,
+`opaque_engine_key_hash`, bytes saved, objects saved, and duration in connector
+metrics and JSONL traces. Raw KV payload bytes are never logged.
 
 ## `wait_for_save`
 
 `wait_for_save` waits for outstanding save work to complete and returns or
 raises according to the inspected vLLM contract.
 
-It must preserve per-layer or per-block reason codes. Timeouts, daemon errors,
-validation failures, and lifecycle errors must be visible in metrics and
-traces.
+In sync mode the save is performed during `save_kv_layer`, so
+`wait_for_save` is primarily a drain and error-surfacing point. Any save error
+recorded by the sync path is raised rather than swallowed. Async save mode is
+currently unsupported and raises a deterministic `async_save_unsupported`
+connector error.
+
+It must preserve per-layer or per-block reason codes. Serialization failures,
+timeouts, daemon errors, validation failures, and lifecycle errors must be
+visible in metrics and traces.
 
 ## `start_load_kv`
 
