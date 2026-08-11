@@ -298,7 +298,7 @@ async fn delayed_ack_triggers_retry_and_trace_events() {
     fs::create_dir_all(&root).unwrap();
     let spool = Spool::new(&root);
     let good = start_daemon(spool.clone()).await;
-    let delayed = start_delayed_ack_path(Duration::from_millis(200)).await;
+    let delayed = start_delayed_ack_path(Duration::from_millis(500)).await;
     let fixture = native_fixture();
     let object_id = object_id(&fixture).to_string();
     let trace_path = root.join("timeout-retry-trace.jsonl");
@@ -323,7 +323,7 @@ async fn delayed_ack_triggers_retry_and_trace_events() {
         TEST_CHUNK_SIZE,
         None,
         telemetry.clone(),
-        retry_options(25, 3),
+        retry_options(100, 3),
     )
     .await
     .unwrap();
@@ -595,6 +595,10 @@ async fn start_begin_then_close_on_chunk_path() -> FlakyPath {
         fake_hello(&mut stream).await;
         let begin = read_frame(&mut stream).await.unwrap();
         assert_eq!(begin.header.frame_type, FrameType::PutBegin);
+        let ping = read_frame(&mut stream).await.unwrap();
+        assert_eq!(ping.header.frame_type, FrameType::Ping);
+        let pong = FrameHeader::new(FrameType::Pong, ping.header.transfer_id, 0);
+        write_frame(&mut stream, &pong, &[]).await.unwrap();
         let chunk = read_frame(&mut stream).await.unwrap();
         assert_eq!(chunk.header.frame_type, FrameType::Chunk);
     });
