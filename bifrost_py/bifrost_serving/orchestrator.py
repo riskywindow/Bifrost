@@ -7,7 +7,6 @@ import json
 import os
 import shutil
 import sys
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
@@ -161,7 +160,9 @@ def build_processes(config: OrchestratorConfig) -> list[ManagedProcess]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Orchestrate Phase 6 serving processes")
+    parser = argparse.ArgumentParser(
+        description="Orchestrate Phase 6 serving processes"
+    )
     parser.add_argument(
         "--scenario",
         choices=sorted(SCENARIOS),
@@ -185,7 +186,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             vllm_port=args.vllm_port,
             lmcache_port=args.lmcache_port,
             allow_real_vllm=args.allow_real_vllm,
-            allow_model_downloads=os.environ.get("BIFROST_ALLOW_MODEL_DOWNLOADS") == "1",
+            allow_model_downloads=os.environ.get("BIFROST_ALLOW_MODEL_DOWNLOADS")
+            == "1",
             dry_run=args.dry_run,
         )
         result = run_orchestration(config)
@@ -193,13 +195,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
         else:
             verb = "planned" if result.dry_run else "started and stopped"
-            print(f"{verb} {len(result.processes)} process(es); wrote {result.manifest_path}")
+            print(
+                f"{verb} {len(result.processes)} process(es); wrote {result.manifest_path}"
+            )
         return 0
     except SystemExit:
         raise
     except Exception as exc:
         if "--json" in (argv or sys.argv[1:]):
-            print(json.dumps({"status": "error", "error": str(exc)}, indent=2), file=sys.stderr)
+            print(
+                json.dumps({"status": "error", "error": str(exc)}, indent=2),
+                file=sys.stderr,
+            )
         else:
             print(f"bifrost serving orchestrator failed: {exc}", file=sys.stderr)
         return 2
@@ -213,10 +220,14 @@ def _validate_config(config: OrchestratorConfig) -> None:
     if config.lmcache_port <= 0 or config.lmcache_port > 65535:
         raise OrchestratorError("lmcache-port must be in 1..65535")
     _split_endpoint(config.bifrost_endpoint)
-    if _running_in_ci() and config.scenario != "fake":
-        raise OrchestratorSafetyError("refusing real serving orchestration in CI")
     if config.scenario in REAL_VLLM_SCENARIOS:
-        if not (config.allow_real_vllm or os.environ.get("BIFROST_RUN_REAL_VLLM") == "1"):
+        # Planning only constructs command descriptions and writes a manifest. It is
+        # intentionally safe in CI and must not be blocked by real-run guards.
+        if config.dry_run:
+            return
+        if not (
+            config.allow_real_vllm or os.environ.get("BIFROST_RUN_REAL_VLLM") == "1"
+        ):
             raise OrchestratorSafetyError(
                 "refusing to start real vLLM without --allow-real-vllm or BIFROST_RUN_REAL_VLLM=1"
             )
@@ -226,6 +237,8 @@ def _validate_config(config: OrchestratorConfig) -> None:
             raise OrchestratorSafetyError(
                 "refusing non-local model value without BIFROST_ALLOW_MODEL_DOWNLOADS=1"
             )
+        if _running_in_ci():
+            raise OrchestratorSafetyError("refusing real serving orchestration in CI")
 
 
 def _fake_openai_server(config: OrchestratorConfig, cwd: Path) -> ManagedProcess:
@@ -346,11 +359,15 @@ def _child_env(
         env["BIFROST_VLLM_MODEL"] = config.model
     if lmcache_mode == "bifrost":
         env["LMCACHE_CONFIG_FILE"] = str(
-            config.output_dir / BaselineMode.VLLM_LMCACHE_BIFROST.value / "lmcache_config.yaml"
+            config.output_dir
+            / BaselineMode.VLLM_LMCACHE_BIFROST.value
+            / "lmcache_config.yaml"
         )
     elif lmcache_mode == "local":
         env["LMCACHE_CONFIG_FILE"] = str(
-            config.output_dir / BaselineMode.VLLM_LMCACHE_LOCAL_CPU.value / "lmcache_config.yaml"
+            config.output_dir
+            / BaselineMode.VLLM_LMCACHE_LOCAL_CPU.value
+            / "lmcache_config.yaml"
         )
         env["BIFROST_LMCACHE_MODE"] = "local_cpu"
     return env

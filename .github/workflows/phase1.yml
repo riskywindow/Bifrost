@@ -23,6 +23,12 @@ jobs:
       - name: Install Python test dependencies
         run: python -m pip install -e "bifrost_py[dev]"
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Rust binaries
+        run: cargo build --manifest-path bifrostd/Cargo.toml --bins
+
       - name: Regenerate identity vectors
         run: python tools/generate_identity_vectors.py
 
@@ -33,9 +39,6 @@ jobs:
         env:
           PYTHONPATH: bifrost_py
         run: pytest bifrost_py/tests tests
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
 
       - name: Run Rust tests
         run: cargo test --manifest-path bifrostd/Cargo.toml

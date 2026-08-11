@@ -14,7 +14,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 import time
 from dataclasses import dataclass, field, fields
@@ -42,7 +41,12 @@ from .collectors import LMCacheMetricsCollector, VLLMMetricsCollector
 from .compare import build_comparisons
 from .correctness import ResponseComparisonConfig, compare_run_outputs
 from .env_doctor import EnvDoctorConfig, run_doctor
-from .phases import DEFAULT_PHASE_ORDER, BenchmarkPhase, build_phase_plans, parse_phase_order
+from .phases import (
+    DEFAULT_PHASE_ORDER,
+    BenchmarkPhase,
+    build_phase_plans,
+    parse_phase_order,
+)
 from .processes import ManagedProcess, http_ready_check, tcp_ready_check
 from .request_schema import read_jsonl
 from .runner import ServingBenchmarkConfig, run_serving_benchmark
@@ -125,7 +129,11 @@ def run_real_matrix(config: RealMatrixConfig) -> RealMatrixResult:
     workload_digest = _workload_digest(config.workload_jsonl)
     requested_modes = tuple(_mode(mode) for mode in config.modes)
     plan = _execution_plan(config, requested_modes)
-    root_preflight = preflight_real_matrix(config, plan) if not config.dry_run else _dry_preflight(config, plan)
+    root_preflight = (
+        preflight_real_matrix(config, plan)
+        if not config.dry_run
+        else _dry_preflight(config, plan)
+    )
     write_json_artifact(config.output_dir / "preflight.json", root_preflight)
 
     mode_results: list[dict[str, Any]] = []
@@ -172,7 +180,9 @@ def run_real_matrix(config: RealMatrixConfig) -> RealMatrixResult:
     evidence_path = config.output_dir / "sanitized_evidence_bundle.json"
     gate_path = config.output_dir / "completion_gate.json"
     report_path = config.output_dir / "report.md"
-    write_json_artifact(comparison_path, {"comparisons": comparisons, "mode_results": mode_results})
+    write_json_artifact(
+        comparison_path, {"comparisons": comparisons, "mode_results": mode_results}
+    )
     _write_matrix_comparison_csv(comparison_csv_path, summary)
     write_json_artifact(evidence_path, _sanitized_evidence(summary))
     write_json_artifact(gate_path, completion_gate)
@@ -199,8 +209,13 @@ def run_real_matrix(config: RealMatrixConfig) -> RealMatrixResult:
     )
 
 
-def preflight_real_matrix(config: RealMatrixConfig, plan: Sequence[dict[str, Any]]) -> dict[str, Any]:
-    ports = sorted({int(item["vllm_port"]) for item in plan} | {int(item["bifrost_port"]) for item in plan})
+def preflight_real_matrix(
+    config: RealMatrixConfig, plan: Sequence[dict[str, Any]]
+) -> dict[str, Any]:
+    ports = sorted(
+        {int(item["vllm_port"]) for item in plan}
+        | {int(item["bifrost_port"]) for item in plan}
+    )
     report = run_doctor(
         EnvDoctorConfig(
             endpoint=f"127.0.0.1:{config.bifrost_base_port}",
@@ -241,23 +256,37 @@ def evaluate_completion_gate(
     for result in mode_results:
         label = f"rep{result.get('repetition')}:{result.get('mode')}"
         if result.get("status") != "completed":
-            failures.append(f"{label} did not complete: {result.get('skip_reason') or result.get('error')}")
+            failures.append(
+                f"{label} did not complete: {result.get('skip_reason') or result.get('error')}"
+            )
             continue
-        summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+        summary = (
+            result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+        )
         measured = _measured_section(summary)
         if int(measured.get("request_count") or 0) <= 0:
             failures.append(f"{label} has zero measured samples")
         artifacts = result.get("artifact_manifest")
-        if isinstance(artifacts, Mapping) and artifacts.get("missing_required_artifacts"):
+        if isinstance(artifacts, Mapping) and artifacts.get(
+            "missing_required_artifacts"
+        ):
             failures.append(f"{label} is missing required artifacts")
         mode = str(result.get("mode"))
-        if mode == BaselineMode.VLLM_LMCACHE_LOCAL_CPU.value and not _lmcache_activity(result):
-            failures.append(f"{label} did not report LMCache store and retrieve activity")
+        if mode == BaselineMode.VLLM_LMCACHE_LOCAL_CPU.value and not _lmcache_activity(
+            result
+        ):
+            failures.append(
+                f"{label} did not report LMCache store and retrieve activity"
+            )
         if mode == BaselineMode.VLLM_LMCACHE_BIFROST.value:
             if not _bifrost_activity(result):
-                failures.append(f"{label} did not report BIFROST connector PUT and GET activity")
+                failures.append(
+                    f"{label} did not report BIFROST connector PUT and GET activity"
+                )
             if not _bifrost_store_activity(result):
-                failures.append(f"{label} did not report BIFROST store object or byte activity")
+                failures.append(
+                    f"{label} did not report BIFROST store object or byte activity"
+                )
             if not _fsck_clean(result):
                 failures.append(f"{label} BIFROST fsck was not clean")
     return {
@@ -283,7 +312,9 @@ def mode_order_for_repetition(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run guarded Phase 6 real-serving matrix")
+    parser = argparse.ArgumentParser(
+        description="Run guarded Phase 6 real-serving matrix"
+    )
     parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--workload-jsonl", type=Path, default=None)
     parser.add_argument("--output-dir", type=Path, default=None)
@@ -315,7 +346,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise
     except Exception as exc:
         if argv is not None and "--json" in argv:
-            print(json.dumps({"status": "error", "error": str(exc)}, indent=2), file=sys.stderr)
+            print(
+                json.dumps({"status": "error", "error": str(exc)}, indent=2),
+                file=sys.stderr,
+            )
         else:
             print(f"bifrost real matrix failed: {exc}", file=sys.stderr)
         return 2
@@ -371,7 +405,9 @@ def _run_plan_item(
     mode_dir = Path(str(item["mode_dir"]))
     mode_dir.mkdir(parents=True, exist_ok=True)
     run = _run_config_for_item(config, item)
-    _write_mode_artifacts(config, run, mode_dir, workload_digest, dry_run=config.dry_run)
+    _write_mode_artifacts(
+        config, run, mode_dir, workload_digest, dry_run=config.dry_run
+    )
     if config.dry_run:
         result = {
             "mode": mode.value,
@@ -411,7 +447,9 @@ def _run_plan_item(
                 bifrost_endpoint=run.bifrost_endpoint,
                 collect_bifrost_stats=run.bifrost_enabled,
                 collect_bifrost_fsck=run.bifrost_enabled,
-                bifrost_fsck_command=_fsck_command(run.bifrost_endpoint) if run.bifrost_enabled else (),
+                bifrost_fsck_command=_fsck_command(run.bifrost_endpoint)
+                if run.bifrost_enabled
+                else (),
                 connector_metrics_jsonl_path=run.connector_metrics_path,
                 engine_warmup_requests=config.engine_warmup_requests,
                 population_requests_per_prefix=config.population_requests_per_prefix,
@@ -422,14 +460,23 @@ def _run_plan_item(
         )
         after_population = _collect_external_metrics(config, run)
         after_measured = _collect_external_metrics(config, run)
-        write_json_artifact(mode_dir / "metrics_after_population.json", after_population)
+        write_json_artifact(
+            mode_dir / "metrics_after_population.json", after_population
+        )
         write_json_artifact(mode_dir / "metrics_after_measured.json", after_measured)
         summary = dict(benchmark.summary)
-        summary["lmcache_activity"] = _activity_delta(before.get("lmcache"), after_measured.get("lmcache"))
+        summary["lmcache_activity"] = _activity_delta(
+            before.get("lmcache"), after_measured.get("lmcache")
+        )
         summary["lmcache_log_activity"] = _lmcache_log_activity(mode_dir / "stdout.log")
-        summary["vllm_metrics"] = {"before": before.get("vllm"), "after": after_measured.get("vllm")}
+        summary["vllm_metrics"] = {
+            "before": before.get("vllm"),
+            "after": after_measured.get("vllm"),
+        }
         write_json_artifact(mode_dir / "summary.json", summary)
-        result = _completed_result(mode.value, int(item["repetition"]), mode_dir, summary)
+        result = _completed_result(
+            mode.value, int(item["repetition"]), mode_dir, summary
+        )
     except Exception as exc:
         result = _failed_result(mode.value, int(item["repetition"]), mode_dir, exc)
     finally:
@@ -467,7 +514,9 @@ def _write_mode_artifacts(
         ),
         dry_run=False,
     )
-    vllm_command = build_vllm_command(run, mode_dir / "generated_lmcache_config.yaml" if run.lmcache_enabled else None)
+    vllm_command = build_vllm_command(
+        run, mode_dir / "generated_lmcache_config.yaml" if run.lmcache_enabled else None
+    )
     write_json_artifact(mode_dir / "generated_vllm_command.json", vllm_command)
     if run.lmcache_enabled:
         (mode_dir / "generated_lmcache_config.yaml").write_text(
@@ -475,7 +524,10 @@ def _write_mode_artifacts(
             encoding="utf-8",
         )
     if run.bifrost_enabled:
-        write_json_artifact(mode_dir / "generated_bifrost_connector_config.json", build_bifrost_connector_config(run))
+        write_json_artifact(
+            mode_dir / "generated_bifrost_connector_config.json",
+            build_bifrost_connector_config(run),
+        )
     shutil.copyfile(config.workload_jsonl, mode_dir / "workload.jsonl")
     phase_plan = build_phase_plans(
         read_jsonl(config.workload_jsonl),
@@ -494,24 +546,46 @@ def _write_mode_artifacts(
             ]
         },
     )
-    (mode_dir / "resolved_run_config.yaml").write_text(_simple_yaml(_resolved_run_config(config, run, workload_digest)), encoding="utf-8")
-    write_json_artifact(mode_dir / "environment_doctor.json", _dry_preflight(config, []))
-    write_json_artifact(mode_dir / "versions.json", capture_versions(model=run.model, workload_path=config.workload_jsonl, env=os.environ))
+    (mode_dir / "resolved_run_config.yaml").write_text(
+        _simple_yaml(_resolved_run_config(config, run, workload_digest)),
+        encoding="utf-8",
+    )
+    write_json_artifact(
+        mode_dir / "environment_doctor.json", _dry_preflight(config, [])
+    )
+    write_json_artifact(
+        mode_dir / "versions.json",
+        capture_versions(
+            model=run.model, workload_path=config.workload_jsonl, env=os.environ
+        ),
+    )
     write_json_artifact(
         mode_dir / "command_manifest.json",
         {
             "schema_version": "bifrost.phase6_real_matrix_command_manifest.v1",
             "dry_run": dry_run,
             "mode": run.mode.value,
-            "generated_bundle": {key: str(path) for key, path in generated.files.items()},
+            "generated_bundle": {
+                key: str(path) for key, path in generated.files.items()
+            },
             "vllm_command": vllm_command,
             "gpu": {"CUDA_VISIBLE_DEVICES": config.gpu_id},
         },
     )
-    for name in ("metrics_before.json", "metrics_after_population.json", "metrics_after_measured.json"):
+    for name in (
+        "metrics_before.json",
+        "metrics_after_population.json",
+        "metrics_after_measured.json",
+    ):
         path = mode_dir / name
         if not path.exists():
-            write_json_artifact(path, {"status": "skipped", "reason": "dry-run" if dry_run else "not collected"})
+            write_json_artifact(
+                path,
+                {
+                    "status": "skipped",
+                    "reason": "dry-run" if dry_run else "not collected",
+                },
+            )
     for name in ("raw_requests.jsonl", "stdout.log", "stderr.log"):
         path = mode_dir / name
         if not path.exists():
@@ -561,7 +635,12 @@ def _processes_for_run(
         run, mode_dir / "generated_lmcache_config.yaml" if run.lmcache_enabled else None
     )
     vllm_env = dict(env)
-    vllm_env.update({str(key): str(value) for key, value in vllm_command_artifact.get("env", {}).items()})
+    vllm_env.update(
+        {
+            str(key): str(value)
+            for key, value in vllm_command_artifact.get("env", {}).items()
+        }
+    )
     processes.append(
         ManagedProcess(
             name="vllm_server",
@@ -575,25 +654,37 @@ def _processes_for_run(
     return processes
 
 
-def _execution_plan(config: RealMatrixConfig, modes: Sequence[BaselineMode]) -> list[dict[str, Any]]:
+def _execution_plan(
+    config: RealMatrixConfig, modes: Sequence[BaselineMode]
+) -> list[dict[str, Any]]:
     plan: list[dict[str, Any]] = []
     for repetition in range(config.repetitions):
-        for index, mode in enumerate(mode_order_for_repetition(modes, repetition, rotate=config.rotate_mode_order)):
+        for index, mode in enumerate(
+            mode_order_for_repetition(
+                modes, repetition, rotate=config.rotate_mode_order
+            )
+        ):
             vllm_port = config.base_port + repetition * config.port_stride + index
-            bifrost_port = config.bifrost_base_port + repetition * config.port_stride + index
+            bifrost_port = (
+                config.bifrost_base_port + repetition * config.port_stride + index
+            )
             plan.append(
                 {
                     "repetition": repetition,
                     "mode": mode.value,
                     "vllm_port": vllm_port,
                     "bifrost_port": bifrost_port,
-                    "mode_dir": str(config.output_dir / f"rep_{repetition:02d}" / mode.value),
+                    "mode_dir": str(
+                        config.output_dir / f"rep_{repetition:02d}" / mode.value
+                    ),
                 }
             )
     return plan
 
 
-def _run_config_for_item(config: RealMatrixConfig, item: Mapping[str, Any]) -> BaselineRunConfig:
+def _run_config_for_item(
+    config: RealMatrixConfig, item: Mapping[str, Any]
+) -> BaselineRunConfig:
     matrix = _single_repetition_matrix(
         config,
         _matrix_base_port_for_item(item),
@@ -632,12 +723,20 @@ def _single_repetition_matrix(
     )
 
 
-def _preflight_failures(config: RealMatrixConfig, report: Mapping[str, Any]) -> list[str]:
+def _preflight_failures(
+    config: RealMatrixConfig, report: Mapping[str, Any]
+) -> list[str]:
     checks = report.get("checks") if isinstance(report.get("checks"), Mapping) else {}
     failures: list[str] = []
     torch = _check(checks, "torch")
-    torch_details = torch.get("details") if isinstance(torch.get("details"), Mapping) else {}
-    if torch.get("status") != "ready" or not torch_details.get("cuda_available") or int(torch_details.get("cuda_device_count") or 0) <= 0:
+    torch_details = (
+        torch.get("details") if isinstance(torch.get("details"), Mapping) else {}
+    )
+    if (
+        torch.get("status") != "ready"
+        or not torch_details.get("cuda_available")
+        or int(torch_details.get("cuda_device_count") or 0) <= 0
+    ):
         failures.append("GPU is not visible through torch.cuda")
     for name in (
         "vllm",
@@ -657,18 +756,27 @@ def _preflight_failures(config: RealMatrixConfig, report: Mapping[str, Any]) -> 
     return failures
 
 
-def _dry_preflight(config: RealMatrixConfig, plan: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+def _dry_preflight(
+    config: RealMatrixConfig, plan: Sequence[Mapping[str, Any]]
+) -> dict[str, Any]:
     return {
         "schema_version": "bifrost.phase6_real_matrix_preflight.v1",
         "status": "dry_run",
         "failures": [],
-        "required_ports": sorted({int(item["vllm_port"]) for item in plan} | {int(item["bifrost_port"]) for item in plan}) if plan else [],
+        "required_ports": sorted(
+            {int(item["vllm_port"]) for item in plan}
+            | {int(item["bifrost_port"]) for item in plan}
+        )
+        if plan
+        else [],
         "doctor": {"status": "skipped", "reason": "dry-run"},
     }
 
 
 def _run_correctness(mode_results: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    completed = [result for result in mode_results if result.get("status") == "completed"]
+    completed = [
+        result for result in mode_results if result.get("status") == "completed"
+    ]
     if len(completed) < 2:
         return {
             "schema_version": "bifrost.phase6_real_matrix_correctness.v1",
@@ -683,9 +791,18 @@ def _run_correctness(mode_results: Sequence[Mapping[str, Any]]) -> dict[str, Any
         comparison = compare_run_outputs(
             reference,
             candidate,
-            ResponseComparisonConfig(mode="token_count_only", reason="Phase 6 real matrix deterministic token-count check"),
+            ResponseComparisonConfig(
+                mode="token_count_only",
+                reason="Phase 6 real matrix deterministic token-count check",
+            ),
         ).to_dict()
-        comparisons.append({"mode": result.get("mode"), "repetition": result.get("repetition"), "comparison": comparison})
+        comparisons.append(
+            {
+                "mode": result.get("mode"),
+                "repetition": result.get("repetition"),
+                "comparison": comparison,
+            }
+        )
         if comparison["status"] == "fail":
             status = "fail"
     return {
@@ -696,7 +813,9 @@ def _run_correctness(mode_results: Sequence[Mapping[str, Any]]) -> dict[str, Any
     }
 
 
-def _completed_result(mode: str, repetition: int, mode_dir: Path, summary: Mapping[str, Any]) -> dict[str, Any]:
+def _completed_result(
+    mode: str, repetition: int, mode_dir: Path, summary: Mapping[str, Any]
+) -> dict[str, Any]:
     return {
         "mode": mode,
         "repetition": repetition,
@@ -714,7 +833,9 @@ def _completed_result(mode: str, repetition: int, mode_dir: Path, summary: Mappi
     }
 
 
-def _failed_result(mode: str, repetition: int, mode_dir: Path, exc: Exception) -> dict[str, Any]:
+def _failed_result(
+    mode: str, repetition: int, mode_dir: Path, exc: Exception
+) -> dict[str, Any]:
     return {
         "mode": mode,
         "repetition": repetition,
@@ -745,12 +866,18 @@ def _skipped_result(item: Mapping[str, Any], reason: str) -> dict[str, Any]:
     return result
 
 
-def _collect_external_metrics(config: RealMatrixConfig, run: BaselineRunConfig) -> dict[str, Any]:
+def _collect_external_metrics(
+    config: RealMatrixConfig, run: BaselineRunConfig
+) -> dict[str, Any]:
     vllm_url = config.vllm_metrics_url_template.format(port=run.port)
     return {
         "schema_version": "bifrost.phase6_real_matrix_external_metrics.v1",
-        "vllm": VLLMMetricsCollector(metrics_url=vllm_url, timeout_seconds=2.0).snapshot(),
-        "lmcache": LMCacheMetricsCollector(metrics_url=config.lmcache_metrics_url, timeout_seconds=2.0).snapshot(),
+        "vllm": VLLMMetricsCollector(
+            metrics_url=vllm_url, timeout_seconds=2.0
+        ).snapshot(),
+        "lmcache": LMCacheMetricsCollector(
+            metrics_url=config.lmcache_metrics_url, timeout_seconds=2.0
+        ).snapshot(),
     }
 
 
@@ -758,20 +885,36 @@ def _activity_delta(before: Any, after: Any) -> dict[str, Any]:
     before_metrics = before.get("metrics") if isinstance(before, Mapping) else {}
     after_metrics = after.get("metrics") if isinstance(after, Mapping) else {}
     return {
-        "store_activity": _positive_metric_delta(before_metrics, after_metrics, ("store", "put")),
-        "retrieve_activity": _positive_metric_delta(before_metrics, after_metrics, ("retrieve", "get", "hit")),
+        "store_activity": _positive_metric_delta(
+            before_metrics, after_metrics, ("store", "put")
+        ),
+        "retrieve_activity": _positive_metric_delta(
+            before_metrics, after_metrics, ("retrieve", "get", "hit")
+        ),
         "before": before,
         "after": after,
     }
 
 
 def _lmcache_activity(result: Mapping[str, Any]) -> bool:
-    summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
-    activity = summary.get("lmcache_activity") if isinstance(summary.get("lmcache_activity"), Mapping) else {}
+    summary = (
+        result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+    )
+    activity = (
+        summary.get("lmcache_activity")
+        if isinstance(summary.get("lmcache_activity"), Mapping)
+        else {}
+    )
     if activity.get("store_activity") and activity.get("retrieve_activity"):
         return True
-    log_activity = summary.get("lmcache_log_activity") if isinstance(summary.get("lmcache_log_activity"), Mapping) else {}
-    return bool(log_activity.get("store_activity") and log_activity.get("retrieve_activity"))
+    log_activity = (
+        summary.get("lmcache_log_activity")
+        if isinstance(summary.get("lmcache_log_activity"), Mapping)
+        else {}
+    )
+    return bool(
+        log_activity.get("store_activity") and log_activity.get("retrieve_activity")
+    )
 
 
 def _lmcache_log_activity(log_path: Path) -> dict[str, Any]:
@@ -807,7 +950,9 @@ def _lmcache_log_activity(log_path: Path) -> dict[str, Any]:
 
 
 def _bifrost_activity(result: Mapping[str, Any]) -> bool:
-    summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+    summary = (
+        result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+    )
     for stats in _bifrost_connector_stat_maps(summary):
         if _connector_put_get_activity(stats):
             return True
@@ -815,7 +960,9 @@ def _bifrost_activity(result: Mapping[str, Any]) -> bool:
 
 
 def _bifrost_store_activity(result: Mapping[str, Any]) -> bool:
-    summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+    summary = (
+        result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+    )
     store = _store_counts(summary)
     return bool(
         store["object_delta"] > 0
@@ -869,8 +1016,12 @@ def _append_connector_stats(candidates: list[Mapping[str, Any]], snapshot: Any) 
 
 
 def _connector_put_get_activity(stats: Mapping[str, Any]) -> bool:
-    put = _first_positive(stats, ("put_count", "connector_put_completed", "put_completed"))
-    get = _first_positive(stats, ("get_count", "connector_get_completed", "get_completed"))
+    put = _first_positive(
+        stats, ("put_count", "connector_put_completed", "put_completed")
+    )
+    get = _first_positive(
+        stats, ("get_count", "connector_get_completed", "get_completed")
+    )
     return put > 0 and get > 0
 
 
@@ -883,15 +1034,29 @@ def _first_positive(stats: Mapping[str, Any], keys: Sequence[str]) -> float:
 
 
 def _fsck_clean(result: Mapping[str, Any]) -> bool:
-    summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
-    after = summary.get("bifrost_stats", {}).get("after") if isinstance(summary.get("bifrost_stats"), Mapping) else {}
+    summary = (
+        result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+    )
+    after = (
+        summary.get("bifrost_stats", {}).get("after")
+        if isinstance(summary.get("bifrost_stats"), Mapping)
+        else {}
+    )
     fsck = after.get("fsck") if isinstance(after, Mapping) else None
     return isinstance(fsck, Mapping) and fsck.get("status") == "ok"
 
 
 def _measured_section(summary: Mapping[str, Any]) -> Mapping[str, Any]:
-    sections = summary.get("phase_sections") if isinstance(summary.get("phase_sections"), Mapping) else {}
-    measured = sections.get(BenchmarkPhase.MEASURED.value) if isinstance(sections, Mapping) else None
+    sections = (
+        summary.get("phase_sections")
+        if isinstance(summary.get("phase_sections"), Mapping)
+        else {}
+    )
+    measured = (
+        sections.get(BenchmarkPhase.MEASURED.value)
+        if isinstance(sections, Mapping)
+        else None
+    )
     return measured if isinstance(measured, Mapping) else {}
 
 
@@ -903,7 +1068,11 @@ def _positive_metric_delta(before: Any, after: Any, needles: Sequence[str]) -> b
         if not any(needle in lowered for needle in needles):
             continue
         prior = before.get(key, 0)
-        if _positive(value) and isinstance(prior, (int, float)) and float(value) > float(prior):
+        if (
+            _positive(value)
+            and isinstance(prior, (int, float))
+            and float(value) > float(prior)
+        ):
             return True
     return False
 
@@ -945,7 +1114,9 @@ def _root_manifest(
                 "mode": result.get("mode"),
                 "repetition": result.get("repetition"),
                 "path": str(manifest_path),
-                "missing_required_artifacts": manifest.get("missing_required_artifacts"),
+                "missing_required_artifacts": manifest.get(
+                    "missing_required_artifacts"
+                ),
             }
         )
         for artifact in manifest.get("artifacts", []):
@@ -1096,7 +1267,9 @@ def _write_matrix_markdown_report(path: Path, summary: Mapping[str, Any]) -> Non
                 )
             )
     else:
-        lines.append("| unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable |")
+        lines.append(
+            "| unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable |"
+        )
     lines.extend(
         [
             "",
@@ -1149,18 +1322,24 @@ def _write_matrix_markdown_report(path: Path, summary: Mapping[str, Any]) -> Non
                 )
             )
     else:
-        lines.append("| unavailable | unavailable | unavailable | unavailable | unavailable |")
+        lines.append(
+            "| unavailable | unavailable | unavailable | unavailable | unavailable |"
+        )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _model_value(summary: Mapping[str, Any]) -> Any:
-    model = _nested(summary, "preflight", "doctor", "checks", "model", "details", "value")
+    model = _nested(
+        summary, "preflight", "doctor", "checks", "model", "details", "value"
+    )
     if model is not None:
         return model
     for result in summary.get("mode_results", []):
         if not isinstance(result, Mapping):
             continue
-        run_summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+        run_summary = (
+            result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+        )
         if run_summary.get("model"):
             return run_summary.get("model")
     return None
@@ -1182,9 +1361,15 @@ def _local_model_statement(summary: Mapping[str, Any]) -> str | None:
 
 
 def _hardware_summary(summary: Mapping[str, Any]) -> str | None:
-    platform_details = _nested(summary, "preflight", "doctor", "checks", "platform", "details")
-    torch_details = _nested(summary, "preflight", "doctor", "checks", "torch", "details")
-    if not isinstance(platform_details, Mapping) and not isinstance(torch_details, Mapping):
+    platform_details = _nested(
+        summary, "preflight", "doctor", "checks", "platform", "details"
+    )
+    torch_details = _nested(
+        summary, "preflight", "doctor", "checks", "torch", "details"
+    )
+    if not isinstance(platform_details, Mapping) and not isinstance(
+        torch_details, Mapping
+    ):
         return None
     parts: list[str] = []
     if isinstance(platform_details, Mapping):
@@ -1212,7 +1397,9 @@ def _unique_mode_values(summary: Mapping[str, Any], key: str) -> list[str]:
     for result in summary.get("mode_results", []):
         if not isinstance(result, Mapping):
             continue
-        run_summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+        run_summary = (
+            result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+        )
         value = run_summary.get(key)
         if value is not None:
             values.add(str(value))
@@ -1224,10 +1411,18 @@ def _raw_result_entries(summary: Mapping[str, Any]) -> list[dict[str, Any]]:
     for result in summary.get("mode_results", []):
         if not isinstance(result, Mapping):
             continue
-        artifacts = result.get("artifacts") if isinstance(result.get("artifacts"), Mapping) else {}
+        artifacts = (
+            result.get("artifacts")
+            if isinstance(result.get("artifacts"), Mapping)
+            else {}
+        )
         path = artifacts.get("raw_requests")
         if path is None:
-            run_summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+            run_summary = (
+                result.get("summary")
+                if isinstance(result.get("summary"), Mapping)
+                else {}
+            )
             path = run_summary.get("raw_requests_path")
         entries.append(
             {
@@ -1244,7 +1439,11 @@ def _generated_config_entries(summary: Mapping[str, Any]) -> list[dict[str, Any]
     for result in summary.get("mode_results", []):
         if not isinstance(result, Mapping):
             continue
-        manifest = result.get("artifact_manifest") if isinstance(result.get("artifact_manifest"), Mapping) else {}
+        manifest = (
+            result.get("artifact_manifest")
+            if isinstance(result.get("artifact_manifest"), Mapping)
+            else {}
+        )
         for artifact in manifest.get("artifacts", []):
             if not isinstance(artifact, Mapping):
                 continue
@@ -1270,13 +1469,27 @@ def _matrix_rows(summary: Mapping[str, Any]) -> list[dict[str, Any]]:
     for result in summary.get("mode_results", []):
         if not isinstance(result, Mapping):
             continue
-        run_summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+        run_summary = (
+            result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+        )
         connector = _connector_counts(run_summary)
         store = _store_counts(run_summary)
-        lmcache = run_summary.get("lmcache_activity") if isinstance(run_summary.get("lmcache_activity"), Mapping) else {}
-        lmcache_log = run_summary.get("lmcache_log_activity") if isinstance(run_summary.get("lmcache_log_activity"), Mapping) else {}
-        lmcache_store_activity = bool(lmcache.get("store_activity") or lmcache_log.get("store_activity"))
-        lmcache_retrieve_activity = bool(lmcache.get("retrieve_activity") or lmcache_log.get("retrieve_activity"))
+        lmcache = (
+            run_summary.get("lmcache_activity")
+            if isinstance(run_summary.get("lmcache_activity"), Mapping)
+            else {}
+        )
+        lmcache_log = (
+            run_summary.get("lmcache_log_activity")
+            if isinstance(run_summary.get("lmcache_log_activity"), Mapping)
+            else {}
+        )
+        lmcache_store_activity = bool(
+            lmcache.get("store_activity") or lmcache_log.get("store_activity")
+        )
+        lmcache_retrieve_activity = bool(
+            lmcache.get("retrieve_activity") or lmcache_log.get("retrieve_activity")
+        )
         rows.append(
             {
                 "repetition": result.get("repetition"),
@@ -1311,19 +1524,51 @@ def _matrix_rows(summary: Mapping[str, Any]) -> list[dict[str, Any]]:
 def _connector_counts(summary: Mapping[str, Any]) -> dict[str, Any]:
     counts = {"put_count": 0, "get_count": 0, "bytes_put": 0, "bytes_get": 0}
     for stats in _bifrost_connector_stat_maps(summary):
-        counts["put_count"] = max(counts["put_count"], int(_first_positive(stats, ("put_count", "connector_put_completed", "put_completed"))))
-        counts["get_count"] = max(counts["get_count"], int(_first_positive(stats, ("get_count", "connector_get_completed", "get_completed"))))
-        counts["bytes_put"] = max(counts["bytes_put"], int(_first_positive(stats, ("bytes_put", "connector_bytes_put"))))
-        counts["bytes_get"] = max(counts["bytes_get"], int(_first_positive(stats, ("bytes_get", "connector_bytes_get"))))
+        counts["put_count"] = max(
+            counts["put_count"],
+            int(
+                _first_positive(
+                    stats, ("put_count", "connector_put_completed", "put_completed")
+                )
+            ),
+        )
+        counts["get_count"] = max(
+            counts["get_count"],
+            int(
+                _first_positive(
+                    stats, ("get_count", "connector_get_completed", "get_completed")
+                )
+            ),
+        )
+        counts["bytes_put"] = max(
+            counts["bytes_put"],
+            int(_first_positive(stats, ("bytes_put", "connector_bytes_put"))),
+        )
+        counts["bytes_get"] = max(
+            counts["bytes_get"],
+            int(_first_positive(stats, ("bytes_get", "connector_bytes_get"))),
+        )
     return counts
 
 
 def _store_counts(summary: Mapping[str, Any]) -> dict[str, int]:
-    delta = summary.get("bifrost_stats_delta") if isinstance(summary.get("bifrost_stats_delta"), Mapping) else {}
+    delta = (
+        summary.get("bifrost_stats_delta")
+        if isinstance(summary.get("bifrost_stats_delta"), Mapping)
+        else {}
+    )
     return {
-        "object_delta": int(_first_positive(delta, ("object_count", "opaque_lmcache_object_count"))),
-        "bytes_delta": int(_first_positive(delta, ("bytes_stored", "total_logical_bytes", "total_bytes_on_disk"))),
-        "verified_delta": int(_first_positive(delta, ("verified_count", "committed_count"))),
+        "object_delta": int(
+            _first_positive(delta, ("object_count", "opaque_lmcache_object_count"))
+        ),
+        "bytes_delta": int(
+            _first_positive(
+                delta, ("bytes_stored", "total_logical_bytes", "total_bytes_on_disk")
+            )
+        ),
+        "verified_delta": int(
+            _first_positive(delta, ("verified_count", "committed_count"))
+        ),
         "access_delta": int(_first_positive(delta, ("total_access_count",))),
     }
 
@@ -1401,14 +1646,21 @@ def _validate_config(config: RealMatrixConfig) -> None:
     if not config.workload_jsonl.exists():
         raise RealMatrixError(f"workload JSONL does not exist: {config.workload_jsonl}")
     parse_phase_order(config.phase_order)
-    _single_repetition_matrix(config, config.base_port, f"127.0.0.1:{config.bifrost_base_port}", config.output_dir / ".fairness_check").validate_fairness()
+    _single_repetition_matrix(
+        config,
+        config.base_port,
+        f"127.0.0.1:{config.bifrost_base_port}",
+        config.output_dir / ".fairness_check",
+    ).validate_fairness()
 
 
 def _enforce_real_opt_in(config: RealMatrixConfig) -> None:
+    if not (config.allow_real_vllm or os.environ.get("BIFROST_RUN_REAL_VLLM") == "1"):
+        raise RealMatrixSafetyError(
+            "refusing real execution without --allow-real-vllm or BIFROST_RUN_REAL_VLLM=1"
+        )
     if os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true":
         raise RealMatrixSafetyError("refusing real vLLM execution in CI")
-    if not (config.allow_real_vllm or os.environ.get("BIFROST_RUN_REAL_VLLM") == "1"):
-        raise RealMatrixSafetyError("refusing real execution without --allow-real-vllm or BIFROST_RUN_REAL_VLLM=1")
 
 
 def _workload_digest(path: Path) -> dict[str, Any]:
@@ -1473,7 +1725,11 @@ def _parse_simple_yaml(text: str) -> dict[str, Any]:
         if ":" not in line:
             continue
         key, value = line.split(":", 1)
-        target = data[parent] if parent and raw.startswith(" ") and isinstance(data.get(parent), dict) else data
+        target = (
+            data[parent]
+            if parent and raw.startswith(" ") and isinstance(data.get(parent), dict)
+            else data
+        )
         target[key.strip()] = _parse_scalar(value.strip())
     return data
 
@@ -1545,9 +1801,8 @@ def _bifrost_daemon_command(repo_root: Path) -> str:
 
 def _fsck_command(endpoint: str | None) -> tuple[str, ...]:
     repo_root = Path(__file__).resolve().parents[2]
-    store = (
-        shutil.which("bifrost-store")
-        or str(repo_root / "bifrostd" / "target" / "debug" / "bifrost-store")
+    store = shutil.which("bifrost-store") or str(
+        repo_root / "bifrostd" / "target" / "debug" / "bifrost-store"
     )
     return (store, "fsck", "--endpoint", str(endpoint), "--check", "--json")
 
@@ -1568,7 +1823,9 @@ def _simple_yaml(value: Any, indent: int = 0) -> str:
                 lines.append(f"{prefix}{key}:")
                 lines.append(_simple_yaml(item, indent + 2).rstrip())
             else:
-                lines.append(f"{prefix}{key}: {json.dumps(item) if isinstance(item, str) else item}")
+                lines.append(
+                    f"{prefix}{key}: {json.dumps(item) if isinstance(item, str) else item}"
+                )
         return "\n".join(lines) + "\n"
     return f"{prefix}{value}\n"
 

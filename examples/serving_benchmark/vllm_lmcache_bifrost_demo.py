@@ -93,7 +93,9 @@ def run_demo(config: RealVLLMDemoConfig) -> dict[str, Any]:
         "output_dir": str(config.output_dir),
         "workload_path": str(workload_path),
         "config_dir": str(generated_config.output_dir),
-        "config_files": {key: str(path) for key, path in generated_config.files.items()},
+        "config_files": {
+            key: str(path) for key, path in generated_config.files.items()
+        },
         "environment_readiness_path": str(doctor_path),
         "readiness": doctor.to_dict()["readiness"],
         "demo_run_readiness": _demo_run_readiness(
@@ -119,7 +121,9 @@ def run_demo(config: RealVLLMDemoConfig) -> dict[str, Any]:
         return summary
 
     _require_opt_in(config)
-    _require_demo_readiness(doctor.to_dict(), allow_model_downloads=config.allow_model_downloads)
+    _require_demo_readiness(
+        doctor.to_dict(), allow_model_downloads=config.allow_model_downloads
+    )
     run_summary = _run_real_stack(config, workload_path)
     summary.update(run_summary)
     _write_summary(config.output_dir, summary)
@@ -163,7 +167,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 workload_name=args.workload,
                 include_vllm_only_baseline=args.include_vllm_only_baseline,
                 allow_real_vllm=args.allow_real_vllm,
-                allow_model_downloads=os.environ.get("BIFROST_ALLOW_MODEL_DOWNLOADS") == "1",
+                allow_model_downloads=os.environ.get("BIFROST_ALLOW_MODEL_DOWNLOADS")
+                == "1",
                 readiness_timeout_seconds=args.readiness_timeout_seconds,
                 timeout_seconds=args.timeout_seconds,
             )
@@ -177,7 +182,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise
     except Exception as exc:
         if "--json" in (argv or sys.argv[1:]):
-            print(json.dumps({"status": "error", "error": str(exc)}, indent=2), file=sys.stderr)
+            print(
+                json.dumps({"status": "error", "error": str(exc)}, indent=2),
+                file=sys.stderr,
+            )
         else:
             print(f"real vLLM demo failed: {exc}", file=sys.stderr)
         return 2
@@ -187,7 +195,9 @@ def _run_real_stack(config: RealVLLMDemoConfig, workload_path: Path) -> dict[str
     mode_results: list[dict[str, Any]] = []
     skipped_baselines = _skipped_baselines(config)
     if config.include_vllm_only_baseline:
-        mode_results.append(_run_process_backed_mode(config, workload_path, "vllm-only", "vllm_only"))
+        mode_results.append(
+            _run_process_backed_mode(config, workload_path, "vllm-only", "vllm_only")
+        )
 
     candidate = _run_process_backed_mode(
         config,
@@ -337,7 +347,9 @@ def _write_workload(config: RealVLLMDemoConfig) -> Path:
     )
     workload_dir = config.output_dir / "workload"
     workload_path = workload_dir / "repeated_prefix_workload.jsonl"
-    write_workload(workload, out=workload_path, summary_path=workload_dir / "summary.json")
+    write_workload(
+        workload, out=workload_path, summary_path=workload_dir / "summary.json"
+    )
     return workload_path
 
 
@@ -358,7 +370,9 @@ def _planned_commands(config: RealVLLMDemoConfig) -> dict[str, list[list[str]]]:
             dry_run=True,
             env=os.environ.copy(),
         )
-        commands[scenario] = [process.command for process in build_processes(proc_config)]
+        commands[scenario] = [
+            process.command for process in build_processes(proc_config)
+        ]
     return commands
 
 
@@ -370,11 +384,15 @@ def _require_opt_in(config: RealVLLMDemoConfig) -> None:
     )
 
 
-def _require_demo_readiness(report: dict[str, Any], *, allow_model_downloads: bool) -> None:
+def _require_demo_readiness(
+    report: dict[str, Any], *, allow_model_downloads: bool
+) -> None:
     level = _demo_run_readiness(report, allow_model_downloads=allow_model_downloads)
     if level["status"] == "ready":
         return
-    reasons = "; ".join(level.get("reasons") or ["full benchmark readiness is not satisfied"])
+    reasons = "; ".join(
+        level.get("reasons") or ["full benchmark readiness is not satisfied"]
+    )
     raise RealVLLMDemoError(f"environment is not ready for real serving: {reasons}")
 
 
@@ -418,8 +436,13 @@ def _demo_run_readiness(
     torch_details = checks["torch"].get("details") or {}
     if checks["torch"]["status"] == "ready" and not torch_details.get("cuda_available"):
         reasons.append("torch reports CUDA is unavailable.")
-        fixes.append("Use a machine with a compatible GPU, driver, CUDA runtime, and torch build.")
-    if checks["torch"]["status"] == "ready" and int(torch_details.get("cuda_device_count") or 0) < 1:
+        fixes.append(
+            "Use a machine with a compatible GPU, driver, CUDA runtime, and torch build."
+        )
+    if (
+        checks["torch"]["status"] == "ready"
+        and int(torch_details.get("cuda_device_count") or 0) < 1
+    ):
         reasons.append("No GPU devices are visible through torch.")
         fixes.append("Run real serving on a host with at least one visible GPU.")
     return {
@@ -469,7 +492,9 @@ def _object_count_delta(summary: Any) -> int | float | None:
 def _latency_summary(mode_results: list[dict[str, Any]]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for result in mode_results:
-        summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
+        summary = (
+            result.get("summary") if isinstance(result.get("summary"), dict) else {}
+        )
         out[str(result["mode"])] = {
             "status": result.get("status"),
             "p50_latency_ms": summary.get("p50_latency_ms"),
@@ -534,11 +559,14 @@ def _print_human_summary(summary: dict[str, Any]) -> None:
         lines.append(f"- {scenario}:")
         lines.extend(f"  {' '.join(command)}" for command in commands)
     lines.append(f"BIFROST object count delta: {summary['bifrost_object_count_delta']}")
-    lines.append(f"latency summary: {json.dumps(summary['latency_summary'], sort_keys=True)}")
+    lines.append(
+        f"latency summary: {json.dumps(summary['latency_summary'], sort_keys=True)}"
+    )
     if summary["skipped_baselines"]:
         lines.append("skipped baselines:")
         lines.extend(
-            f"- {item['mode']}: {item['reason']}" for item in summary["skipped_baselines"]
+            f"- {item['mode']}: {item['reason']}"
+            for item in summary["skipped_baselines"]
         )
     lines.append(f"report path: {summary['report_path']}")
     print("\n".join(lines))
@@ -557,9 +585,14 @@ def _validate_config(config: RealVLLMDemoConfig) -> None:
         raise RealVLLMDemoError("max-tokens must be positive")
     if config.mode == "run" and not config.model:
         raise RealVLLMDemoError("run mode requires --model or BIFROST_VLLM_MODEL")
-    if os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true":
-        if config.mode == "run":
-            raise RealVLLMDemoError("refusing real vLLM demo run mode in CI")
+    if (
+        config.mode == "run"
+        and (config.allow_real_vllm or os.environ.get("BIFROST_RUN_REAL_VLLM") == "1")
+        and (
+            os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true"
+        )
+    ):
+        raise RealVLLMDemoError("refusing real vLLM demo run mode in CI")
 
 
 if __name__ == "__main__":
