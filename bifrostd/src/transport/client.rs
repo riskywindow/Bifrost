@@ -485,6 +485,13 @@ pub async fn put_validated_object_multipath_observed_with_options(
         true,
     )
     .await?;
+    synchronize_multipath_begin(
+        connections[begin_index]
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("selected path has no connection"))?,
+        &transfer_id,
+    )
+    .await?;
     telemetry
         .metrics
         .record_bytes_sent(metadata_bytes.len() as u64);
@@ -1598,6 +1605,23 @@ async fn send_put_begin(
         ("multipath".to_string(), json!(multipath)),
     ]));
     write_frame(stream, &begin, metadata_bytes).await?;
+    Ok(())
+}
+
+async fn synchronize_multipath_begin(
+    stream: &mut TcpStream,
+    transfer_id: &str,
+) -> anyhow::Result<()> {
+    let ping = FrameHeader::new(FrameType::Ping, transfer_id, 0);
+    write_frame(stream, &ping, &[]).await?;
+    let response = read_frame(stream).await?;
+    if response.header.frame_type != FrameType::Pong {
+        anyhow::bail!(
+            "expected pong after multipath put_begin, got {:?}: {}",
+            response.header.frame_type,
+            response.header.reason.unwrap_or_default()
+        );
+    }
     Ok(())
 }
 

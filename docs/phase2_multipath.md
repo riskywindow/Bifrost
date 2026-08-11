@@ -40,11 +40,13 @@ connections. It then:
 1. Connects to every configured path.
 2. Marks paths that fail connect or handshake as dead.
 3. Sends one `put_begin` on the first healthy path.
-4. Sends chunks round-robin across non-dead paths.
-5. Waits for each `chunk_ack` on the same connection that sent the chunk.
-6. Retries a chunk on another path if the selected path fails during send or
+4. Uses a `ping`/`pong` barrier on that connection so staging is ready before
+   another path can send the first chunk.
+5. Sends chunks round-robin across non-dead paths.
+6. Waits for each `chunk_ack` on the same connection that sent the chunk.
+7. Retries a chunk on another path if the selected path fails during send or
    while waiting for the ack.
-7. Sends `put_commit` on a remaining healthy path only after every chunk has
+8. Sends `put_commit` on a remaining healthy path only after every chunk has
    been acknowledged.
 
 If every path is dead, the transfer fails closed.

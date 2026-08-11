@@ -268,6 +268,9 @@ pub async fn handle_connection_observed(
                 send_opaque_key_list_result(&mut stream, &store, &frame).await?;
                 return Ok(());
             }
+            FrameType::Ping => {
+                send_pong(&mut stream, &frame.header.transfer_id).await?;
+            }
             _ => {
                 metrics.record_transfer_failed();
                 send_error(
@@ -948,6 +951,11 @@ async fn send_hello(stream: &mut TcpStream, transfer_id: &str) -> TransportResul
     hello.peer_role = Some("daemon".to_string());
     hello.supported_versions = Some(vec![TRANSPORT_VERSION.to_string()]);
     write_frame(stream, &hello, &[]).await
+}
+
+async fn send_pong(stream: &mut TcpStream, transfer_id: &str) -> TransportResult<()> {
+    let pong = FrameHeader::new(FrameType::Pong, transfer_id, 0);
+    write_frame(stream, &pong, &[]).await
 }
 
 async fn send_chunk_ack(

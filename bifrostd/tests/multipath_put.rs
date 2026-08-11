@@ -652,6 +652,10 @@ async fn send_put_begin(
         ("multipath".to_string(), json!(true)),
     ]));
     write_frame(stream, &begin, metadata_bytes).await.unwrap();
+    let ping = FrameHeader::new(FrameType::Ping, transfer_id, 0);
+    write_frame(stream, &ping, &[]).await.unwrap();
+    let response = read_frame(stream).await.unwrap();
+    assert_eq!(response.header.frame_type, FrameType::Pong);
 }
 
 async fn send_chunk(
