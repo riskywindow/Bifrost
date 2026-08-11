@@ -718,16 +718,8 @@ async fn run_inspect(endpoint: &str, object_id: &str, as_json: bool) -> anyhow::
             print_object(object);
             println!(
                 "payload_hash={} descriptor_hash={} bytes_on_disk={} servable={}",
-                outcome
-                    .response
-                    .payload_hash
-                    .as_deref()
-                    .unwrap_or("-"),
-                outcome
-                    .response
-                    .descriptor_hash
-                    .as_deref()
-                    .unwrap_or("-"),
+                outcome.response.payload_hash.as_deref().unwrap_or("-"),
+                outcome.response.descriptor_hash.as_deref().unwrap_or("-"),
                 outcome
                     .response
                     .bytes_on_disk
